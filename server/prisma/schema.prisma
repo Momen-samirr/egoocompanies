@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model user {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String?
+  phone_number      String   @unique
+  email             String?  @unique
+  notificationToken String?
+  ratings           Float    @default(0)
+  totalRides        Float    @default(0)
+  cratedAt          DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  rides             rides[]  @relation("UserRides")
+}
+
+enum VehicleType {
+  Car
+  Motorcycle
+  CNG
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT
+}
+
+model Admin {
+  id           String           @id @default(auto()) @map("_id") @db.ObjectId
+  email        String           @unique
+  password     String
+  name         String
+  role         AdminRole        @default(ADMIN)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  createdTrips ScheduledTrip[]  @relation("CreatedBy")
+}
+
+model driver {
+  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
+  name                String
+  country             String
+  phone_number        String           @unique
+  email               String           @unique
+  vehicle_type        VehicleType
+  registration_number String           @unique
+  registration_date   String
+  driving_license     String
+  vehicle_color       String?
+  rate                String
+  notificationToken   String?
+  ratings             Float            @default(0)
+  totalEarning        Float            @default(0)
+  totalRides          Float            @default(0)
+  pendingRides        Float            @default(0)
+  cancelRides         Float            @default(0)
+  status              String           @default("inactive")
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  rides               rides[]          @relation("DriverRides")
+  assignedTrips       ScheduledTrip[]  @relation("AssignedCaptain")
+}
+
+enum ScheduledTripStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+model ScheduledTrip {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  tripDate          DateTime
+  scheduledTime     DateTime
+  status            ScheduledTripStatus  @default(SCHEDULED)
+  assignedCaptainId String?             @db.ObjectId
+  createdById       String              @db.ObjectId
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  assignedCaptain   driver?             @relation("AssignedCaptain", fields: [assignedCaptainId], references: [id])
+  createdBy         Admin               @relation("CreatedBy", fields: [createdById], references: [id])
+  points            TripPoint[]
+  progress          TripProgress?
+  activationChecks  TripActivationCheck[]
+}
+
+model TripPoint {
+  id              String         @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId String         @db.ObjectId
+  name            String
+  latitude        Float
+  longitude       Float
+  order           Int
+  isFinalPoint    Boolean        @default(false)
+  reachedAt       DateTime?
+  scheduledTrip   ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model TripProgress {
+  id                String         @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId   String         @unique @db.ObjectId
+  captainId         String         @db.ObjectId
+  currentPointIndex Int            @default(0)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  lastLocationUpdate DateTime?
+  lastLatitude      Float?
+  lastLongitude     Float?
+  scheduledTrip     ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+model TripActivationCheck {
+  id                String         @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId   String         @db.ObjectId
+  captainId         String         @db.ObjectId
+  checkedAt         DateTime       @default(now())
+  wasWithinProximity Boolean       @default(false)
+  wasOnTime         Boolean         @default(false)
+  activated         Boolean         @default(false)
+  captainLatitude   Float?
+  captainLongitude  Float?
+  distanceToFirstPoint Float?
+  scheduledTrip     ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now())
+}
+
+model rides {
+  id                      String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                  String   @db.ObjectId
+  driverId                String   @db.ObjectId
+  charge                  Float
+  currentLocationName     String
+  destinationLocationName String
+  distance                String
+  status                  String
+  rating                  Float?
+  user                    user     @relation("UserRides", fields: [userId], references: [id])
+  driver                  driver   @relation("DriverRides", fields: [driverId], references: [id])
+  cratedAt                DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}

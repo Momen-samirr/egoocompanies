@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "48704184212",
+    "project_id": "ridewave-driver-8395a",
+    "storage_bucket": "ridewave-driver-8395a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:48704184212:android:68b34b14d8ab8ba40e7981",
+        "android_client_info": {
+          "package_name": "com.becodemy.ridewavedriver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAD8WEXpQHlzp5U-2p61vtLudr8VUHKxHk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,1229 @@
+require("dotenv").config();
+import { NextFunction, Request, Response } from "express";
+import twilio from "twilio";
+import prisma from "../utils/prisma";
+import jwt from "jsonwebtoken";
+import { sendToken } from "../utils/send-token";
+import { sendEmail } from "../utils/send-email";
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = twilio(accountSid, authToken, {
+  lazyLoading: true,
+});
+
+// Normalize phone number to E.164 format
+const normalizePhoneNumber = (phoneNumber: string): string => {
+  if (!phoneNumber) return "";
+  
+  // Remove all whitespace and special characters except + and digits
+  let normalized = phoneNumber.trim().replace(/[\s\-\(\)\.]/g, "");
+  
+  // Ensure it starts with +
+  if (!normalized.startsWith("+")) {
+    normalized = `+${normalized}`;
+  }
+  
+  return normalized;
+};
+
+// sending otp to driver phone number
+export const sendingOtpToPhone = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    let { phone_number } = req.body;
+    
+    if (!phone_number) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+    
+    // Normalize phone number to ensure consistent format
+    phone_number = normalizePhoneNumber(phone_number);
+    console.log("Sending OTP to normalized phone number:", phone_number);
+    
+    try {
+      const verification = await client.verify.v2
+        ?.services(process.env.TWILIO_SERVICE_SID!)
+        .verifications.create({
+          channel: "sms",
+          to: phone_number,
+        });
+      
+      console.log("Verification created:", verification.sid);
+      
+      res.status(201).json({
+        success: true,
+        message: "OTP sent successfully",
+      });
+    } catch (error: any) {
+      console.error("Twilio error sending OTP:", error);
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to send OTP. Please check your phone number.",
+      });
+    }
+  } catch (error: any) {
+    console.error("Error in sendingOtpToPhone:", error);
+    res.status(500).json({
+      success: false,
+      message: "An unexpected error occurred.",
+    });
+  }
+};
+
+// verifying otp for login
+export const verifyPhoneOtpForLogin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    let { phone_number, otp } = req.body;
+
+    if (!phone_number || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number and OTP are required.",
+      });
+    }
+
+    // Normalize phone number to match the format used when sending OTP
+    const originalPhoneNumber = phone_number;
+    phone_number = normalizePhoneNumber(phone_number);
+    otp = otp.toString().trim().replace(/\s+/g, "");
+    
+    console.log("Verifying OTP for phone number:");
+    console.log("  Original:", originalPhoneNumber);
+    console.log("  Normalized:", phone_number);
+    console.log("  OTP:", otp);
+
+    try {
+      const verificationCheck = await client.verify.v2
+        .services(process.env.TWILIO_SERVICE_SID!)
+        .verificationChecks.create({
+          to: phone_number,
+          code: otp,
+        });
+
+      console.log("Verification check status:", verificationCheck.status);
+
+      // Check if verification was successful
+      if (verificationCheck.status !== "approved") {
+        return res.status(400).json({
+          success: false,
+          message: "OTP is incorrect or expired.",
+        });
+      }
+
+      // Use normalized phone number for database lookup
+      const driver = await prisma.driver.findUnique({
+        where: {
+          phone_number,
+        },
+      });
+      
+      // If not found with normalized, try with original format
+      if (!driver) {
+        const driverWithOriginal = await prisma.driver.findUnique({
+          where: {
+            phone_number: originalPhoneNumber,
+          },
+        });
+        
+        if (driverWithOriginal) {
+          sendToken(driverWithOriginal, res);
+          return;
+        }
+        
+        return res.status(404).json({
+          success: false,
+          message: "Driver not found. Please register first.",
+        });
+      }
+      
+      sendToken(driver, res);
+    } catch (error: any) {
+      console.error("Twilio verification error:", error);
+      console.error("Error details:", {
+        status: error.status,
+        code: error.code,
+        message: error.message,
+        phone_number_used: phone_number,
+      });
+      
+      // Handle Twilio-specific errors
+      if (error.status === 404 || error.code === 20404) {
+        return res.status(400).json({
+          success: false,
+          message: "OTP verification not found. The OTP may have expired or the phone number doesn't match. Please request a new OTP.",
+        });
+      }
+      
+      // Check for common Twilio error codes
+      if (error.code === 20429) {
+        return res.status(400).json({
+          success: false,
+          message: "Too many verification attempts. Please request a new OTP.",
+        });
+      }
+      
+      res.status(400).json({
+        success: false,
+        message: error.message || "OTP verification failed. Please try again.",
+      });
+    }
+  } catch (error: any) {
+    console.error("Unexpected error:", error);
+    res.status(500).json({
+      success: false,
+      message: "An unexpected error occurred.",
+    });
+  }
+};
+
+// verifying phone otp for registration
+export const verifyPhoneOtpForRegistration = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    let { phone_number, otp } = req.body;
+
+    if (!phone_number || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number and OTP are required.",
+      });
+    }
+
+    // Normalize phone number to match the format used when sending OTP
+    const originalPhoneNumber = phone_number;
+    phone_number = normalizePhoneNumber(phone_number);
+    otp = otp.toString().trim().replace(/\s+/g, "");
+    
+    console.log("Verifying registration OTP for phone number:");
+    console.log("  Original:", originalPhoneNumber);
+    console.log("  Normalized:", phone_number);
+    console.log("  OTP:", otp);
+
+    try {
+      const verificationCheck = await client.verify.v2
+        .services(process.env.TWILIO_SERVICE_SID!)
+        .verificationChecks.create({
+          to: phone_number,
+          code: otp,
+        });
+
+      console.log("Verification check status:", verificationCheck.status);
+
+      // Check if verification was successful
+      if (verificationCheck.status !== "approved") {
+        return res.status(400).json({
+          success: false,
+          message: "OTP is incorrect or expired.",
+        });
+      }
+
+      // Update the phone number in request body to normalized version
+      req.body.phone_number = phone_number;
+      await sendingOtpToEmail(req, res);
+    } catch (error: any) {
+      console.error("Twilio verification error:", error);
+      console.error("Error details:", {
+        status: error.status,
+        code: error.code,
+        message: error.message,
+        phone_number_used: phone_number,
+      });
+      
+      // Handle Twilio-specific errors
+      if (error.status === 404 || error.code === 20404) {
+        return res.status(400).json({
+          success: false,
+          message: "OTP verification not found. The OTP may have expired or the phone number doesn't match. Please request a new OTP.",
+        });
+      }
+      
+      // Check for common Twilio error codes
+      if (error.code === 20429) {
+        return res.status(400).json({
+          success: false,
+          message: "Too many verification attempts. Please request a new OTP.",
+        });
+      }
+      
+      res.status(400).json({
+        success: false,
+        message: error.message || "OTP verification failed. Please try again.",
+      });
+    }
+  } catch (error: any) {
+    console.error("Unexpected error:", error);
+    res.status(500).json({
+      success: false,
+      message: "An unexpected error occurred.",
+    });
+  }
+};
+
+// sending otp to email
+export const sendingOtpToEmail = async (req: Request, res: Response) => {
+  try {
+    const {
+      name,
+      country,
+      phone_number,
+      email,
+      vehicle_type,
+      registration_number,
+      registration_date,
+      driving_license,
+      vehicle_color,
+      rate,
+    } = req.body;
+
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
+    const driver = {
+      name,
+      country,
+      phone_number,
+      email,
+      vehicle_type,
+      registration_number,
+      registration_date,
+      driving_license,
+      vehicle_color,
+      rate,
+    };
+    const token = jwt.sign(
+      {
+        driver,
+        otp,
+      },
+      process.env.EMAIL_ACTIVATION_SECRET!,
+      {
+        expiresIn: "5m",
+      }
+    );
+    // Check if email service is configured
+    if (!process.env.EMAIL_USER) {
+      console.error("Email service is not configured");
+      return res.status(500).json({
+        success: false,
+        message: "Email service is not configured. Please contact support.",
+      });
+    }
+
+    try {
+      await sendEmail({
+        to: email,
+        name: name,
+        subject: "Verify your email address!",
+        html: `
+          <p>Hi ${name},</p>
+          <p>Your Egoo verification code is <strong>${otp}</strong>. If you didn't request for this OTP, please ignore this email!</p>
+          <p>Thanks,<br>Egoo Team</p>
+        `,
+      });
+      res.status(201).json({
+        success: true,
+        token,
+      });
+    } catch (error: any) {
+      console.error("Email Error:", error);
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to send email",
+      });
+    }
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+// verifying email otp and creating driver account
+export const verifyingEmailOtp = async (req: Request, res: Response) => {
+  try {
+    const { otp, token } = req.body;
+
+    const newDriver: any = jwt.verify(
+      token,
+      process.env.EMAIL_ACTIVATION_SECRET!
+    );
+
+    if (newDriver.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP is not correct or expired!",
+      });
+    }
+
+    const {
+      name,
+      country,
+      phone_number,
+      email,
+      vehicle_type,
+      registration_number,
+      registration_date,
+      driving_license,
+      vehicle_color,
+      rate,
+    } = newDriver.driver;
+
+    const driver = await prisma.driver.create({
+      data: {
+        name,
+        country,
+        phone_number,
+        email,
+        vehicle_type,
+        registration_number,
+        registration_date,
+        driving_license,
+        vehicle_color,
+        rate,
+      },
+    });
+    sendToken(driver, res);
+  } catch (error) {
+    console.log(error);
+    res.status(400).json({
+      success: false,
+      message: "Your otp is expired!",
+    });
+  }
+};
+
+// get logged in driver data
+export const getLoggedInDriverData = async (req: any, res: Response) => {
+  try {
+    const driver = req.driver;
+
+    // Get completed scheduled trips count for this driver
+    const completedScheduledTripsCount = await prisma.scheduledTrip.count({
+      where: {
+        assignedCaptainId: driver.id,
+        status: "COMPLETED",
+      },
+    });
+
+    // Add completed scheduled trips count to driver data
+    const driverWithStats = {
+      ...driver,
+      completedScheduledTrips: completedScheduledTripsCount,
+    };
+
+    res.status(201).json({
+      success: true,
+      driver: driverWithStats,
+    });
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+// updating driver status
+export const updateDriverStatus = async (req: any, res: Response) => {
+  try {
+    const { status } = req.body;
+
+    const driver = await prisma.driver.update({
+      where: {
+        id: req.driver.id!,
+      },
+      data: {
+        status,
+      },
+    });
+    res.status(201).json({
+      success: true,
+      driver,
+    });
+  } catch (error: any) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// updating driver notification token
+export const updateNotificationToken = async (req: any, res: Response) => {
+  try {
+    const { notificationToken } = req.body;
+
+    if (!notificationToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Notification token is required",
+      });
+    }
+
+    const driver = await prisma.driver.update({
+      where: {
+        id: req.driver.id!,
+      },
+      data: {
+        notificationToken,
+      },
+    });
+    res.status(201).json({
+      success: true,
+      driver,
+      message: "Notification token updated successfully",
+    });
+  } catch (error: any) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// get drivers data with id
+export const getDriversById = async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.query as any;
+    console.log(ids,'ids')
+    if (!ids) {
+      return res.status(400).json({ message: "No driver IDs provided" });
+    }
+
+    const driverIds = ids.split(",");
+
+    // Fetch drivers from database
+    const drivers = await prisma.driver.findMany({
+      where: {
+        id: { in: driverIds },
+      },
+    });
+
+    res.json(drivers);
+  } catch (error) {
+    console.error("Error fetching driver data:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// creating new ride
+export const newRide = async (req: any, res: Response) => {
+  try {
+    const {
+      userId,
+      charge,
+      status,
+      currentLocationName,
+      destinationLocationName,
+      distance,
+    } = req.body;
+
+    const newRide = await prisma.rides.create({
+      data: {
+        userId,
+        driverId: req.driver.id,
+        charge: parseFloat(charge),
+        status,
+        currentLocationName,
+        destinationLocationName,
+        distance,
+      },
+      include: {
+        driver: true,
+        user: true,
+      },
+    });
+
+    // Notify socket server to send real-time update to user
+    try {
+      const axios = require("axios");
+      const SOCKET_SERVER_URL = process.env.SOCKET_SERVER_URL || "http://localhost:3001";
+      
+      // Prepare ride data for the user (matching the format expected by user app)
+      const rideData = {
+        driver: {
+          ...req.driver,
+          currentLocation: req.body.currentLocation || null,
+          marker: req.body.marker || null,
+          distance: parseFloat(distance),
+        },
+        currentLocation: req.body.currentLocation || null,
+        marker: req.body.marker || null,
+        distance: parseFloat(distance),
+        rideData: newRide,
+      };
+
+      await axios.post(`${SOCKET_SERVER_URL}/api/notify-ride-accepted`, {
+        userId,
+        rideData,
+      }).catch((error: any) => {
+        // Don't fail the request if socket server is unavailable
+        console.log("⚠️ Could not notify socket server:", error.message);
+      });
+    } catch (socketError) {
+      // Don't fail the request if socket notification fails
+      console.log("⚠️ Socket notification error (non-critical):", socketError);
+    }
+
+    res.status(201).json({ success: true, newRide });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// updating ride status
+export const updatingRideStatus = async (req: any, res: Response) => {
+  try {
+    const { rideId, rideStatus } = req.body;
+
+    // Validate input
+    if (!rideId || !rideStatus) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid input data" });
+    }
+
+    const driverId = req.driver?.id;
+    if (!driverId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // Fetch the ride data to get the rideCharge
+    const ride = await prisma.rides.findUnique({
+      where: {
+        id: rideId,
+      },
+    });
+
+    if (!ride) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Ride not found" });
+    }
+
+    const rideCharge = ride.charge;
+
+    // Update ride status
+    const updatedRide = await prisma.rides.update({
+      where: {
+        id: rideId,
+        driverId,
+      },
+      data: {
+        status: rideStatus,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (rideStatus === "Completed") {
+      // Update driver stats if the ride is completed
+      await prisma.driver.update({
+        where: {
+          id: driverId,
+        },
+        data: {
+          totalEarning: {
+            increment: rideCharge,
+          },
+          totalRides: {
+            increment: 1,
+          },
+        },
+      });
+
+      // Notify socket server to send real-time update to user about ride completion
+      try {
+        const axios = require("axios");
+        const SOCKET_SERVER_URL = process.env.SOCKET_SERVER_URL || "http://localhost:3001";
+
+        await axios.post(`${SOCKET_SERVER_URL}/api/notify-ride-completed`, {
+          userId: updatedRide.userId,
+          rideId: rideId,
+          rideData: updatedRide,
+        }).catch((error: any) => {
+          // Don't fail the request if socket server is unavailable
+          console.log("⚠️ Could not notify socket server about ride completion:", error.message);
+        });
+      } catch (socketError) {
+        // Don't fail the request if socket notification fails
+        console.log("⚠️ Socket notification error (non-critical):", socketError);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      updatedRide,
+    });
+  } catch (error: any) {
+    console.error(error);
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// getting drivers rides
+export const getAllRides = async (req: any, res: Response) => {
+  const rides = await prisma.rides.findMany({
+    where: {
+      driverId: req.driver?.id,
+    },
+    include: {
+      driver: true,
+      user: true,
+    },
+  });
+  res.status(201).json({
+    rides,
+  });
+};
+
+// Get Scheduled Trips for Captain
+export const getScheduledTrips = async (req: any, res: Response) => {
+  try {
+    const { status, latitude, longitude } = req.query;
+    const captainId = req.driver?.id;
+
+    if (!captainId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // Only show trips assigned to this captain (exclude trips with null assignedCaptainId)
+    const where: any = {
+      assignedCaptainId: captainId, // This will only match trips assigned to this captain
+      // Note: Trips with null assignedCaptainId won't match, so they won't appear for any captain
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    // Get current location from query params if provided
+    const currentLocation = latitude && longitude
+      ? { lat: parseFloat(latitude as string), lng: parseFloat(longitude as string) }
+      : null;
+
+    const trips = await prisma.scheduledTrip.findMany({
+      where,
+      orderBy: { scheduledTime: "asc" },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+      },
+    });
+
+    // Get captain's current status
+    const captain = await prisma.driver.findUnique({
+      where: { id: captainId },
+      select: { status: true },
+    });
+
+    const isOnline = captain?.status === "active";
+
+    // For each scheduled trip, check activation status if it's scheduled
+    const tripsWithActivationStatus = await Promise.all(
+      trips.map(async (trip) => {
+        let activationStatus = null;
+
+        if (trip.status === "SCHEDULED") {
+          // First check if captain is online
+          if (!isOnline) {
+            activationStatus = {
+              canActivate: false,
+              reason: "You must be online to start trips",
+            };
+          } else {
+            // Use current location from request, or fall back to stored location in progress
+            let locationToUse = currentLocation;
+            
+            if (!locationToUse) {
+              const progress = trip.progress;
+              if (progress && progress.lastLatitude && progress.lastLongitude) {
+                locationToUse = {
+                  lat: progress.lastLatitude,
+                  lng: progress.lastLongitude,
+                };
+              }
+            }
+
+            if (locationToUse) {
+              const { checkTripActivationConditions } = await import("../utils/trip-activation");
+              const result = await checkTripActivationConditions(trip.id, locationToUse);
+              activationStatus = {
+                canActivate: result.canActivate,
+                reason: result.reason,
+                distanceToFirstPoint: result.distanceToFirstPoint,
+                isWithinTimeWindow: result.isWithinTimeWindow,
+                isTooEarly: result.isTooEarly,
+                earliestStartTime: result.earliestStartTime?.toISOString(),
+              };
+            } else {
+              activationStatus = {
+                canActivate: false,
+                reason: "Location not available. Please enable location services and try again.",
+              };
+            }
+          }
+        }
+
+        return {
+          ...trip,
+          activationStatus,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      trips: tripsWithActivationStatus,
+    });
+  } catch (error: any) {
+    console.error("Get scheduled trips error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Start Scheduled Trip
+export const startScheduledTrip = async (req: any, res: Response) => {
+  try {
+    const { tripId } = req.params;
+    const { latitude, longitude } = req.body;
+    const captainId = req.driver?.id;
+
+    if (!captainId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        message: "Current location (latitude, longitude) is required",
+      });
+    }
+
+    // Check if captain is online
+    const captain = await prisma.driver.findUnique({
+      where: { id: captainId },
+      select: { status: true },
+    });
+
+    if (!captain || captain.status !== "active") {
+      return res.status(400).json({
+        success: false,
+        message: "You must be online to start a trip",
+      });
+    }
+
+    // Get the trip
+    const trip = await prisma.scheduledTrip.findUnique({
+      where: { id: tripId },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    // Security check: Verify captain is assigned to this trip
+    if (!trip.assignedCaptainId) {
+      return res.status(403).json({
+        success: false,
+        message: "This trip has no assigned captain",
+      });
+    }
+
+    if (trip.assignedCaptainId !== captainId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to this trip",
+      });
+    }
+
+    if (trip.status !== "SCHEDULED") {
+      return res.status(400).json({
+        success: false,
+        message: `Trip is already ${trip.status.toLowerCase()}`,
+      });
+    }
+
+    // Check activation conditions again (security)
+    const { checkTripActivationConditions } = await import("../utils/trip-activation");
+    const activationCheck = await checkTripActivationConditions(tripId, {
+      lat: latitude,
+      lng: longitude,
+    });
+
+    if (!activationCheck.canActivate) {
+      return res.status(400).json({
+        success: false,
+        message: activationCheck.reason || "Trip cannot be activated",
+        activationCheck,
+      });
+    }
+
+    // Create or update trip progress
+    const progress = await prisma.tripProgress.upsert({
+      where: { scheduledTripId: tripId },
+      update: {
+        startedAt: new Date(),
+        currentPointIndex: 0,
+        lastLocationUpdate: new Date(),
+        lastLatitude: latitude,
+        lastLongitude: longitude,
+      },
+      create: {
+        scheduledTripId: tripId,
+        captainId,
+        currentPointIndex: 0,
+        startedAt: new Date(),
+        lastLocationUpdate: new Date(),
+        lastLatitude: latitude,
+        lastLongitude: longitude,
+      },
+    });
+
+    // Update trip status to ACTIVE
+    const updatedTrip = await prisma.scheduledTrip.update({
+      where: { id: tripId },
+      data: {
+        status: "ACTIVE",
+      },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      trip: updatedTrip,
+      message: "Trip started successfully",
+    });
+  } catch (error: any) {
+    console.error("Start scheduled trip error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Update Trip Progress
+export const updateTripProgress = async (req: any, res: Response) => {
+  try {
+    const { tripId, checkpointIndex, latitude, longitude } = req.body;
+    const captainId = req.driver?.id;
+
+    if (!captainId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (checkpointIndex === undefined || checkpointIndex === null) {
+      return res.status(400).json({
+        success: false,
+        message: "checkpointIndex is required",
+      });
+    }
+
+    // Get the trip
+    const trip = await prisma.scheduledTrip.findUnique({
+      where: { id: tripId },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+      },
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    // Security check: Verify captain is assigned to this trip
+    if (!trip.assignedCaptainId) {
+      return res.status(403).json({
+        success: false,
+        message: "This trip has no assigned captain",
+      });
+    }
+
+    if (trip.assignedCaptainId !== captainId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to this trip",
+      });
+    }
+
+    if (trip.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Trip is not active",
+      });
+    }
+
+    if (!trip.progress) {
+      return res.status(400).json({
+        success: false,
+        message: "Trip progress not found",
+      });
+    }
+
+    // Validate checkpoint index
+    if (checkpointIndex < 0 || checkpointIndex >= trip.points.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid checkpoint index",
+      });
+    }
+
+    // Mark the checkpoint as reached
+    const checkpoint = trip.points[checkpointIndex];
+    await prisma.tripPoint.update({
+      where: { id: checkpoint.id },
+      data: {
+        reachedAt: new Date(),
+      },
+    });
+
+    // Update progress
+    const isFinalPoint = checkpoint.isFinalPoint;
+    const nextPointIndex = isFinalPoint ? checkpointIndex : checkpointIndex + 1;
+
+    const updateData: any = {
+      currentPointIndex: nextPointIndex,
+      lastLocationUpdate: new Date(),
+    };
+
+    if (latitude && longitude) {
+      updateData.lastLatitude = latitude;
+      updateData.lastLongitude = longitude;
+    }
+
+    // If final point reached, complete the trip
+    if (isFinalPoint) {
+      updateData.completedAt = new Date();
+      await prisma.scheduledTrip.update({
+        where: { id: tripId },
+        data: {
+          status: "COMPLETED",
+        },
+      });
+    }
+
+    const updatedProgress = await prisma.tripProgress.update({
+      where: { scheduledTripId: tripId },
+      data: updateData,
+    });
+
+    // Get updated trip
+    const updatedTrip = await prisma.scheduledTrip.findUnique({
+      where: { id: tripId },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      trip: updatedTrip,
+      message: isFinalPoint ? "Trip completed successfully" : "Checkpoint reached",
+    });
+  } catch (error: any) {
+    console.error("Update trip progress error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Update Captain Location (enhanced to check trip activation)
+export const updateCaptainLocation = async (req: any, res: Response) => {
+  try {
+    const { latitude, longitude } = req.body;
+    const captainId = req.driver?.id;
+
+    if (!captainId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        message: "Latitude and longitude are required",
+      });
+    }
+
+    // Check if captain is online - only process location updates if online
+    const captain = await prisma.driver.findUnique({
+      where: { id: captainId },
+      select: { status: true },
+    });
+
+    if (!captain || captain.status !== "active") {
+      return res.status(400).json({
+        success: false,
+        message: "You must be online to update location",
+      });
+    }
+
+    // Update location in any active trip progress
+    const activeTrips = await prisma.scheduledTrip.findMany({
+      where: {
+        assignedCaptainId: captainId,
+        status: "ACTIVE",
+      },
+      include: {
+        progress: true,
+      },
+    });
+
+    for (const trip of activeTrips) {
+      if (trip.progress) {
+        await prisma.tripProgress.update({
+          where: { scheduledTripId: trip.id },
+          data: {
+            lastLocationUpdate: new Date(),
+            lastLatitude: latitude,
+            lastLongitude: longitude,
+          },
+        });
+      }
+    }
+
+    // Check for scheduled trips that might be ready to activate
+    const scheduledTrips = await prisma.scheduledTrip.findMany({
+      where: {
+        assignedCaptainId: captainId,
+        status: "SCHEDULED",
+      },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+          take: 1,
+        },
+        progress: true,
+      },
+    });
+
+    const activationResults = [];
+    for (const trip of scheduledTrips) {
+      if (trip.points.length > 0) {
+        // Check if notification was already sent for this trip recently (within last 24 hours)
+        // We check BEFORE calling checkTripActivationConditions to avoid creating unnecessary check records
+        const oneDayAgo = new Date();
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+        
+        const existingActivationCheck = await prisma.tripActivationCheck.findFirst({
+          where: {
+            scheduledTripId: trip.id,
+            activated: true,
+            createdAt: {
+              gte: oneDayAgo,
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+
+        // Skip checking if notification was already sent recently
+        // (We still log activation results for trips that already have notifications)
+        const shouldSkipNotification = !!existingActivationCheck;
+        if (shouldSkipNotification) {
+          const timeSinceLastCheck = Date.now() - existingActivationCheck.createdAt.getTime();
+          const minutesAgo = Math.floor(timeSinceLastCheck / (1000 * 60));
+          console.log(`⏭️ Trip "${trip.name}" (${trip.id}) - notification already sent ${minutesAgo} minute(s) ago, skipping duplicate`);
+        }
+
+        // Check activation conditions (always check for logging and API response)
+        const { checkTripActivationConditions } = await import("../utils/trip-activation");
+        const result = await checkTripActivationConditions(trip.id, {
+          lat: latitude,
+          lng: longitude,
+        });
+
+        // Only send notification if conditions are met AND notification wasn't sent recently
+        if (result.canActivate && !shouldSkipNotification) {
+          // Send notification (only once per trip)
+          const { sendTripActivationNotification } = await import("../utils/send-notification");
+          const notificationResult = await sendTripActivationNotification(captainId, trip.id);
+          
+          if (notificationResult.success) {
+            console.log(`📱 Trip activation notification sent to captain ${captainId} for trip ${trip.id}`);
+          } else {
+            console.error(`❌ Failed to send trip activation notification: ${notificationResult.message}`);
+          }
+        } else if (result.canActivate && shouldSkipNotification) {
+          console.log(`⏭️ Skipping duplicate notification for trip ${trip.id} - already sent recently`);
+        }
+
+        activationResults.push({
+          tripId: trip.id,
+          tripName: trip.name,
+          canActivate: result.canActivate,
+          reason: result.reason,
+          distanceToFirstPoint: result.distanceToFirstPoint,
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Location updated successfully",
+      activationChecks: activationResults,
+    });
+  } catch (error: any) {
+    console.error("Update captain location error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
