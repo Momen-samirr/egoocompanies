@@ -15,8 +15,9 @@ node server.js
 
 ## Ports
 
-- **WebSocket Server**: Port 8080 (required for dashboard)
-- **HTTP API Server**: Port 3001 (optional, for HTTP endpoints)
+- **Server Port**: Uses `PORT` environment variable (set automatically by Render)
+- **Default (local)**: Port 8080
+- **Both HTTP and WebSocket** run on the same port (required for Render deployment)
 
 ## Stopping the Server
 
@@ -44,7 +45,9 @@ lsof -ti:8080
 
 ## Environment Variables
 
-- `PORT`: HTTP server port (default: 3001)
+- `PORT`: Server port for both HTTP and WebSocket (default: 8080)
+  - **Render**: Automatically sets this - no need to configure
+  - **Local**: Uses 8080 by default
 
 ## Logs
 

@@ -1,12 +1,13 @@
 const express = require("express");
+const http = require("http");
 const { WebSocketServer } = require("ws");
 const geolib = require("geolib");
 
 const app = express();
 app.use(express.json());
-// Use port 3001 for HTTP server to avoid conflict with Next.js (port 3000)
-// The WebSocket server runs on port 8080 which is what the dashboard needs
-const PORT = process.env.PORT || 3001;
+// Use Render's PORT environment variable (automatically set by Render)
+// For local development, fallback to 8080 (original WebSocket port)
+const PORT = process.env.PORT || 8080;
 
 // Store driver locations with additional info
 let drivers = {};
@@ -14,25 +15,19 @@ let activeRides = {};
 // Store user connections by userId
 let userConnections = {};
 
-// Create WebSocket server
-const WS_PORT = 8080;
-const wss = new WebSocketServer({ port: WS_PORT });
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create WebSocket server attached to the HTTP server
+// This allows both HTTP and WebSocket to work on the same port (required for Render)
+const wss = new WebSocketServer({ server });
 
 wss.on('listening', () => {
-  console.log(`✅ WebSocket server started on port ${WS_PORT}`);
+  console.log(`✅ WebSocket server ready on port ${PORT}`);
 });
 
 wss.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`\n❌ Port ${WS_PORT} is already in use!`);
-    console.error(`   Please stop the existing server:`);
-    console.error(`   npm run stop`);
-    console.error(`   or: lsof -ti:${WS_PORT} | xargs kill -9\n`);
-    process.exit(1);
-  } else {
-    console.error('WebSocket server error:', error);
-    process.exit(1);
-  }
+  console.error('WebSocket server error:', error);
 });
 
 // Broadcast driver locations to all admin clients
@@ -381,16 +376,20 @@ app.post("/api/notify-ride-completed", (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`HTTP API server is running on port ${PORT}`);
-  console.log(`\n✅ Ready to accept WebSocket connections from dashboard`);
-  console.log(`   Connect to: ws://localhost:${WS_PORT}?role=admin\n`);
+// Start the HTTP server (WebSocket is attached to it)
+server.listen(PORT, () => {
+  console.log(`🚀 Server started on port ${PORT}`);
+  console.log(`✅ HTTP API server is running`);
+  console.log(`✅ WebSocket server is ready`);
+  console.log(`\n📡 Connect WebSocket to: ws://localhost:${PORT}?role=admin`);
+  console.log(`🌐 HTTP API available at: http://localhost:${PORT}/api\n`);
 }).on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
     console.error(`❌ Port ${PORT} is already in use!`);
-    console.error(`   The WebSocket server on port ${WS_PORT} is still running.`);
-    console.error(`   You can ignore this if you only need WebSocket functionality.`);
+    console.error(`   Please stop the existing server or use a different port.`);
+    process.exit(1);
   } else {
+    console.error('Server error:', error);
     throw error;
   }
 });
