@@ -44,7 +44,7 @@ if (getRNMinorVersion() >= 75) {
   }
 }
 
-rootProject.name = 'Ridewave-Driver'
+rootProject.name = 'egoo'
 
 dependencyResolutionManagement {
   versionCatalogs {
