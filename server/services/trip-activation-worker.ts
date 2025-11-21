@@ -67,6 +67,7 @@ export class TripActivationWorker {
               id: true,
               name: true,
               notificationToken: true,
+              status: true,
             },
           },
           points: {

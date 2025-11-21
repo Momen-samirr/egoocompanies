@@ -131,6 +131,16 @@ export async function checkTripActivationConditions(
     }
 
     // Log activation check
+    // assignedCaptainId should not be null at this point (we checked assignedCaptain above)
+    if (!trip.assignedCaptainId) {
+      return {
+        canActivate: false,
+        reason: "Trip has no assigned captain",
+        isWithinProximity: false,
+        isOnTime: false,
+      };
+    }
+
     await prisma.tripActivationCheck.create({
       data: {
         scheduledTripId: tripId,
