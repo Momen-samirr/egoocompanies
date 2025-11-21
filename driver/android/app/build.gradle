@@ -25,9 +25,15 @@ static def versionToNumber(major, minor, patch) {
 }
 
 // Parse version name from app.json and calculate version code
-def appVersion = getAppVersion()
-def (appMajor, appMinor, appPatch) = appVersion.tokenize('.').collect { it.toInteger() }
-def versionCodeFromVersion = appPatch * 100 + appMinor * 10000 + appMajor * 1000000
+def appVersion = "1.0.0" // Default fallback
+def versionCodeFromVersion = 1000000 // Default fallback (1.0.0 = 1000000)
+try {
+    appVersion = getAppVersion()
+    def (appMajor, appMinor, appPatch) = appVersion.tokenize('.').collect { it.toInteger() }
+    versionCodeFromVersion = appPatch * 100 + appMinor * 10000 + appMajor * 1000000
+} catch (Exception e) {
+    println "Warning: Could not read version from app.json, using default: ${appVersion}"
+}
 
 def getRNVersion() {
   def version = providers.exec {
@@ -136,11 +142,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Version code: For EAS builds with autoIncrement, EAS manages this automatically.
-        // For local builds, this is calculated from app.json version.
-        // You can override with: android.defaultConfig.versionCode property
-        versionCode project.hasProperty('android.defaultConfig.versionCode') 
-            ? project.property('android.defaultConfig.versionCode').toInteger() 
-            : versionCodeFromVersion
+        // Initial versionCode for 1.0.0 = 1000000. EAS will increment this automatically.
+        versionCode 1000000
         // Version name: Synced from app.json
         versionName appVersion
     }

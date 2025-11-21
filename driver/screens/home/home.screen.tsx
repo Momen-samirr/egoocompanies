@@ -71,6 +71,20 @@ export default function HomeScreen() {
 
   const { colors } = useTheme();
 
+  // Safe wrapper for Device.isDevice to prevent UserHandle serialization error
+  // This error occurs on subsequent app launches when expo-device tries to access system properties
+  const isPhysicalDevice = (): boolean => {
+    try {
+      return Device.isDevice ?? false;
+    } catch (error: any) {
+      // Catch the UserHandle serialization error that occurs on subsequent launches
+      console.warn("⚠️ Error accessing Device.isDevice:", error?.message || error);
+      // Default to true on Android to allow push notifications to work
+      // The error is a known issue with expo-device on Android
+      return Platform.OS === "android" ? true : false;
+    }
+  };
+
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     // Trigger refresh in OverviewSection
@@ -580,7 +594,7 @@ export default function HomeScreen() {
     console.log("🔔 ===== STARTING PUSH NOTIFICATION REGISTRATION =====");
     console.log("🔔 Timestamp:", new Date().toISOString());
     
-    if (!Device.isDevice) {
+    if (!isPhysicalDevice()) {
       console.warn("⚠️ Not a physical device - push notifications not available");
       Toast.show("Must use physical device for Push Notifications", {
         type: "danger",
@@ -659,7 +673,7 @@ export default function HomeScreen() {
       console.log("✅ Token:", pushTokenString);
       console.log("✅ Token format: Valid");
       console.log("✅ Project ID:", projectId);
-      console.log("✅ Device is device:", Device.isDevice);
+      console.log("✅ Device is device:", isPhysicalDevice());
       console.log("✅ Platform:", Platform.OS);
       console.log("✅ Timestamp:", new Date().toISOString());
         
@@ -802,7 +816,7 @@ export default function HomeScreen() {
           
           // Don't show error to user - this is a configuration issue that needs a rebuild
           // The app can still function without push notifications
-        } else if (Device.isDevice) {
+        } else if (isPhysicalDevice()) {
           // Only show other errors on real devices
           Toast.show("Push notifications may not be available. Please rebuild the app.", {
             type: "warning",
