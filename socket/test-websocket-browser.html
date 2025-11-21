@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test - ws.egoobus.com</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        button {
+            background: #0070f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0051cc;
+        }
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected {
+            background: #0a5;
+        }
+        .disconnected {
+            background: #a00;
+        }
+        .pending {
+            background: #fa0;
+        }
+        #messages {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .message.sent {
+            color: #0af;
+        }
+        .message.received {
+            color: #0fa;
+        }
+        .message.error {
+            color: #f00;
+        }
+        .message.info {
+            color: #ff0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket Connection Test</h1>
+        <p><strong>URL:</strong> <code>wss://ws.egoobus.com?role=admin</code></p>
+        
+        <div>
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button onclick="clearMessages()">Clear Messages</button>
+        </div>
+        
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <h3>Messages:</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+
+        function addMessage(text, type = 'info') {
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${type}`;
+            messageEl.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+            messagesEl.appendChild(messageEl);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            statusEl.textContent = status;
+            statusEl.className = `status ${className}`;
+        }
+
+        function connect() {
+            const url = 'wss://ws.egoobus.com?role=admin';
+            addMessage(`Connecting to ${url}...`, 'info');
+            updateStatus('Connecting...', 'pending');
+            
+            connectBtn.disabled = true;
+            disconnectBtn.disabled = false;
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                addMessage('✅ Connected successfully!', 'received');
+                updateStatus('Connected', 'connected');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addMessage(`📨 Received: ${JSON.stringify(data, null, 2)}`, 'received');
+                } catch (e) {
+                    addMessage(`📨 Received (raw): ${event.data}`, 'received');
+                }
+            };
+
+            ws.onerror = (error) => {
+                addMessage(`❌ Error: ${error.message || 'Connection error'}`, 'error');
+                updateStatus('Error', 'disconnected');
+                
+                if (error.message && error.message.includes('502')) {
+                    addMessage('⚠️ 502 Bad Gateway - Service is not running. Check Render dashboard.', 'error');
+                }
+            };
+
+            ws.onclose = (event) => {
+                addMessage(`🔌 Connection closed. Code: ${event.code}, Reason: ${event.reason || 'No reason'}`, 'info');
+                updateStatus('Disconnected', 'disconnected');
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                ws = null;
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                addMessage('Disconnecting...', 'info');
+            }
+        }
+
+        function clearMessages() {
+            messagesEl.innerHTML = '';
+        }
+
+        // Auto-connect on load
+        // connect();
+    </script>
+</body>
+</html>
+

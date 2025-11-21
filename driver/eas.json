@@ -15,6 +15,11 @@
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_SERVER_URI": "https://api.egoobus.com/api/v1",
+        "EXPO_PUBLIC_WEBSOCKET_URL": "wss://ws.egoobus.com",
+        "EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY": "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q"
       }
     }
   },
