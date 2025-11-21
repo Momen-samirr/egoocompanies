@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Ridewave-Driver",
-    "slug": "Ridewave-Driver",
+    "name": "egoo",
+    "slug": "egoo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "Ridewave-Driver",
+    "scheme": "egoo",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
@@ -15,8 +15,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Allow Ridewave-Driver to use your location to find nearby rides and navigate.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Ridewave-Driver to use your location to find nearby rides and navigate."
+        "NSLocationWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate."
       },
       "bundleIdentifier": "com.becodemy.ridewavedriver"
     },
@@ -36,9 +36,9 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "INTERNET",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
-      ]
+        "POST_NOTIFICATIONS"
+      ],
+      "privacy": "https://egoobus.com/privacy-policy"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -57,7 +57,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Ridewave-Driver to use your location to find nearby rides and navigate."
+          "locationAlwaysAndWhenInUsePermission": "Allow egoo to use your location to find nearby rides and navigate."
         }
       ],
       [

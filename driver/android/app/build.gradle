@@ -2,11 +2,32 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
-def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+// Load keystore properties from file if it exists
+def keystorePropertiesFile = rootProject.file("app/keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+// Read version from app.json
+def getAppVersion() {
+    def projectRoot = rootProject.projectDir.parentFile.absolutePath
+    def appJsonFile = new File(projectRoot, "app.json")
+    def appJson = new groovy.json.JsonSlurper().parse(appJsonFile)
+    return appJson.expo.version
+}
+
+// Define projectRoot for use in react block
+def projectRoot = rootProject.projectDir.parentFile.absolutePath
 
 static def versionToNumber(major, minor, patch) {
   return patch * 100 + minor * 10000 + major * 1000000
 }
+
+// Parse version name from app.json and calculate version code
+def appVersion = getAppVersion()
+def (appMajor, appMinor, appPatch) = appVersion.tokenize('.').collect { it.toInteger() }
+def versionCodeFromVersion = appPatch * 100 + appMinor * 10000 + appMajor * 1000000
 
 def getRNVersion() {
   def version = providers.exec {
@@ -114,8 +135,14 @@ android {
         applicationId 'com.becodemy.ridewavedriver'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        // Version code: For EAS builds with autoIncrement, EAS manages this automatically.
+        // For local builds, this is calculated from app.json version.
+        // You can override with: android.defaultConfig.versionCode property
+        versionCode project.hasProperty('android.defaultConfig.versionCode') 
+            ? project.property('android.defaultConfig.versionCode').toInteger() 
+            : versionCodeFromVersion
+        // Version name: Synced from app.json
+        versionName appVersion
     }
     signingConfigs {
         debug {
@@ -124,15 +151,23 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            // Check for keystore properties in file first, then project properties (for EAS)
+            def storeFileProp = keystoreProperties['MYAPP_RELEASE_STORE_FILE'] ?: findProperty('MYAPP_RELEASE_STORE_FILE')
+            if (storeFileProp != null) {
+                storeFile file(storeFileProp)
+                storePassword keystoreProperties['MYAPP_RELEASE_STORE_PASSWORD'] ?: findProperty('MYAPP_RELEASE_STORE_PASSWORD')
+                keyAlias keystoreProperties['MYAPP_RELEASE_KEY_ALIAS'] ?: findProperty('MYAPP_RELEASE_KEY_ALIAS')
+                keyPassword keystoreProperties['MYAPP_RELEASE_KEY_PASSWORD'] ?: findProperty('MYAPP_RELEASE_KEY_PASSWORD')
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

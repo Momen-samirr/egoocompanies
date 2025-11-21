@@ -14,3 +14,8 @@ local.properties
 
 # Bundle artifacts
 *.jsbundle
+
+# Keystore files (DO NOT COMMIT)
+*.keystore
+keystore.properties
+release.keystore

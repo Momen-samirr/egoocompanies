@@ -2,10 +2,13 @@
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
   <uses-permission android:name="android.permission.INTERNET"/>
-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <!-- POST_NOTIFICATIONS required for Android 13+ (API 33+) -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
-  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <!-- SYSTEM_ALERT_WINDOW is optional and requires runtime request for overlay permission -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <!-- Note: Storage permissions removed - not needed on Android 10+ (API 29+) for most use cases -->
+  <!-- If file access is needed, use scoped storage APIs instead -->
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -31,9 +34,9 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="Ridewave-Driver"/>
+        <data android:scheme="egoo"/>
         <data android:scheme="com.becodemy.ridewavedriver"/>
-        <data android:scheme="exp+ridewave-driver"/>
+        <data android:scheme="exp+egoo"/>
       </intent-filter>
     </activity>
     <activity android:name="com.facebook.react.devsupport.DevSettingsActivity" android:exported="false"/>
