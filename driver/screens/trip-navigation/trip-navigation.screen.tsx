@@ -11,7 +11,7 @@ import { useTheme } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
-import { windowHeight, windowWidth } from "@/themes/app.constant";
+import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
 import { Toast } from "react-native-toast-notifications";
 import { useGetDriverData } from "@/hooks/useGetDriverData";
 import { getServerUri } from "@/configs/constants";
@@ -20,6 +20,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import color from "@/themes/app.colors";
 import { calculateDistance } from "@/utils/haversine";
+import CheckpointCard from "@/components/trip/CheckpointCard";
+import ETADisplay from "@/components/common/ETADisplay";
+import EmergencyEndSlider from "@/components/trip/EmergencyEndSlider";
+import { spacing, shadows } from "@/styles/design-system";
+import fonts from "@/themes/app.fonts";
 
 interface ScheduledTrip {
   id: string;
@@ -49,14 +54,49 @@ export default function TripNavigationScreen() {
   const [loading, setLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
   const [updatingProgress, setUpdatingProgress] = useState(false);
+  const [distanceToCheckpoint, setDistanceToCheckpoint] = useState<number | undefined>(undefined);
+  const [etaToCheckpoint, setEtaToCheckpoint] = useState<number | undefined>(undefined);
+  const [canUseEmergency, setCanUseEmergency] = useState(true);
+  const [emergencyDisabledMessage, setEmergencyDisabledMessage] = useState<string>("");
   const mapRef = useRef<MapView>(null);
+  const locationWatchSubscription = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
     if (tripId) {
       fetchTrip();
       startLocationTracking();
+      checkEmergencyUsageStatus();
     }
   }, [tripId]);
+
+  const checkEmergencyUsageStatus = async () => {
+    try {
+      const accessToken = await AsyncStorage.getItem("accessToken");
+      if (!accessToken) {
+        return;
+      }
+
+      const response = await axios.get(
+        `${getServerUri()}/driver/emergency-usage-status`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setCanUseEmergency(response.data.canUse);
+        if (!response.data.canUse && response.data.message) {
+          setEmergencyDisabledMessage(response.data.message);
+        }
+      }
+    } catch (error: any) {
+      console.error("Error checking emergency usage status:", error);
+      // Default to allowing if check fails (fail open for safety)
+      setCanUseEmergency(true);
+    }
+  };
 
   const fetchTrip = async () => {
     try {
@@ -79,7 +119,13 @@ export default function TripNavigationScreen() {
         const activeTrip = response.data.trips.find((t: ScheduledTrip) => t.id === tripId);
         if (activeTrip) {
           setTrip(activeTrip);
-          updateMapRegion(activeTrip);
+          // Wait for location to be available before updating map
+          setTimeout(() => {
+            if (currentLocation) {
+              updateMapRegion(activeTrip);
+              updateDistanceAndETA(currentLocation);
+            }
+          }, 500);
         } else {
           Toast.show("Trip not found or not active", { type: "danger" });
           router.back();
@@ -105,9 +151,10 @@ export default function TripNavigationScreen() {
     // Get initial location
     const location = await Location.getCurrentPositionAsync({});
     setCurrentLocation(location);
+    updateDistanceAndETA(location);
 
     // Watch location updates
-    Location.watchPositionAsync(
+    locationWatchSubscription.current = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
         timeInterval: 5000, // Update every 5 seconds
@@ -115,24 +162,62 @@ export default function TripNavigationScreen() {
       },
       (location) => {
         setCurrentLocation(location);
+        updateDistanceAndETA(location);
+        updateMapRegion();
       }
     );
   };
 
-  const updateMapRegion = (tripData: ScheduledTrip) => {
-    if (tripData.points && tripData.points.length > 0 && currentLocation) {
-      const currentPoint = tripData.points[tripData.progress?.currentPointIndex || 0];
-      const latDelta = Math.abs(currentPoint.latitude - currentLocation.coords.latitude) * 2.5;
-      const lngDelta = Math.abs(currentPoint.longitude - currentLocation.coords.longitude) * 2.5;
+  const updateDistanceAndETA = (location: Location.LocationObject) => {
+    if (!trip || !location) return;
 
-      mapRef.current?.animateToRegion({
-        latitude: (currentPoint.latitude + currentLocation.coords.latitude) / 2,
-        longitude: (currentPoint.longitude + currentLocation.coords.longitude) / 2,
-        latitudeDelta: Math.max(latDelta, 0.05),
-        longitudeDelta: Math.max(lngDelta, 0.05),
-      });
-    }
+    const currentPointIndex = trip.progress?.currentPointIndex || 0;
+    const currentPoint = trip.points[currentPointIndex];
+    
+    if (!currentPoint || currentPoint.reachedAt) return;
+
+    const distance = calculateDistance(
+      location.coords.latitude,
+      location.coords.longitude,
+      currentPoint.latitude,
+      currentPoint.longitude
+    );
+
+    setDistanceToCheckpoint(distance / 1000); // Convert to km
+
+    // Estimate ETA (assuming average speed of 30 km/h in city)
+    const estimatedSpeed = 30; // km/h
+    const etaMinutes = (distance / 1000 / estimatedSpeed) * 60;
+    setEtaToCheckpoint(etaMinutes);
   };
+
+  const updateMapRegion = (tripData?: ScheduledTrip) => {
+    const tripDataToUse = tripData || trip;
+    if (!tripDataToUse || !tripDataToUse.points || tripDataToUse.points.length === 0 || !currentLocation || !mapRef.current) {
+      return;
+    }
+    
+    const currentPoint = tripDataToUse.points[tripDataToUse.progress?.currentPointIndex || 0];
+    if (!currentPoint) return;
+
+    const latDelta = Math.abs(currentPoint.latitude - currentLocation.coords.latitude) * 2.5;
+    const lngDelta = Math.abs(currentPoint.longitude - currentLocation.coords.longitude) * 2.5;
+
+    mapRef.current.animateToRegion({
+      latitude: (currentPoint.latitude + currentLocation.coords.latitude) / 2,
+      longitude: (currentPoint.longitude + currentLocation.coords.longitude) / 2,
+      latitudeDelta: Math.max(latDelta, 0.05),
+      longitudeDelta: Math.max(lngDelta, 0.05),
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (locationWatchSubscription.current) {
+        locationWatchSubscription.current.remove();
+      }
+    };
+  }, []);
 
   const handleReachCheckpoint = async (checkpointIndex: number) => {
     if (!trip || !currentLocation) {
@@ -208,6 +293,54 @@ export default function TripNavigationScreen() {
     );
   };
 
+  const handleEmergencyTerminate = async () => {
+    if (!trip) {
+      return;
+    }
+
+    try {
+      const accessToken = await AsyncStorage.getItem("accessToken");
+      if (!accessToken) {
+        Toast.show("Please login first", { type: "danger" });
+        return;
+      }
+
+      const response = await axios.post(
+        `${getServerUri()}/driver/emergency-terminate-trip`,
+        {
+          tripId: trip.id,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        Toast.show("Trip emergency terminated successfully", {
+          type: "success",
+        });
+        // Update local state
+        setCanUseEmergency(false);
+        setEmergencyDisabledMessage(
+          "You have already used the emergency end option today."
+        );
+        // Navigate back to home
+        setTimeout(() => {
+          router.push("/(tabs)/home");
+        }, 2000);
+      }
+    } catch (error: any) {
+      console.error("Error emergency terminating trip:", error);
+      Toast.show(
+        error.response?.data?.message || "Failed to emergency terminate trip",
+        { type: "danger" }
+      );
+      throw error; // Re-throw to let the slider handle the error state
+    }
+  };
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -253,7 +386,7 @@ export default function TripNavigationScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Map View */}
-      <View style={{ height: windowHeight(400) }}>
+      <View style={{ height: windowHeight(400), position: "relative" }}>
         <MapView
           ref={mapRef}
           style={{ flex: 1 }}
@@ -263,18 +396,10 @@ export default function TripNavigationScreen() {
             latitudeDelta: 0.05,
             longitudeDelta: 0.05,
           }}
+          showsUserLocation={true}
+          followsUserLocation={false}
         >
-          {/* Current Location */}
-          {currentLocation && (
-            <Marker
-              coordinate={{
-                latitude: currentLocation.coords.latitude,
-                longitude: currentLocation.coords.longitude,
-              }}
-              title="Your Location"
-              pinColor="blue"
-            />
-          )}
+          {/* Current Location - Using showsUserLocation instead */}
 
           {/* Checkpoints */}
           {trip.points.map((point, index) => {
@@ -312,29 +437,93 @@ export default function TripNavigationScreen() {
               apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
               strokeWidth={4}
               strokeColor={color.primary}
+              onReady={(result) => {
+                // Update distance and ETA when route is calculated
+                if (result.distance && result.duration) {
+                  setDistanceToCheckpoint(result.distance / 1000); // Convert to km
+                  setEtaToCheckpoint(result.duration / 60); // Convert to minutes
+                }
+              }}
             />
           )}
         </MapView>
+        {/* Center on me button */}
+        {currentLocation && (
+          <TouchableOpacity
+            style={{
+              position: "absolute",
+              bottom: spacing.md,
+              right: spacing.md,
+              backgroundColor: "#fff",
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              justifyContent: "center",
+              alignItems: "center",
+              ...shadows.md,
+            }}
+            onPress={updateMapRegion}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 20 }}>📍</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Trip Info and Checkpoints */}
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={{ padding: spacing.lg }}
       >
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 20, fontWeight: "bold", color: colors.text, marginBottom: 4 }}>
+        {/* Trip Header with Progress */}
+        <View style={{ marginBottom: spacing.lg }}>
+          <Text style={{ fontSize: fontSizes.FONT24, fontWeight: "bold", color: colors.text, marginBottom: spacing.xs }}>
             {trip.name}
           </Text>
-          <Text style={{ color: colors.text, fontSize: 14 }}>
-            Progress: {currentPointIndex + 1} of {trip.points.length} checkpoints
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Text style={{ color: colors.text, fontSize: fontSizes.FONT14, fontFamily: fonts.regular }}>
+              Progress: {currentPointIndex + 1} of {trip.points.length} checkpoints
+            </Text>
+            {/* Progress Bar */}
+            <View style={{ flex: 1, height: 6, backgroundColor: colors.border, borderRadius: 3, marginLeft: spacing.md }}>
+              <View
+                style={{
+                  width: `${((currentPointIndex + 1) / trip.points.length) * 100}%`,
+                  height: "100%",
+                  backgroundColor: color.status.completed,
+                  borderRadius: 3,
+                }}
+              />
+            </View>
+          </View>
         </View>
 
+        {/* Current Checkpoint ETA */}
+        {currentPoint && !currentPoint.reachedAt && (
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: 12,
+              padding: spacing.lg,
+              marginBottom: spacing.lg,
+              borderWidth: 1,
+              borderColor: color.status.active,
+            }}
+          >
+            <Text style={{ fontSize: fontSizes.FONT14, fontFamily: fonts.medium, color: color.text.secondary, marginBottom: spacing.sm }}>
+              Next Checkpoint
+            </Text>
+            <Text style={{ fontSize: fontSizes.FONT18, fontFamily: fonts.bold, color: colors.text, marginBottom: spacing.md }}>
+              {currentPoint.name}
+            </Text>
+            <ETADisplay distance={distanceToCheckpoint} duration={etaToCheckpoint} size="md" />
+          </View>
+        )}
+
         {/* Checkpoints List */}
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 16, fontWeight: "600", color: colors.text, marginBottom: 12 }}>
-            Checkpoints
+        <View style={{ marginBottom: spacing.lg }}>
+          <Text style={{ fontSize: fontSizes.FONT18, fontWeight: "600", color: colors.text, marginBottom: spacing.md, fontFamily: fonts.bold }}>
+            All Checkpoints
           </Text>
           {trip.points.map((point, index) => {
             const isReached = point.reachedAt !== null;
@@ -342,74 +531,18 @@ export default function TripNavigationScreen() {
             const isPast = index < currentPointIndex;
 
             return (
-              <View
+              <CheckpointCard
                 key={point.id}
-                style={{
-                  backgroundColor: colors.card,
-                  borderRadius: 8,
-                  padding: 12,
-                  marginBottom: 8,
-                  borderWidth: isCurrent ? 2 : 1,
-                  borderColor: isCurrent
-                    ? color.primary
-                    : isReached
-                    ? "#10b981"
-                    : colors.border,
-                  opacity: isPast && !isReached ? 0.5 : 1,
-                }}
-              >
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: colors.text }}>
-                        {index + 1}. {point.name}
-                      </Text>
-                      {point.isFinalPoint && (
-                        <Text
-                          style={{
-                            marginLeft: 8,
-                            fontSize: 10,
-                            backgroundColor: "#a855f7",
-                            color: "#fff",
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 4,
-                          }}
-                        >
-                          FINAL
-                        </Text>
-                      )}
-                    </View>
-                    <Text style={{ fontSize: 12, color: colors.text, opacity: 0.7 }}>
-                      {point.latitude.toFixed(6)}, {point.longitude.toFixed(6)}
-                    </Text>
-                    {isReached && (
-                      <Text style={{ fontSize: 12, color: "#10b981", marginTop: 4 }}>
-                        ✓ Reached at {new Date(point.reachedAt!).toLocaleTimeString()}
-                      </Text>
-                    )}
-                  </View>
-                  {isCurrent && !isCompleted && (
-                    <TouchableOpacity
-                      onPress={() => handleReachCheckpoint(index)}
-                      disabled={updatingProgress || !isWithinRange(index)}
-                      style={{
-                        backgroundColor: color.primary,
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 8,
-                        opacity: updatingProgress || !isWithinRange(index) ? 0.6 : 1,
-                      }}
-                    >
-                      {updatingProgress ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={{ color: "#fff", fontWeight: "600" }}>Reached</Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
+                checkpoint={point}
+                isCurrent={isCurrent}
+                isReached={isReached}
+                isPast={isPast}
+                distance={isCurrent ? distanceToCheckpoint : undefined}
+                duration={isCurrent ? etaToCheckpoint : undefined}
+                onReachPress={() => handleReachCheckpoint(index)}
+                disabled={updatingProgress || !isWithinRange(index)}
+                showReachButton={isCurrent && !isCompleted}
+              />
             );
           })}
         </View>
@@ -427,6 +560,15 @@ export default function TripNavigationScreen() {
               ✓ Trip Completed!
             </Text>
           </View>
+        )}
+
+        {/* Emergency End Trip Slider - Only show for ACTIVE trips */}
+        {!isCompleted && trip.status === "ACTIVE" && (
+          <EmergencyEndSlider
+            onConfirm={handleEmergencyTerminate}
+            disabled={!canUseEmergency}
+            disabledMessage={emergencyDisabledMessage}
+          />
         )}
       </ScrollView>
     </View>

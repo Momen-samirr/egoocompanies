@@ -32,6 +32,43 @@ export type Color = {
   red: string;
   primary: string;
   subPrimary: string;
+  // Semantic colors
+  semantic: {
+    success: string;
+    successLight: string;
+    warning: string;
+    warningLight: string;
+    error: string;
+    errorLight: string;
+    info: string;
+    infoLight: string;
+  };
+  // Status colors
+  status: {
+    online: string;
+    offline: string;
+    scheduled: string;
+    active: string;
+    completed: string;
+    cancelled: string;
+    failed: string;
+  };
+  // Background colors
+  background: {
+    primary: string;
+    secondary: string;
+    tertiary: string;
+    card: string;
+    modal: string;
+  };
+  // Text colors
+  text: {
+    primary: string;
+    secondary: string;
+    tertiary: string;
+    disabled: string;
+    inverse: string;
+  };
 };
 
 const color: Color = {
@@ -68,6 +105,43 @@ const color: Color = {
   iconRed: "#FEEBEB",
   darkBorder: "#474747",
   selectPrimary: "#E8F4F1",
+  // Semantic colors
+  semantic: {
+    success: "#10b981",
+    successLight: "#d1fae5",
+    warning: "#f59e0b",
+    warningLight: "#fef3c7",
+    error: "#ef4444",
+    errorLight: "#fee2e2",
+    info: "#3b82f6",
+    infoLight: "#dbeafe",
+  },
+  // Status colors
+  status: {
+    online: "#10b981",
+    offline: "#9ca3af",
+    scheduled: "#fbbf24",
+    active: "#3b82f6",
+    completed: "#10b981",
+    cancelled: "#ef4444",
+    failed: "#dc2626",
+  },
+  // Background colors
+  background: {
+    primary: "#ffffff",
+    secondary: "#F5F5F5",
+    tertiary: "#F9FAFB",
+    card: "#ffffff",
+    modal: "rgba(0, 0, 0, 0.5)",
+  },
+  // Text colors
+  text: {
+    primary: "#1F1F1F",
+    secondary: "#8F8F8F",
+    tertiary: "#9BA6B8",
+    disabled: "#D1D5DB",
+    inverse: "#ffffff",
+  },
 };
 
 export default color;

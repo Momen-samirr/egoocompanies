@@ -1,4 +1,4 @@
-import { View, Text, Linking } from "react-native";
+import { View, Text, Linking, ScrollView, TouchableOpacity, Platform } from "react-native";
 import React, { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
@@ -10,10 +10,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { Toast } from "react-native-toast-notifications";
 import { getServerUri } from "@/configs/constants";
+import { useTheme } from "@react-navigation/native";
+import PassengerCard from "@/components/ride/PassengerCard";
+import ETADisplay from "@/components/common/ETADisplay";
+import StatusBadge from "@/components/common/StatusBadge";
+import { spacing, shadows } from "@/styles/design-system";
+import fonts from "@/themes/app.fonts";
+import Header from "@/components/common/header";
+import { useGetDriverData } from "@/hooks/useGetDriverData";
 
 export default function RideDetailsScreen() {
+  const { colors } = useTheme();
+  const { driver } = useGetDriverData();
   const { orderData: orderDataObj } = useLocalSearchParams() as any;
   const [orderStatus, setorderStatus] = useState("Processing");
+  const [isOnline, setIsOnline] = useState(false);
   const orderData = JSON.parse(orderDataObj);
   const [region, setRegion] = useState<any>({
     latitude: 37.78825,
@@ -21,6 +32,19 @@ export default function RideDetailsScreen() {
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
+
+  useEffect(() => {
+    checkOnlineStatus();
+  }, []);
+
+  const checkOnlineStatus = async () => {
+    try {
+      const status = await AsyncStorage.getItem("status");
+      setIsOnline(status === "active");
+    } catch (error) {
+      console.error("Error checking online status:", error);
+    }
+  };
 
   useEffect(() => {
     if (orderData?.currentLocation && orderData?.marker) {
@@ -74,93 +98,294 @@ export default function RideDetailsScreen() {
       })
       .catch((error) => {
         console.log(error);
+        Toast.show("Failed to update ride status", { type: "danger" });
       });
   };
 
-  return (
-    <View>
-      <View style={{ height: windowHeight(480) }}>
-        <MapView
-          style={{ flex: 1 }}
-          region={region}
-          onRegionChangeComplete={(region) => setRegion(region)}
-        >
-          {orderData?.marker && <Marker coordinate={orderData?.marker} />}
-          {orderData?.currentLocation && (
-            <Marker coordinate={orderData?.currentLocation} />
-          )}
-          {orderData?.currentLocation && orderData?.marker && (
-            <MapViewDirections
-              origin={orderData?.currentLocation}
-              destination={orderData?.marker}
-              apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
-              strokeWidth={4}
-              strokeColor="blue"
-            />
-          )}
-        </MapView>
-      </View>
-      <View style={{ padding: windowWidth(20) }}>
-        <Text
-          style={{
-            fontSize: fontSizes.FONT20,
-            fontWeight: "500",
-            paddingVertical: windowHeight(5),
-          }}
-        >
-          Passenger Name: {orderData?.user?.name}
-        </Text>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Text
-            style={{
-              fontSize: fontSizes.FONT20,
-              fontWeight: "500",
-              paddingVertical: windowHeight(5),
-            }}
-          >
-            Phone Number:
-          </Text>
-          <Text
-            style={{
-              color: color.buttonBg,
-              paddingLeft: 5,
-              fontSize: fontSizes.FONT20,
-              fontWeight: "500",
-              paddingVertical: windowHeight(5),
-            }}
-            onPress={() =>
-              Linking.openURL(`tel:${orderData?.user?.phone_number}`)
-            }
-          >
-            {orderData?.user?.phone_number}
-          </Text>
-        </View>
-        <Text
-          style={{
-            fontSize: fontSizes.FONT20,
-            fontWeight: "500",
-            paddingVertical: windowHeight(5),
-          }}
-        >
-          Payable amount:{" "}
-          {(orderData.distance * parseInt(orderData?.driver?.rate)).toFixed(2)}{" "}
-          BDT
-        </Text>
+  const openNavigation = () => {
+    const destination = orderData?.marker;
+    if (!destination) return;
 
-        <View style={{ paddingTop: windowHeight(30) }}>
-          <Button
-            title={
-              orderStatus === "Processing"
-                ? "Pick Up Passenger"
-                : "Drop Off Passenger"
-            }
-            height={windowHeight(40)}
-            disabled={orderStatus?.length === 0}
-            backgroundColor={color.bgDark}
-            onPress={() => handleSubmit()}
-          />
+    const { latitude, longitude } = destination;
+    const scheme = Platform.select({
+      ios: "maps:0,0?q=",
+      android: "geo:0,0?q=",
+    });
+    const latLng = `${latitude},${longitude}`;
+    const label = orderData?.destinationLocationName || "Destination";
+    const url = Platform.select({
+      ios: `${scheme}${label}@${latLng}`,
+      android: `${scheme}${latLng}(${label})`,
+    });
+
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        // Fallback to Google Maps web
+        Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latLng}`);
+      });
+    }
+  };
+
+  const estimatedDistance = orderData?.distance ? parseFloat(orderData.distance) : 0;
+  const estimatedFare = estimatedDistance * parseInt(orderData?.driver?.rate || "0");
+
+  const getStatusBadgeType = () => {
+    switch (orderStatus) {
+      case "Processing":
+        return "scheduled";
+      case "Ongoing":
+        return "active";
+      case "Completed":
+        return "completed";
+      default:
+        return "scheduled";
+    }
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Header isOn={isOnline} toggleSwitch={() => {}} showBackButton={true} title="Ride Details" />
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Map View */}
+        <View style={{ height: windowHeight(350), borderRadius: 0 }}>
+          <MapView
+            style={{ flex: 1 }}
+            region={region}
+            onRegionChangeComplete={(region) => setRegion(region)}
+            showsUserLocation={true}
+          >
+            {orderData?.marker && (
+              <Marker
+                coordinate={orderData?.marker}
+                title="Destination"
+                pinColor={color.status.active}
+              />
+            )}
+            {orderData?.currentLocation && (
+              <Marker
+                coordinate={orderData?.currentLocation}
+                title="Pickup"
+                pinColor={color.status.completed}
+              />
+            )}
+            {orderData?.currentLocation && orderData?.marker && (
+              <MapViewDirections
+                origin={orderData?.currentLocation}
+                destination={orderData?.marker}
+                apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                strokeWidth={4}
+                strokeColor={color.primary}
+              />
+            )}
+          </MapView>
         </View>
-      </View>
+
+        <View style={{ padding: spacing.lg }}>
+          {/* Status Badge */}
+          <View style={{ marginBottom: spacing.lg }}>
+            <StatusBadge status={getStatusBadgeType()} size="lg" />
+          </View>
+
+          {/* Passenger Card */}
+          {orderData?.user && (
+            <View style={{ marginBottom: spacing.lg }}>
+              <PassengerCard passenger={orderData.user} />
+            </View>
+          )}
+
+          {/* Ride Information Card */}
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: 12,
+              padding: spacing.lg,
+              marginBottom: spacing.lg,
+              ...shadows.sm,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: fontSizes.FONT18,
+                fontFamily: fonts.bold,
+                color: colors.text,
+                marginBottom: spacing.md,
+              }}
+            >
+              Ride Information
+            </Text>
+
+            {/* Locations */}
+            <View style={{ marginBottom: spacing.md }}>
+              <View style={{ flexDirection: "row", marginBottom: spacing.sm }}>
+                <View style={{ width: 20, alignItems: "center", marginRight: spacing.sm }}>
+                  <View
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: color.status.completed,
+                    }}
+                  />
+                  <View
+                    style={{
+                      width: 2,
+                      flex: 1,
+                      backgroundColor: color.border,
+                      marginTop: spacing.xs,
+                    }}
+                  />
+                  <View
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: color.status.active,
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontSize: fontSizes.FONT14,
+                      fontFamily: fonts.medium,
+                      color: color.text.secondary,
+                      marginBottom: spacing.xs / 2,
+                    }}
+                  >
+                    Pickup
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: fontSizes.FONT16,
+                      fontFamily: fonts.regular,
+                      color: colors.text,
+                      marginBottom: spacing.md,
+                    }}
+                    numberOfLines={2}
+                  >
+                    {orderData?.currentLocationName || "Pickup Location"}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: fontSizes.FONT14,
+                      fontFamily: fonts.medium,
+                      color: color.text.secondary,
+                      marginBottom: spacing.xs / 2,
+                    }}
+                  >
+                    Destination
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: fontSizes.FONT16,
+                      fontFamily: fonts.regular,
+                      color: colors.text,
+                    }}
+                    numberOfLines={2}
+                  >
+                    {orderData?.destinationLocationName || "Destination"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ETA and Distance */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingTop: spacing.md,
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+                marginBottom: spacing.md,
+              }}
+            >
+              <ETADisplay distance={estimatedDistance} size="md" />
+            </View>
+
+            {/* Fare Information */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingTop: spacing.md,
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: fontSizes.FONT16,
+                  fontFamily: fonts.medium,
+                  color: color.text.secondary,
+                }}
+              >
+                Estimated Fare
+              </Text>
+              <Text
+                style={{
+                  fontSize: fontSizes.FONT24,
+                  fontFamily: fonts.bold,
+                  color: color.primary,
+                }}
+              >
+                {estimatedFare.toFixed(2)} BDT
+              </Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={{ gap: spacing.md }}>
+            <TouchableOpacity
+              onPress={openNavigation}
+              style={{
+                backgroundColor: colors.card,
+                padding: spacing.md,
+                borderRadius: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 20, marginRight: spacing.sm }}>🧭</Text>
+              <Text
+                style={{
+                  fontSize: fontSizes.FONT16,
+                  fontFamily: fonts.medium,
+                  color: colors.text,
+                }}
+              >
+                Open in Maps
+              </Text>
+            </TouchableOpacity>
+
+            <Button
+              title={
+                orderStatus === "Processing"
+                  ? "Pick Up Passenger"
+                  : orderStatus === "Ongoing"
+                  ? "Complete Ride"
+                  : "Ride Completed"
+              }
+              height={windowHeight(50)}
+              disabled={orderStatus === "Completed"}
+              backgroundColor={
+                orderStatus === "Completed"
+                  ? color.border
+                  : orderStatus === "Processing"
+                  ? color.status.completed
+                  : color.primary
+              }
+              onPress={() => handleSubmit()}
+            />
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }

@@ -23,10 +23,15 @@ const Button: React.FC<ButtonProps> = ({
           width: widthNumber,
           height: height,
           backgroundColor: backgroundColor || color.buttonBg,
+          minHeight: 44, // Minimum touch target size
         },
       ]}
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled }}
+      accessibilityHint={disabled ? "Button is disabled" : undefined}
     >
       <Text
         style={[

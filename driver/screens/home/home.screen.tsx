@@ -9,19 +9,18 @@ import {
   Alert,
   AppState,
   AppStateStatus,
+  RefreshControl,
 } from "react-native";
 import React, { useEffect, useRef, useState } from "react";
 import Header from "@/components/common/header";
-import { recentRidesData, rideData } from "@/configs/constants";
 import { useTheme } from "@react-navigation/native";
-import RenderRideItem from "@/components/ride/render.ride.item";
 import { external } from "@/styles/external.style";
 import styles from "./styles";
 import RideCard from "@/components/ride/ride.card";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
-import { windowHeight, windowWidth } from "@/themes/app.constant";
-import { Gps, Location } from "@/utils/icons";
+import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
+import { Gps, Location, Calender } from "@/utils/icons";
 import color from "@/themes/app.colors";
 import Button from "@/components/common/button";
 import axios from "axios";
@@ -34,6 +33,12 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import { router } from "expo-router";
 import { getWebSocketUrl, getServerUri } from "@/configs/constants";
+import EmptyState from "@/components/common/EmptyState";
+import PassengerCard from "@/components/ride/PassengerCard";
+import ETADisplay from "@/components/common/ETADisplay";
+import { spacing, shadows } from "@/styles/design-system";
+import fonts from "@/themes/app.fonts";
+import OverviewSection from "@/components/home/OverviewSection";
 
 export default function HomeScreen() {
   const notificationListener = useRef<any>();
@@ -56,6 +61,8 @@ export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [lastLocation, setLastLocation] = useState<any>(null);
   const [recentRides, setrecentRides] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const ws = useRef<WebSocket | null>(null);
   const locationWatchSubscription = useRef<any>(null);
   const isOnRef = useRef<any>(undefined); // Track isOn in ref so callbacks always have latest value
@@ -63,6 +70,15 @@ export default function HomeScreen() {
   const isProcessingNotification = useRef<boolean>(false); // Prevent concurrent notification processing
 
   const { colors } = useTheme();
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    // Trigger refresh in OverviewSection
+    setRefreshTrigger(prev => prev + 1);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  }, []);
 
   // CRITICAL: Set up notification handler BEFORE listeners
   // This handler determines how notifications are displayed when app is in foreground
@@ -1280,140 +1296,253 @@ export default function HomeScreen() {
     }
   };
 
+  const estimatedFare = distance ? (distance * parseInt(driver?.rate || "0")).toFixed(2) : "0.00";
+  const estimatedDistance = distance ? parseFloat(distance) : 0;
+
   return (
-    <View style={[external.fx_1]}>
-      <View style={styles.spaceBelow}>
-        <Header isOn={isOn} toggleSwitch={() => handleStatusChange()} />
+    <View style={[external.fx_1, { backgroundColor: colors.background }]}>
+      <Header isOn={isOn} toggleSwitch={() => handleStatusChange()} />
+      <ScrollView
+        style={styles.spaceBelow}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Scheduled Trips Card */}
         <TouchableOpacity
           onPress={() => router.push("/(routes)/scheduled-trips")}
-          style={{
-            marginHorizontal: 16,
-            marginTop: 8,
-            marginBottom: 8,
-            backgroundColor: color.primary,
-            padding: 12,
-            borderRadius: 8,
-            alignItems: "center",
-          }}
+          style={[
+            {
+              marginHorizontal: spacing.lg,
+              marginTop: spacing.md,
+              marginBottom: spacing.md,
+              backgroundColor: colors.card,
+              padding: spacing.lg,
+              borderRadius: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              ...shadows.md,
+            },
+          ]}
+          activeOpacity={0.7}
         >
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
-            📅 Scheduled Trips
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: `${color.primary}20`,
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: spacing.md,
+              }}
+            >
+              <Calender colors={color.primary} width={24} height={24} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: fontSizes.FONT18,
+                  fontFamily: fonts.bold,
+                  color: colors.text,
+                  marginBottom: spacing.xs / 2,
+                }}
+              >
+                Scheduled Trips
+              </Text>
+              <Text
+                style={{
+                  fontSize: fontSizes.FONT14,
+                  fontFamily: fonts.regular,
+                  color: color.text.secondary,
+                }}
+              >
+                View and manage your scheduled trips
+              </Text>
+            </View>
+          </View>
         </TouchableOpacity>
-        <FlatList
-          data={rideData}
-          numColumns={2}
-          renderItem={({ item }) => (
-            <RenderRideItem item={item} colors={colors} />
-          )}
-        />
-        {/* Recent Rides Section - Temporarily Hidden */}
-        {/* 
-        <View style={[styles.rideContainer, { backgroundColor: colors.card }]}>
-          <Text style={[styles.rideTitle, { color: colors.text }]}>
-            Recent Rides
-          </Text>
-          <ScrollView>
-            {recentRides?.map((item: any, index: number) => (
-              <RideCard item={item} key={index} />
-            ))}
-            {recentRides?.length === 0 && (
-              <Text>You didn't take any ride yet!</Text>
-            )}
-          </ScrollView>
-        </View>
-        */}
-      </View>
+
+        {/* Overview Section */}
+        <OverviewSection refreshTrigger={refreshTrigger} />
+      </ScrollView>
+
+      {/* Enhanced Ride Request Modal */}
       <Modal
-        transparent={true}
         visible={isModalVisible}
+        animationType="slide"
+        transparent={true}
         onRequestClose={handleClose}
       >
-        <TouchableOpacity style={styles.modalBackground} activeOpacity={1}>
-          <TouchableOpacity style={styles.modalContainer} activeOpacity={1}>
-            <View>
-              <Text style={styles.modalTitle}>New Ride Request Received!</Text>
-              <MapView
-                style={{ height: windowHeight(180) }}
-                region={region}
-                onRegionChangeComplete={(region) => setRegion(region)}
+        <View style={styles.modalBackground}>
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                backgroundColor: colors.background,
+                maxHeight: "90%",
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                New Ride Request
+              </Text>
+              <TouchableOpacity
+                onPress={handleClose}
+                style={styles.closeButton}
+                activeOpacity={0.7}
               >
-                {marker && <Marker coordinate={marker} />}
-                {currentLocation && <Marker coordinate={currentLocation} />}
-                {currentLocation && marker && (
-                  <MapViewDirections
-                    origin={currentLocation}
-                    destination={marker}
-                    apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
-                    strokeWidth={4}
-                    strokeColor="blue"
-                  />
-                )}
-              </MapView>
-              <View style={{ flexDirection: "row" }}>
-                <View style={styles.leftView}>
-                  <Location color={colors.text} />
-                  <View
-                    style={[
-                      styles.verticaldot,
-                      { borderColor: color.buttonBg },
-                    ]}
-                  />
-                  <Gps colors={colors.text} />
+                <Text style={{ fontSize: 24, color: colors.text }}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Map View - Larger */}
+              <View style={{ height: windowHeight(300), borderRadius: 12, overflow: "hidden", marginBottom: spacing.lg }}>
+                <MapView
+                  style={{ flex: 1 }}
+                  region={region}
+                  onRegionChangeComplete={(region) => setRegion(region)}
+                >
+                  {marker && (
+                    <Marker
+                      coordinate={marker}
+                      title="Destination"
+                      pinColor={color.status.active}
+                    />
+                  )}
+                  {currentLocation && (
+                    <Marker
+                      coordinate={currentLocation}
+                      title="Pickup"
+                      pinColor={color.status.completed}
+                    />
+                  )}
+                  {currentLocation && marker && (
+                    <MapViewDirections
+                      origin={currentLocation}
+                      destination={marker}
+                      apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                      strokeWidth={4}
+                      strokeColor={color.primary}
+                    />
+                  )}
+                </MapView>
+              </View>
+
+              {/* Passenger Info */}
+              {userData && (
+                <View style={{ marginBottom: spacing.lg }}>
+                  <PassengerCard passenger={userData} />
                 </View>
-                <View style={styles.rightView}>
-                  <Text style={[styles.pickup, { color: colors.text }]}>
-                    {currentLocationName}
-                  </Text>
-                  <View style={styles.border} />
-                  <Text style={[styles.drop, { color: colors.text }]}>
-                    {destinationLocationName}
-                  </Text>
+              )}
+
+              {/* Location Details */}
+              <View
+                style={{
+                  backgroundColor: colors.card,
+                  borderRadius: 12,
+                  padding: spacing.lg,
+                  marginBottom: spacing.lg,
+                }}
+              >
+                <View style={{ flexDirection: "row", marginBottom: spacing.md }}>
+                  <View style={styles.leftView}>
+                    <Location color={color.status.completed} />
+                    <View
+                      style={[
+                        styles.verticaldot,
+                        { borderColor: color.primary },
+                      ]}
+                    />
+                    <Gps colors={color.status.active} />
+                  </View>
+                  <View style={[styles.rightView, { flex: 1 }]}>
+                    <Text
+                      style={[
+                        styles.pickup,
+                        { color: colors.text, marginBottom: spacing.sm },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {currentLocationName || "Pickup Location"}
+                    </Text>
+                    <View style={styles.border} />
+                    <Text
+                      style={[styles.drop, { color: colors.text }]}
+                      numberOfLines={2}
+                    >
+                      {destinationLocationName || "Destination"}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* ETA and Distance */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingTop: spacing.md,
+                    borderTopWidth: 1,
+                    borderTopColor: colors.border,
+                  }}
+                >
+                  <ETADisplay distance={estimatedDistance} size="md" />
+                  <View>
+                    <Text
+                      style={{
+                        fontSize: fontSizes.FONT12,
+                        fontFamily: fonts.regular,
+                        color: color.text.secondary,
+                        marginBottom: spacing.xs / 2,
+                      }}
+                    >
+                      Estimated Fare
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: fontSizes.FONT20,
+                        fontFamily: fonts.bold,
+                        color: color.primary,
+                      }}
+                    >
+                      {estimatedFare} BDT
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <Text
-                style={{
-                  paddingTop: windowHeight(5),
-                  fontSize: windowHeight(14),
-                }}
-              >
-                Distance: {distance} km
-              </Text>
-              <Text
-                style={{
-                  paddingVertical: windowHeight(5),
-                  paddingBottom: windowHeight(5),
-                  fontSize: windowHeight(14),
-                }}
-              >
-                Amount:
-                {(distance * parseInt(driver?.rate!)).toFixed(2)} BDT
-              </Text>
+
+              {/* Action Buttons */}
               <View
                 style={{
                   flexDirection: "row",
-                  justifyContent: "space-between",
-                  marginVertical: windowHeight(5),
+                  gap: spacing.md,
+                  marginBottom: spacing.lg,
                 }}
               >
                 <Button
                   title="Decline"
                   onPress={handleClose}
-                  width={windowWidth(120)}
-                  height={windowHeight(30)}
-                  backgroundColor="crimson"
+                  width="48%"
+                  height={windowHeight(50)}
+                  backgroundColor={color.semantic.error}
                 />
                 <Button
-                  title={loading ? "Accepting..." : "Accept"}
+                  title={loading ? "Accepting..." : "Accept Ride"}
                   onPress={() => acceptRideHandler()}
-                  width={windowWidth(120)}
-                  height={windowHeight(30)}
+                  width="48%"
+                  height={windowHeight(50)}
                   disabled={loading}
                 />
               </View>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );

@@ -19,6 +19,7 @@ import {
   getScheduledTripById,
   updateScheduledTrip,
   deleteScheduledTrip,
+  getEmergencyLogs,
 } from "../controllers/admin.controller";
 import { isAuthenticatedAdmin } from "../middleware/isAuthenticated";
 
@@ -60,6 +61,9 @@ adminRouter.get("/trips", isAuthenticatedAdmin, getScheduledTrips);
 adminRouter.get("/trips/:id", isAuthenticatedAdmin, getScheduledTripById);
 adminRouter.put("/trips/:id", isAuthenticatedAdmin, updateScheduledTrip);
 adminRouter.delete("/trips/:id", isAuthenticatedAdmin, deleteScheduledTrip);
+
+// Emergency Logs
+adminRouter.get("/emergency-logs", isAuthenticatedAdmin, getEmergencyLogs);
 
 export default adminRouter;
 

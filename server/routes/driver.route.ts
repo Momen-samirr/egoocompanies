@@ -15,6 +15,9 @@ import {
   startScheduledTrip,
   updateTripProgress,
   updateCaptainLocation,
+  getDriverStats,
+  checkEmergencyUsageStatus,
+  emergencyTerminateTrip,
 } from "../controllers/driver.controller";
 import { isAuthenticatedDriver } from "../middleware/isAuthenticated";
 
@@ -46,10 +49,16 @@ driverRouter.put(
 
 driverRouter.get("/get-rides", isAuthenticatedDriver, getAllRides);
 
+driverRouter.get("/stats", isAuthenticatedDriver, getDriverStats);
+
 // Scheduled Trips
 driverRouter.get("/scheduled-trips", isAuthenticatedDriver, getScheduledTrips);
 driverRouter.post("/start-trip/:tripId", isAuthenticatedDriver, startScheduledTrip);
 driverRouter.post("/trip/progress", isAuthenticatedDriver, updateTripProgress);
 driverRouter.post("/update-location", isAuthenticatedDriver, updateCaptainLocation);
+
+// Emergency Termination
+driverRouter.get("/emergency-usage-status", isAuthenticatedDriver, checkEmergencyUsageStatus);
+driverRouter.post("/emergency-terminate-trip", isAuthenticatedDriver, emergencyTerminateTrip);
 
 export default driverRouter;

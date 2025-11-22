@@ -66,6 +66,16 @@ model driver {
   updatedAt           DateTime         @updatedAt
   rides               rides[]          @relation("DriverRides")
   assignedTrips       ScheduledTrip[]  @relation("AssignedCaptain")
+  emergencyUsages     EmergencyUsage[] @relation("DriverEmergencyUsages")
+}
+
+model EmergencyUsage {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  driverId    String   @db.ObjectId
+  tripId      String   @db.ObjectId
+  usedAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
+  driver      driver   @relation("DriverEmergencyUsages", fields: [driverId], references: [id])
 }
 
 enum ScheduledTripStatus {
@@ -74,6 +84,7 @@ enum ScheduledTripStatus {
   COMPLETED
   CANCELLED
   FAILED
+  EMERGENCY_TERMINATED
 }
 
 model ScheduledTrip {
@@ -84,6 +95,8 @@ model ScheduledTrip {
   status            ScheduledTripStatus  @default(SCHEDULED)
   assignedCaptainId String?             @db.ObjectId
   createdById       String              @db.ObjectId
+  emergencyTerminatedAt DateTime?
+  emergencyTerminatedBy String?         @db.ObjectId
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   assignedCaptain   driver?             @relation("AssignedCaptain", fields: [assignedCaptainId], references: [id])

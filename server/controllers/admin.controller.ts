@@ -154,6 +154,26 @@ export const getDashboardStats = async (req: any, res: Response) => {
       },
     });
 
+    // Emergency terminated trips count
+    const emergencyTerminatedTrips = await prisma.scheduledTrip.count({
+      where: { status: "EMERGENCY_TERMINATED" },
+    });
+
+    // Emergency terminations today
+    const todayStartForEmergency = new Date();
+    todayStartForEmergency.setHours(0, 0, 0, 0);
+    const tomorrowForEmergency = new Date(todayStartForEmergency);
+    tomorrowForEmergency.setDate(tomorrowForEmergency.getDate() + 1);
+    
+    const emergencyTerminationsToday = await prisma.emergencyUsage.count({
+      where: {
+        usedAt: {
+          gte: todayStartForEmergency,
+          lt: tomorrowForEmergency,
+        },
+      },
+    });
+
     res.status(200).json({
       success: true,
       stats: {
@@ -171,6 +191,8 @@ export const getDashboardStats = async (req: any, res: Response) => {
         },
         todayRides,
         recentRides,
+        emergencyTerminatedTrips,
+        emergencyTerminationsToday,
       },
     });
   } catch (error: any) {
@@ -930,10 +952,10 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
-    if (existingTrip.status === "ACTIVE") {
+    if (existingTrip.status === "ACTIVE" || existingTrip.status === "EMERGENCY_TERMINATED") {
       return res.status(400).json({
         success: false,
-        message: "Cannot update an active trip",
+        message: `Cannot update a trip with status: ${existingTrip.status}`,
       });
     }
 
@@ -1069,10 +1091,10 @@ export const deleteScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
-    if (trip.status === "ACTIVE") {
+    if (trip.status === "ACTIVE" || trip.status === "EMERGENCY_TERMINATED") {
       return res.status(400).json({
         success: false,
-        message: "Cannot delete an active trip. Please cancel it first.",
+        message: `Cannot delete a trip with status: ${trip.status}`,
       });
     }
 
@@ -1087,6 +1109,78 @@ export const deleteScheduledTrip = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     console.error("Delete scheduled trip error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get Emergency Usage Logs
+export const getEmergencyLogs = async (req: any, res: Response) => {
+  try {
+    const { page = 1, limit = 20, driverId, startDate, endDate } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where: any = {};
+    if (driverId) where.driverId = driverId;
+    if (startDate || endDate) {
+      where.usedAt = {};
+      if (startDate) where.usedAt.gte = new Date(startDate);
+      if (endDate) where.usedAt.lte = new Date(endDate);
+    }
+
+    const [logs, total] = await Promise.all([
+      prisma.emergencyUsage.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: { usedAt: "desc" },
+        include: {
+          driver: {
+            select: {
+              id: true,
+              name: true,
+              phone_number: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      prisma.emergencyUsage.count({ where }),
+    ]);
+
+    // Get trip details for each log
+    const logsWithTrips = await Promise.all(
+      logs.map(async (log) => {
+        const trip = await prisma.scheduledTrip.findUnique({
+          where: { id: log.tripId },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            emergencyTerminatedAt: true,
+          },
+        });
+        return {
+          ...log,
+          trip,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      logs: logsWithTrips,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    });
+  } catch (error: any) {
+    console.error("Get emergency logs error:", error);
     res.status(500).json({
       success: false,
       message: error.message || "Internal server error",

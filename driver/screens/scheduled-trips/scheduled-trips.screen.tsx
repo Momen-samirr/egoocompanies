@@ -18,7 +18,13 @@ import { router } from "expo-router";
 import * as Location from "expo-location";
 import color from "@/themes/app.colors";
 import { BackArrow } from "@/assets/icons/backArrow";
-import { windowHeight, windowWidth } from "@/themes/app.constant";
+import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
+import { spacing, shadows } from "@/styles/design-system";
+import fonts from "@/themes/app.fonts";
+import StatusBadge from "@/components/common/StatusBadge";
+import { Location as LocationIcon, Calender } from "@/utils/icons";
+import EmptyState from "@/components/common/EmptyState";
+import { SkeletonList } from "@/components/common/LoadingSkeleton";
 
 interface ScheduledTrip {
   id: string;
@@ -254,113 +260,133 @@ export default function ScheduledTripsScreen() {
     };
   };
 
+  const getActivationMessage = (item: ScheduledTrip): string => {
+    if (!item.activationStatus) return "";
+    
+    if (!isOnline) {
+      return "Go online to start this trip";
+    }
+    
+    if (item.activationStatus.canActivate) {
+      return "Ready to start!";
+    }
+    
+    if (item.activationStatus.isTooEarly) {
+      return `Too early. Earliest start: ${new Date(item.activationStatus.earliestStartTime || item.scheduledTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    }
+    
+    if (item.activationStatus.distanceToFirstPoint !== undefined && item.activationStatus.distanceToFirstPoint > 5000) {
+      return `Too far from first checkpoint (${(item.activationStatus.distanceToFirstPoint / 1000).toFixed(1)} km away)`;
+    }
+    
+    return item.activationStatus.reason || "Not ready yet";
+  };
+
   const renderTripItem = ({ item }: { item: ScheduledTrip }) => {
     const dateTime = formatDateTime(item.scheduledTime);
     const statusColor = getStatusColor(item.status);
     // Trip can only be started if: captain is online AND activation conditions are met
     const canStart = isOnline && item.activationStatus?.canActivate && item.status === "SCHEDULED";
+    const activationMessage = getActivationMessage(item);
 
     return (
       <View
         style={{
           backgroundColor: colors.card,
           borderRadius: 12,
-          padding: 16,
-          marginBottom: 12,
+          padding: spacing.lg,
+          marginBottom: spacing.md,
           borderWidth: 1,
           borderColor: colors.border,
+          ...shadows.sm,
         }}
       >
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-          <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text }}>
-            {item.name}
-          </Text>
-          <View
-            style={{
-              backgroundColor: statusColor + "20",
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 12,
-            }}
-          >
-            <Text style={{ color: statusColor, fontSize: 12, fontWeight: "600" }}>
-              {item.status === "FAILED" ? "Failed" : item.status}
+        {/* Header */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: spacing.md }}>
+          <View style={{ flex: 1, marginRight: spacing.sm }}>
+            <Text style={{ fontSize: fontSizes.FONT20, fontFamily: fonts.bold, color: colors.text, marginBottom: spacing.xs }}>
+              {item.name}
             </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <Calender colors={color.text.secondary} width={14} height={14} />
+              <Text style={{ color: color.text.secondary, fontSize: fontSizes.FONT14, fontFamily: fonts.regular }}>
+                {dateTime.date} at {dateTime.time}
+              </Text>
+            </View>
           </View>
+          <StatusBadge 
+            status={
+              item.status === "SCHEDULED" ? "scheduled" :
+              item.status === "ACTIVE" ? "active" :
+              item.status === "COMPLETED" ? "completed" :
+              item.status === "CANCELLED" ? "cancelled" :
+              "failed"
+            } 
+            size="sm"
+          />
         </View>
 
-        <View style={{ marginBottom: 8 }}>
-          <Text style={{ color: colors.text, fontSize: 14 }}>
-            📅 {dateTime.date} at {dateTime.time}
+        {/* Checkpoints Info */}
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: spacing.md, gap: spacing.sm }}>
+          <LocationIcon color={color.text.secondary} width={14} height={14} />
+          <Text style={{ color: colors.text, fontSize: fontSizes.FONT14, fontFamily: fonts.regular }}>
+            {item.points?.length || 0} checkpoint{item.points?.length !== 1 ? "s" : ""}
           </Text>
-          <Text style={{ color: colors.text, fontSize: 14, marginTop: 4 }}>
-            📍 {item.points?.length || 0} checkpoint(s)
-          </Text>
+          {item.points && item.points.length > 0 && (
+            <Text style={{ color: color.text.secondary, fontSize: fontSizes.FONT12 }}>
+              • {item.points[0].name} → {item.points[item.points.length - 1].name}
+            </Text>
+          )}
         </View>
 
-        {item.activationStatus && item.status === "SCHEDULED" && !item.isTooEarly && (
+        {/* Activation Status */}
+        {item.activationStatus && item.status === "SCHEDULED" && (
           <View
             style={{
-              backgroundColor: canStart ? "#10b98120" : "#fbbf2420",
-              padding: 12,
+              backgroundColor: canStart ? color.semantic.successLight : color.semantic.warningLight,
+              padding: spacing.md,
               borderRadius: 8,
-              marginBottom: 12,
+              marginBottom: spacing.md,
+              borderWidth: 1,
+              borderColor: canStart ? color.semantic.success : color.semantic.warning,
             }}
           >
-            {!isOnline && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+              <Text style={{ fontSize: 16 }}>
+                {canStart ? "✓" : "⏳"}
+              </Text>
               <Text
                 style={{
-                  color: "#ef4444",
-                  fontSize: 12,
-                  fontWeight: "600",
-                  marginBottom: 4,
+                  color: canStart ? color.semantic.success : color.semantic.warning,
+                  fontSize: fontSizes.FONT14,
+                  fontFamily: fonts.medium,
+                  flex: 1,
                 }}
               >
-                ⚠️ You must be online to start trips
+                {activationMessage}
+              </Text>
+            </View>
+            {isOnline && item.activationStatus.distanceToFirstPoint !== undefined && item.activationStatus.distanceToFirstPoint <= 5000 && (
+              <Text style={{ color: color.text.secondary, fontSize: fontSizes.FONT12, marginTop: spacing.xs / 2 }}>
+                {((item.activationStatus.distanceToFirstPoint || 0) / 1000).toFixed(2)} km from first checkpoint
               </Text>
             )}
-            {isOnline && item.activationStatus.distanceToFirstPoint !== undefined && (
-              <Text style={{ color: colors.text, fontSize: 12, marginBottom: 4 }}>
-                Distance to first checkpoint:{" "}
-                {(item.activationStatus.distanceToFirstPoint / 1000).toFixed(2)} km
-              </Text>
-            )}
-            {isOnline && (
-              <Text style={{ color: colors.text, fontSize: 11, marginBottom: 4, opacity: 0.7 }}>
-                Scheduled: {formatDateTime(item.scheduledTime).date} at {formatDateTime(item.scheduledTime).time}
-                {item.activationStatus?.earliestStartTime && (
-                  <Text>
-                    {"\n"}Earliest start: {new Date(item.activationStatus.earliestStartTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </Text>
-                )}
-              </Text>
-            )}
-            <Text
-              style={{
-                color: canStart ? "#10b981" : "#fbbf24",
-                fontSize: 12,
-                fontWeight: "600",
-              }}
-            >
-              {canStart
-                ? "✓ Ready to start!"
-                : !isOnline
-                ? "Go online to start this trip"
-                : item.activationStatus.reason || "Conditions not met"}
-            </Text>
           </View>
         )}
 
+        {/* Action Buttons */}
         {item.status === "FAILED" ? (
           <View
             style={{
-              backgroundColor: "#dc2626",
-              padding: 12,
+              backgroundColor: color.semantic.errorLight,
+              padding: spacing.md,
               borderRadius: 8,
               alignItems: "center",
+              borderWidth: 1,
+              borderColor: color.semantic.error,
             }}
           >
-            <Text style={{ color: "#fff", fontWeight: "600" }}>
+            <Text style={{ color: color.semantic.error, fontFamily: fonts.bold, fontSize: fontSizes.FONT14 }}>
               ❌ Trip Failed (Overdue)
             </Text>
           </View>
@@ -369,22 +395,25 @@ export default function ScheduledTripsScreen() {
             onPress={() => handleStartTrip(item)}
             disabled={!canStart || startingTrip === item.id}
             style={{
-              backgroundColor: canStart ? color.primary : "#9ca3af",
-              padding: 12,
+              backgroundColor: canStart ? color.primary : color.border,
+              padding: spacing.md,
               borderRadius: 8,
               alignItems: "center",
-              opacity: startingTrip === item.id ? 0.6 : 1,
+              opacity: startingTrip === item.id ? 0.6 : canStart ? 1 : 0.6,
+              minHeight: 44,
+              justifyContent: "center",
             }}
+            activeOpacity={0.7}
           >
             {startingTrip === item.id ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={{ color: "#fff", fontWeight: "600" }}>Start Trip</Text>
+              <Text style={{ color: "#fff", fontFamily: fonts.bold, fontSize: fontSizes.FONT16 }}>
+                Start Trip
+              </Text>
             )}
           </TouchableOpacity>
-        ) : null}
-
-        {item.status === "ACTIVE" && (
+        ) : item.status === "ACTIVE" ? (
           <TouchableOpacity
             onPress={() => {
               router.push({
@@ -394,14 +423,19 @@ export default function ScheduledTripsScreen() {
             }}
             style={{
               backgroundColor: color.primary,
-              padding: 12,
+              padding: spacing.md,
               borderRadius: 8,
               alignItems: "center",
+              minHeight: 44,
+              justifyContent: "center",
             }}
+            activeOpacity={0.7}
           >
-            <Text style={{ color: "#fff", fontWeight: "600" }}>Continue Trip</Text>
+            <Text style={{ color: "#fff", fontFamily: fonts.bold, fontSize: fontSizes.FONT16 }}>
+              Continue Trip
+            </Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
     );
   };
@@ -439,8 +473,8 @@ export default function ScheduledTripsScreen() {
             Back to Home
           </Text>
         </TouchableOpacity>
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator size="large" color={color.primary} />
+        <View style={{ flex: 1, padding: spacing.lg }}>
+          <SkeletonList count={3} />
         </View>
       </View>
     );
@@ -499,11 +533,12 @@ export default function ScheduledTripsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
-          <View style={{ alignItems: "center", marginTop: 50 }}>
-            <Text style={{ color: colors.text, fontSize: 16 }}>
-              No scheduled trips found
-            </Text>
-          </View>
+          <EmptyState
+            title="No Scheduled Trips"
+            message="You don't have any scheduled trips at the moment. Check back later for new trips."
+            actionLabel="Go to Home"
+            onAction={() => router.push("/(tabs)/home")}
+          />
         }
       />
     </View>

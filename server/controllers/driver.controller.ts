@@ -691,6 +691,136 @@ export const getAllRides = async (req: any, res: Response) => {
   });
 };
 
+// Get driver statistics for overview
+export const getDriverStats = async (req: any, res: Response) => {
+  try {
+    const driverId = req.driver?.id;
+    
+    if (!driverId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // Get today's date range (start and end of today)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Completed trips today (regular rides)
+    const completedTripsToday = await prisma.rides.count({
+      where: {
+        driverId,
+        status: "Completed",
+        cratedAt: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
+    });
+
+    // Completed scheduled trips today
+    const completedScheduledTripsToday = await prisma.scheduledTrip.count({
+      where: {
+        assignedCaptainId: driverId,
+        status: "COMPLETED",
+        updatedAt: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
+    });
+
+    // Failed/missed trips (scheduled trips with FAILED status)
+    const failedTrips = await prisma.scheduledTrip.count({
+      where: {
+        assignedCaptainId: driverId,
+        status: "FAILED",
+      },
+    });
+
+    // Upcoming scheduled trips (SCHEDULED status)
+    const upcomingScheduledTrips = await prisma.scheduledTrip.count({
+      where: {
+        assignedCaptainId: driverId,
+        status: "SCHEDULED",
+        scheduledTime: {
+          gte: new Date(),
+        },
+      },
+    });
+
+    // Active trip (ACTIVE status)
+    const activeTrip = await prisma.scheduledTrip.findFirst({
+      where: {
+        assignedCaptainId: driverId,
+        status: "ACTIVE",
+      },
+      include: {
+        points: true,
+        progress: true,
+      },
+    });
+
+    // Active regular ride (Ongoing status)
+    const activeRide = await prisma.rides.findFirst({
+      where: {
+        driverId,
+        status: "Ongoing",
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    // Total earnings from driver model
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      select: { totalEarning: true },
+    });
+
+    // Total completed trips (all time)
+    const totalCompletedTrips = await prisma.rides.count({
+      where: {
+        driverId,
+        status: "Completed",
+      },
+    });
+
+    // Total completed scheduled trips (all time)
+    const totalCompletedScheduledTrips = await prisma.scheduledTrip.count({
+      where: {
+        assignedCaptainId: driverId,
+        status: "COMPLETED",
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        completedTripsToday: completedTripsToday + completedScheduledTripsToday,
+        failedTrips,
+        upcomingScheduledTrips,
+        activeTrip: activeTrip || activeRide ? {
+          type: activeTrip ? "scheduled" : "regular",
+          id: activeTrip?.id || activeRide?.id,
+          name: activeTrip?.name || `${activeRide?.currentLocationName} → ${activeRide?.destinationLocationName}`,
+        } : null,
+        totalEarnings: driver?.totalEarning || 0,
+        totalCompletedTrips: totalCompletedTrips + totalCompletedScheduledTrips,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error fetching driver stats:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch driver statistics",
+    });
+  }
+};
+
 // Get Scheduled Trips for Captain
 export const getScheduledTrips = async (req: any, res: Response) => {
   try {
@@ -1221,6 +1351,192 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     console.error("Update captain location error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Check if driver can use emergency termination today
+export const checkEmergencyUsageStatus = async (req: any, res: Response) => {
+  try {
+    const driverId = req.driver?.id;
+
+    if (!driverId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // Get today's date range (start and end of today)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Check if driver has used emergency termination today
+    const todayUsage = await prisma.emergencyUsage.findFirst({
+      where: {
+        driverId,
+        usedAt: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
+      orderBy: {
+        usedAt: "desc",
+      },
+    });
+
+    const canUse = !todayUsage;
+    const lastUsedAt = todayUsage?.usedAt || null;
+
+    res.status(200).json({
+      success: true,
+      canUse,
+      lastUsedAt,
+      message: canUse
+        ? "Emergency termination is available"
+        : "You have already used the emergency end option today.",
+    });
+  } catch (error: any) {
+    console.error("Check emergency usage status error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Emergency terminate active trip
+export const emergencyTerminateTrip = async (req: any, res: Response) => {
+  try {
+    const { tripId } = req.body;
+    const driverId = req.driver?.id;
+
+    if (!driverId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!tripId) {
+      return res.status(400).json({
+        success: false,
+        message: "Trip ID is required",
+      });
+    }
+
+    // Get today's date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Check if driver has already used emergency termination today
+    const todayUsage = await prisma.emergencyUsage.findFirst({
+      where: {
+        driverId,
+        usedAt: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
+    });
+
+    if (todayUsage) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already used the emergency end option today.",
+        lastUsedAt: todayUsage.usedAt,
+      });
+    }
+
+    // Get the trip
+    const trip = await prisma.scheduledTrip.findUnique({
+      where: { id: tripId },
+      include: {
+        progress: true,
+      },
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    // Security check: Verify driver is assigned to this trip
+    if (!trip.assignedCaptainId || trip.assignedCaptainId !== driverId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to this trip",
+      });
+    }
+
+    // Only allow emergency termination for ACTIVE trips
+    if (trip.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: `Trip is not active. Current status: ${trip.status}`,
+      });
+    }
+
+    // Update trip status to EMERGENCY_TERMINATED
+    const now = new Date();
+    const updatedTrip = await prisma.scheduledTrip.update({
+      where: { id: tripId },
+      data: {
+        status: "EMERGENCY_TERMINATED",
+        emergencyTerminatedAt: now,
+        emergencyTerminatedBy: driverId,
+      },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Record emergency usage
+    await prisma.emergencyUsage.create({
+      data: {
+        driverId,
+        tripId,
+        usedAt: now,
+      },
+    });
+
+    // Update trip progress to mark as completed (emergency termination)
+    if (trip.progress) {
+      await prisma.tripProgress.update({
+        where: { scheduledTripId: tripId },
+        data: {
+          completedAt: now,
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      trip: updatedTrip,
+      message: "Trip emergency terminated successfully",
+    });
+  } catch (error: any) {
+    console.error("Emergency terminate trip error:", error);
     res.status(500).json({
       success: false,
       message: error.message || "Internal server error",

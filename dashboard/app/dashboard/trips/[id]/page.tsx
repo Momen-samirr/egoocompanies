@@ -9,7 +9,7 @@ interface ScheduledTrip {
   name: string;
   tripDate: string;
   scheduledTime: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED" | "EMERGENCY_TERMINATED";
   assignedCaptain: {
     id: string;
     name: string;
@@ -96,6 +96,8 @@ export default function TripDetailsPage() {
         return "bg-red-100 text-red-800";
       case "FAILED":
         return "bg-red-200 text-red-900 font-bold border-2 border-red-500";
+      case "EMERGENCY_TERMINATED":
+        return "bg-orange-200 text-orange-900 font-bold border-2 border-orange-500";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -120,7 +122,8 @@ export default function TripDetailsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          {(trip.status === "SCHEDULED" || trip.status === "FAILED") && (
+          {(trip.status === "SCHEDULED" || trip.status === "FAILED") &&
+            trip.status !== "EMERGENCY_TERMINATED" && (
             <>
               <button
                 onClick={() => router.push(`/dashboard/trips/${tripId}/edit`)}
@@ -166,7 +169,11 @@ export default function TripDetailsPage() {
                     trip.status
                   )}`}
                 >
-                  {trip.status === "FAILED" ? "Failed" : trip.status}
+                  {trip.status === "FAILED"
+                    ? "Failed"
+                    : trip.status === "EMERGENCY_TERMINATED"
+                    ? "Emergency Ended"
+                    : trip.status}
                 </span>
               </dd>
             </div>

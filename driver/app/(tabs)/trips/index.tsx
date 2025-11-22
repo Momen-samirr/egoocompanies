@@ -8,6 +8,9 @@ import axios from "axios";
 import { windowHeight } from "@/themes/app.constant";
 import { getServerUri } from "@/configs/constants";
 import { useTheme } from "@react-navigation/native";
+import { SkeletonList } from "@/components/common/LoadingSkeleton";
+import EmptyState from "@/components/common/EmptyState";
+import { spacing } from "@/styles/design-system";
 
 export default function ScheduledTripsHistory() {
   const { colors } = useTheme();
@@ -52,15 +55,23 @@ export default function ScheduledTripsHistory() {
         style={[
           styles.rideContainer,
           {
-            backgroundColor: color.lightGray,
+            backgroundColor: colors.background,
             paddingTop: windowHeight(40),
             flex: 1,
-            justifyContent: "center",
-            alignItems: "center",
           },
         ]}
       >
-        <ActivityIndicator size="large" color={color.primary} />
+        <Text
+          style={[
+            styles.rideTitle,
+            { color: colors.text, fontWeight: "600" },
+          ]}
+        >
+          Scheduled Trips History
+        </Text>
+        <View style={{ padding: spacing.lg }}>
+          <SkeletonList count={3} />
+        </View>
       </View>
     );
   }
@@ -82,17 +93,10 @@ export default function ScheduledTripsHistory() {
       </Text>
       <ScrollView>
         {trips.length === 0 ? (
-          <View
-            style={{
-              alignItems: "center",
-              marginTop: windowHeight(50),
-              padding: 20,
-            }}
-          >
-            <Text style={{ color: colors.text, fontSize: 16 }}>
-              No scheduled trips found
-            </Text>
-          </View>
+          <EmptyState
+            title="No Scheduled Trips"
+            message="You don't have any scheduled trips in your history."
+          />
         ) : (
           trips.map((item: any, index: number) => (
             <ScheduledTripCard item={item} key={item.id || index} />

@@ -9,7 +9,7 @@ interface ScheduledTrip {
   name: string;
   tripDate: string;
   scheduledTime: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED" | "EMERGENCY_TERMINATED";
   assignedCaptain: {
     id: string;
     name: string;
@@ -96,6 +96,8 @@ export default function ScheduledTripsPage() {
         return "bg-red-100 text-red-800";
       case "FAILED":
         return "bg-red-200 text-red-900 font-bold border-2 border-red-500";
+      case "EMERGENCY_TERMINATED":
+        return "bg-orange-200 text-orange-900 font-bold border-2 border-orange-500";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -129,6 +131,7 @@ export default function ScheduledTripsPage() {
             <option value="COMPLETED">Completed</option>
             <option value="CANCELLED">Cancelled</option>
             <option value="FAILED">Failed</option>
+            <option value="EMERGENCY_TERMINATED">Emergency Terminated</option>
           </select>
         </div>
 
@@ -185,7 +188,11 @@ export default function ScheduledTripsPage() {
                                 trip.status
                               )}`}
                             >
-                              {trip.status === "FAILED" ? "Failed" : trip.status}
+                              {trip.status === "FAILED"
+                                ? "Failed"
+                                : trip.status === "EMERGENCY_TERMINATED"
+                                ? "Emergency Ended"
+                                : trip.status}
                             </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">

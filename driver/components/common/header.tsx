@@ -5,13 +5,34 @@ import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
 import SwitchToggle from "react-native-switch-toggle";
 import { Notification } from "@/utils/icons";
+import { BackArrow } from "@/assets/icons/backArrow";
+import { router } from "expo-router";
 
 interface HeaderProps {
   isOn: boolean;
   toggleSwitch: () => void;
+  showBackButton?: boolean;
+  title?: string;
+  onBackPress?: () => void;
+  notificationCount?: number;
 }
 
-export default function Header({ isOn, toggleSwitch }: HeaderProps) {
+export default function Header({ 
+  isOn, 
+  toggleSwitch, 
+  showBackButton = false,
+  title,
+  onBackPress,
+  notificationCount = 0,
+}: HeaderProps) {
+  const handleBackPress = () => {
+    if (onBackPress) {
+      onBackPress();
+    } else {
+      router.back();
+    }
+  };
+
   return (
     <View style={styles.headerMain}>
       <View style={styles.headerMargin}>
@@ -25,20 +46,41 @@ export default function Header({ isOn, toggleSwitch }: HeaderProps) {
             },
           ]}
         >
-          <View style={[styles.headerTitle]}>
+          <View style={[styles.headerTitle, { flex: 1, flexDirection: "row", alignItems: "center" }]}>
+            {showBackButton && (
+              <TouchableOpacity
+                onPress={handleBackPress}
+                style={styles.backButton}
+                activeOpacity={0.7}
+                accessibilityLabel="Go back"
+                accessibilityRole="button"
+              >
+                <BackArrow colors={color.whiteColor} width={20} height={20} />
+              </TouchableOpacity>
+            )}
             <Text
-              style={{
-                fontFamily: "TT-Octosquares-Medium",
-                fontSize: windowHeight(22),
-                color: "#fff",
-                textAlign: "left",
-              }}
+              style={[
+                styles.headerTitleText,
+                { marginLeft: showBackButton ? windowWidth(10) : 0 }
+              ]}
             >
-              Egoo
+              {title || "Egoo"}
             </Text>
           </View>
-          <TouchableOpacity style={styles.notificationIcon} activeOpacity={0.5}>
+          <TouchableOpacity 
+            style={styles.notificationIcon} 
+            activeOpacity={0.5}
+            accessibilityLabel="Notifications"
+            accessibilityRole="button"
+          >
             <Notification color={color.whiteColor} />
+            {notificationCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {notificationCount > 9 ? "9+" : notificationCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
         <View
@@ -52,15 +94,23 @@ export default function Header({ isOn, toggleSwitch }: HeaderProps) {
               flexDirection: "row",
               alignItems: "center",
               gap: windowWidth(2),
+              flex: 1,
             }}
           >
+            <View style={[styles.statusIndicator, { backgroundColor: isOn ? "#10b981" : "#9ca3af" }]} />
             <Text
-              style={[styles.valueTitle, { color: isOn ? "green" : "#000" }]}
+              style={[
+                styles.valueTitle, 
+                { 
+                  color: isOn ? "#10b981" : "#6b7280",
+                  fontWeight: "600",
+                }
+              ]}
             >
-              {isOn ? "On" : "Off"}
+              {isOn ? "Online" : "Offline"}
             </Text>
-            <Text>
-              *You are {isOn ? "available" : "not available"} for ride now!
+            <Text style={styles.statusSubtext}>
+              {isOn ? "Available for rides" : "Not available"}
             </Text>
           </View>
           <View style={styles.switchBorder}>
@@ -105,15 +155,49 @@ const styles = StyleSheet.create({
   headerTitle: {
     alignItems: "center",
   },
+  headerTitleText: {
+    fontFamily: "TT-Octosquares-Medium",
+    fontSize: windowHeight(22),
+    color: "#fff",
+    textAlign: "left",
+  },
+  backButton: {
+    padding: windowWidth(5),
+    marginLeft: -windowWidth(5),
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   notificationIcon: {
-    height: windowHeight(15),
+    height: windowHeight(40),
     width: windowWidth(40),
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 4,
+    borderRadius: 8,
     backgroundColor: "#675fd800",
     borderColor: color.buttonBg,
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#ef4444",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: color.primary,
+  },
+  notificationBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "bold",
   },
   switchContainer: {
     height: windowHeight(28),
@@ -124,8 +208,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: windowWidth(10),
   },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: windowWidth(3),
+  },
   valueTitle: {
     fontFamily: fonts.medium,
+    fontSize: fontSizes.FONT14,
+  },
+  statusSubtext: {
+    fontFamily: fonts.regular,
+    fontSize: fontSizes.FONT12,
+    color: color.secondaryFont,
+    marginLeft: windowWidth(3),
   },
   switchBorder: {
     height: windowHeight(20),
