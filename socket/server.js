@@ -143,16 +143,22 @@ wss.on("connection", (ws, req) => {
   try {
     // Parse URL to get query parameters
     const urlString = req.url || "";
+    console.log(`🔍 New WebSocket connection - URL: ${urlString}`);
     const url = new URL(urlString, `http://${req.headers.host || "localhost"}`);
     isAdmin = url.searchParams.get("role") === "admin";
+    console.log(`🔍 Connection type: ${isAdmin ? "Admin (Dashboard)" : "Driver/User"}`);
   } catch (error) {
     // Fallback: check if URL contains role=admin
     if (req.url && req.url.includes("role=admin")) {
       isAdmin = true;
     }
-    console.log("URL parsing fallback, isAdmin:", isAdmin);
+    console.log(`🔍 URL parsing fallback, isAdmin: ${isAdmin}, URL: ${req.url}`);
   }
   ws.isAdmin = isAdmin;
+  
+  // Log connection details
+  console.log(`📊 Current connections: ${wss.clients.size} total`);
+  console.log(`📊 Current drivers in memory: ${Object.keys(drivers).length}`);
 
   // Set up ping/pong keepalive to prevent connection timeouts
   ws.isAlive = true;
@@ -205,7 +211,12 @@ wss.on("connection", (ws, req) => {
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message);
-      console.log("Received message:", data);
+      console.log(`📨 Received message from ${ws.isAdmin ? "admin" : "client"}:`, data.type || "unknown");
+      
+      // Log driver location updates in detail
+      if (data.type === "locationUpdate" && data.role === "driver") {
+        console.log(`🚗 Driver location update received from driver ID: ${data.driver}`);
+      }
 
       if (data.type === "locationUpdate" && data.role === "driver") {
         // Store driver ID in the WebSocket connection for cleanup on disconnect
@@ -399,12 +410,48 @@ const findNearbyDrivers = (userLat, userLon) => {
 
 // API endpoint to get current driver locations (for HTTP requests)
 app.get("/api/drivers", (req, res) => {
-  res.json({ drivers });
+  const driverCount = Object.keys(drivers).length;
+  console.log(`📡 HTTP API: /api/drivers requested - returning ${driverCount} drivers`);
+  res.json({ 
+    drivers,
+    count: driverCount,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // API endpoint to get active rides
 app.get("/api/active-rides", (req, res) => {
-  res.json({ rides: activeRides });
+  const rideCount = Object.keys(activeRides).length;
+  console.log(`📡 HTTP API: /api/active-rides requested - returning ${rideCount} rides`);
+  res.json({ 
+    rides: activeRides,
+    count: rideCount,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API endpoint to get connection stats (for debugging)
+app.get("/api/stats", (req, res) => {
+  const adminClients = Array.from(wss.clients).filter(client => client.isAdmin).length;
+  const totalClients = wss.clients.size;
+  const driverCount = Object.keys(drivers).length;
+  
+  console.log(`📡 HTTP API: /api/stats requested`);
+  res.json({
+    connections: {
+      total: totalClients,
+      admin: adminClients,
+      drivers: totalClients - adminClients
+    },
+    drivers: {
+      count: driverCount,
+      ids: Object.keys(drivers)
+    },
+    activeRides: {
+      count: Object.keys(activeRides).length
+    },
+    timestamp: new Date().toISOString()
+  });
 });
 
 // API endpoint to notify user when ride is accepted (called from backend server)
