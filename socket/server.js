@@ -4,6 +4,50 @@ const { WebSocketServer } = require("ws");
 const geolib = require("geolib");
 
 const app = express();
+
+// CORS configuration for HTTP API endpoints
+const allowedOrigins = [
+  "https://dashapp.egoobus.com",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  // Add other allowed origins as needed
+];
+
+// CORS middleware
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // In development, allow all origins
+  if (process.env.NODE_ENV !== "production") {
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
+  } else {
+    // In production, only allow specific origins
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    } else if (!origin) {
+      // Allow requests with no origin (like mobile apps, Postman, etc.)
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
+    // If origin is provided but not in allowed list, don't set the header (will be blocked)
+  }
+  
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200);
+    return;
+  }
+  
+  next();
+});
+
 app.use(express.json());
 // Use Render's PORT environment variable (automatically set by Render)
 // For local development, fallback to 8080 (original WebSocket port)
