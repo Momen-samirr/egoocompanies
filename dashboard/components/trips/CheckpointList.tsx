@@ -1,6 +1,5 @@
 "use client";
 
-import { Checkpoint } from "./TripTimeline";
 import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import { MapPinIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon } from "@heroicons/react/24/outline";
