@@ -80,7 +80,7 @@ export default function LocationAutocomplete({
           const location = extractLocationFromPlace(placeDetails);
 
           if (location) {
-            setSearchValue(location.address);
+            setSearchValue(location.address || "");
             onChange(location);
           } else {
             onError?.("Failed to extract location data.");
