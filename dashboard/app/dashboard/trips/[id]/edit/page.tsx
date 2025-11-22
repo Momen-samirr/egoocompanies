@@ -2,7 +2,23 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useFieldArray, Controller } from "react-hook-form";
+import { toast } from "react-hot-toast";
 import api from "@/lib/api";
+import { useTripForm } from "@/hooks/useTripForm";
+import LocationPicker from "@/components/trips/LocationPicker";
+import FormField from "@/components/common/FormField";
+import Card, { CardBody, CardHeader } from "@/components/common/Card";
+import Button from "@/components/common/Button";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
+import {
+  PlusIcon,
+  TrashIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  MapPinIcon,
+} from "@heroicons/react/24/outline";
+import { LocationData, ScheduledTrip } from "@/types/trip";
 
 interface Driver {
   id: string;
@@ -12,39 +28,57 @@ interface Driver {
   status: string;
 }
 
-interface Checkpoint {
-  id?: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  order: number;
-  isFinalPoint: boolean;
-}
-
-interface ScheduledTrip {
-  id: string;
-  name: string;
-  tripDate: string;
-  scheduledTime: string;
-  assignedCaptainId: string;
-  points: Checkpoint[];
-}
-
 export default function EditTripPage() {
   const router = useRouter();
   const params = useParams();
   const tripId = params.id as string;
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [trip, setTrip] = useState<ScheduledTrip | null>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    tripDate: "",
-    scheduledTime: "",
-    assignedCaptainId: "",
+  const [checkpointLocations, setCheckpointLocations] = useState<
+    Map<number, LocationData | null>
+  >(new Map());
+
+  const { form, handleSubmit, isSubmitting, isDirty } = useTripForm({
+    defaultValues: {
+      name: "",
+      tripDate: "",
+      scheduledTime: "",
+      assignedCaptainId: "",
+      points: [],
+    },
+    onSubmit: async (data) => {
+      // Get timezone offset for time preservation
+      const now = new Date();
+      const timezoneOffset = -now.getTimezoneOffset();
+      const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+      const offsetMinutes = Math.abs(timezoneOffset) % 60;
+      const offsetSign = timezoneOffset >= 0 ? "+" : "-";
+      const timezoneString = `${offsetSign}${String(offsetHours).padStart(
+        2,
+        "0"
+      )}:${String(offsetMinutes).padStart(2, "0")}`;
+      const scheduledTimeWithTimezone = `${data.scheduledTime}:00${timezoneString}`;
+
+      const response = await api.put(`/admin/trips/${tripId}`, {
+        name: data.name,
+        tripDate: data.tripDate,
+        scheduledTime: scheduledTimeWithTimezone,
+        assignedCaptainId: data.assignedCaptainId || undefined,
+        points: data.points,
+      });
+
+      if (response.data.success) {
+        toast.success("Trip updated successfully!");
+        router.push(`/dashboard/trips/${tripId}`);
+      }
+    },
   });
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+
+  const { fields, append, remove, move } = useFieldArray({
+    control: form.control,
+    name: "points",
+  });
 
   useEffect(() => {
     fetchTrip();
@@ -58,34 +92,42 @@ export default function EditTripPage() {
       if (response.data.success) {
         const tripData = response.data.trip;
         setTrip(tripData);
-        
+
         // Format date and time for form inputs
         const scheduledDate = new Date(tripData.scheduledTime);
         const dateStr = scheduledDate.toISOString().split("T")[0];
-        const timeStr = scheduledDate.toTimeString().slice(0, 5); // HH:MM format
-        
-        setFormData({
+        const timeStr = scheduledDate.toTimeString().slice(0, 5);
+
+        // Pre-populate form
+        form.reset({
           name: tripData.name,
           tripDate: dateStr,
           scheduledTime: timeStr,
-          assignedCaptainId: tripData.assignedCaptainId,
-        });
-        
-        // Set checkpoints with their IDs
-        setCheckpoints(
-          tripData.points.map((point: any) => ({
+          assignedCaptainId: tripData.assignedCaptainId || "",
+          points: tripData.points.map((point: any) => ({
             id: point.id,
             name: point.name,
             latitude: point.latitude,
             longitude: point.longitude,
             order: point.order,
             isFinalPoint: point.isFinalPoint,
-          }))
-        );
+          })),
+        });
+
+        // Pre-populate location pickers
+        const locations = new Map<number, LocationData | null>();
+        tripData.points.forEach((point: any, index: number) => {
+          locations.set(index, {
+            latitude: point.latitude,
+            longitude: point.longitude,
+            address: point.name,
+          });
+        });
+        setCheckpointLocations(locations);
       }
     } catch (error: any) {
       console.error("Error fetching trip:", error);
-      alert(error.response?.data?.message || "Failed to load trip");
+      toast.error(error.response?.data?.message || "Failed to load trip");
       router.push("/dashboard/trips");
     } finally {
       setLoading(false);
@@ -98,131 +140,84 @@ export default function EditTripPage() {
       setDrivers(response.data.drivers);
     } catch (error) {
       console.error("Error fetching drivers:", error);
+      toast.error("Failed to load drivers");
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleCheckpointChange = (index: number, field: keyof Checkpoint, value: any) => {
-    setCheckpoints((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
+  const addCheckpoint = () => {
+    append({
+      name: "",
+      latitude: 0,
+      longitude: 0,
+      order: fields.length,
+      isFinalPoint: false,
     });
   };
 
-  const addCheckpoint = () => {
-    setCheckpoints((prev) => [
-      ...prev,
-      { name: "", latitude: 0, longitude: 0, order: prev.length, isFinalPoint: false },
-    ]);
-  };
-
   const removeCheckpoint = (index: number) => {
-    if (checkpoints.length > 1) {
-      setCheckpoints((prev) => {
-        const updated = prev.filter((_, i) => i !== index);
-        // Reorder remaining checkpoints
-        return updated.map((cp, i) => ({ ...cp, order: i }));
+    if (fields.length > 1) {
+      remove(index);
+      const newMap = new Map(checkpointLocations);
+      newMap.delete(index);
+      const reindexed = new Map<number, LocationData | null>();
+      newMap.forEach((value, key) => {
+        if (key > index) {
+          reindexed.set(key - 1, value);
+        } else if (key < index) {
+          reindexed.set(key, value);
+        }
       });
+      setCheckpointLocations(reindexed);
+    } else {
+      toast.error("At least one checkpoint is required");
     }
   };
 
   const moveCheckpoint = (index: number, direction: "up" | "down") => {
     if (
       (direction === "up" && index === 0) ||
-      (direction === "down" && index === checkpoints.length - 1)
+      (direction === "down" && index === fields.length - 1)
     ) {
       return;
     }
 
-    setCheckpoints((prev) => {
-      const updated = [...prev];
-      const newIndex = direction === "up" ? index - 1 : index + 1;
-      [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
-      // Update order
-      updated.forEach((cp, i) => {
-        cp.order = i;
-      });
-      return updated;
-    });
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    move(index, newIndex);
+
+    const newMap = new Map(checkpointLocations);
+    const location1 = newMap.get(index);
+    const location2 = newMap.get(newIndex);
+    if (location1 !== undefined) newMap.set(newIndex, location1);
+    if (location2 !== undefined) newMap.set(index, location2);
+    setCheckpointLocations(newMap);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validation
-    if (!formData.name || !formData.tripDate || !formData.scheduledTime || !formData.assignedCaptainId) {
-      alert("Please fill in all required fields");
-      return;
+  const handleLocationChange = (
+    index: number,
+    location: LocationData | null
+  ) => {
+    if (location) {
+      form.setValue(`points.${index}.latitude`, location.latitude);
+      form.setValue(`points.${index}.longitude`, location.longitude);
+      const newMap = new Map(checkpointLocations);
+      newMap.set(index, location);
+      setCheckpointLocations(newMap);
     }
+  };
 
-    if (checkpoints.length === 0) {
-      alert("Please add at least one checkpoint");
-      return;
-    }
-
-    const hasFinalPoint = checkpoints.some((cp) => cp.isFinalPoint);
-    if (!hasFinalPoint) {
-      alert("Please mark at least one checkpoint as the final point");
-      return;
-    }
-
-    // Validate checkpoints
-    for (let i = 0; i < checkpoints.length; i++) {
-      const cp = checkpoints[i];
-      if (!cp.name || cp.latitude === 0 || cp.longitude === 0) {
-        alert(`Please fill in all fields for checkpoint ${i + 1}`);
-        return;
-      }
-    }
-
-    try {
-      setSaving(true);
-      
-      // Get user's timezone offset to preserve exact time
-      const now = new Date();
-      const timezoneOffset = -now.getTimezoneOffset();
-      const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
-      const offsetMinutes = Math.abs(timezoneOffset) % 60;
-      const offsetSign = timezoneOffset >= 0 ? '+' : '-';
-      const timezoneString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
-      
-      // Send time with timezone to preserve exact time
-      const scheduledTimeWithTimezone = formData.scheduledTime.includes('+') || formData.scheduledTime.includes('-')
-        ? formData.scheduledTime // Already has timezone
-        : `${formData.scheduledTime}:00${timezoneString}`;
-      
-      console.log("📅 Updating trip:");
-      console.log("   Date:", formData.tripDate);
-      console.log("   Time (with timezone):", scheduledTimeWithTimezone);
-      
-      const response = await api.put(`/admin/trips/${tripId}`, {
-        name: formData.name,
-        tripDate: formData.tripDate,
-        scheduledTime: scheduledTimeWithTimezone,
-        assignedCaptainId: formData.assignedCaptainId,
-        points: checkpoints,
-      });
-
-      if (response.data.success) {
-        router.push(`/dashboard/trips/${tripId}`);
-      }
-    } catch (error: any) {
-      console.error("Error updating trip:", error);
-      alert(error.response?.data?.message || "Failed to update trip");
-    } finally {
-      setSaving(false);
+  const onSubmitError = (errors: any) => {
+    const firstError = Object.values(errors)[0] as any;
+    if (firstError?.message) {
+      toast.error(firstError.message);
+    } else {
+      toast.error("Please fix the errors in the form");
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-gray-600">Loading trip...</div>
+        <LoadingSpinner size="lg" text="Loading trip..." />
       </div>
     );
   }
@@ -238,218 +233,294 @@ export default function EditTripPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Edit Scheduled Trip</h1>
-        <button
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Edit Scheduled Trip</h1>
+          {isDirty && (
+            <p className="text-sm text-gray-500 mt-1">You have unsaved changes</p>
+          )}
+        </div>
+        <Button
+          variant="secondary"
           onClick={() => router.push(`/dashboard/trips/${tripId}`)}
-          className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+          disabled={isSubmitting}
         >
           Cancel
-        </button>
+        </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200/60 p-8 space-y-6">
-        {/* Basic Trip Information */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-gray-900">Trip Information</h2>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Trip Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-              placeholder="e.g., Morning Route - Downtown"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Trip Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                name="tripDate"
-                value={formData.tripDate}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Scheduled Time <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="time"
-                name="scheduledTime"
-                value={formData.scheduledTime}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Assign Captain <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="assignedCaptainId"
-              value={formData.assignedCaptainId}
-              onChange={handleInputChange}
-              required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-            >
-              <option value="">Select a captain</option>
-              {drivers.map((driver) => (
-                <option key={driver.id} value={driver.id}>
-                  {driver.name} ({driver.phone_number})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Checkpoints */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Checkpoints</h2>
-            <button
-              type="button"
-              onClick={addCheckpoint}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-            >
-              Add Checkpoint
-            </button>
-          </div>
-
-          {checkpoints.map((checkpoint, index) => (
-            <div key={checkpoint.id || index} className="border border-gray-200/60 rounded-xl p-5 space-y-4 bg-gray-50/30">
-              <div className="flex justify-between items-center">
-                <h3 className="font-medium">Checkpoint {index + 1}</h3>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => moveCheckpoint(index, "up")}
-                    disabled={index === 0}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveCheckpoint(index, "down")}
-                    disabled={index === checkpoints.length - 1}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeCheckpoint(index)}
-                    disabled={checkpoints.length === 1}
-                    className="px-2 py-1 text-sm bg-red-600 text-white rounded disabled:opacity-50"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Checkpoint Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={checkpoint.name}
-                  onChange={(e) => handleCheckpointChange(index, "name", e.target.value)}
+      <form onSubmit={form.handleSubmit(handleSubmit, onSubmitError)}>
+        <div className="space-y-6">
+          {/* Section 1: Basic Information */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Basic Information
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Enter the trip name, date, and scheduled time
+              </p>
+            </CardHeader>
+            <CardBody>
+              <div className="space-y-4">
+                <FormField
+                  label="Trip Name"
                   required
+                  error={form.formState.errors.name}
+                >
+                  <input
+                    type="text"
+                    {...form.register("name")}
+                    placeholder="e.g., Morning Route - Downtown"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                  />
+                </FormField>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    label="Trip Date"
+                    required
+                    error={form.formState.errors.tripDate}
+                  >
+                    <input
+                      type="date"
+                      {...form.register("tripDate")}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                    />
+                  </FormField>
+
+                  <FormField
+                    label="Scheduled Time"
+                    required
+                    error={form.formState.errors.scheduledTime}
+                  >
+                    <input
+                      type="time"
+                      {...form.register("scheduledTime")}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                    />
+                  </FormField>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Section 2: Assignment */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Assignment
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Assign a captain to this trip
+              </p>
+            </CardHeader>
+            <CardBody>
+              <FormField
+                label="Assign Captain"
+                required
+                error={form.formState.errors.assignedCaptainId}
+              >
+                <select
+                  {...form.register("assignedCaptainId")}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                  placeholder="e.g., Downtown Station"
-                />
-              </div>
+                >
+                  <option value="">Select a captain</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.id} value={driver.id}>
+                      {driver.name} ({driver.phone_number})
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </CardBody>
+          </Card>
 
-              <div className="grid grid-cols-2 gap-4">
+          {/* Section 3: Route Planning */}
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Latitude <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={checkpoint.latitude || ""}
-                    onChange={(e) =>
-                      handleCheckpointChange(index, "latitude", parseFloat(e.target.value) || 0)
-                    }
-                    required
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                    placeholder="e.g., 23.8103"
-                  />
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Route Planning
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Add checkpoints for the trip route
+                  </p>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Longitude <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={checkpoint.longitude || ""}
-                    onChange={(e) =>
-                      handleCheckpointChange(index, "longitude", parseFloat(e.target.value) || 0)
-                    }
-                    required
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                    placeholder="e.g., 90.4125"
-                  />
+                <Button
+                  type="button"
+                  onClick={addCheckpoint}
+                  icon={PlusIcon}
+                  size="sm"
+                >
+                  Add Checkpoint
+                </Button>
+              </div>
+            </CardHeader>
+            <CardBody>
+              {form.formState.errors.points && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">
+                    {form.formState.errors.points.message ||
+                      "Please fix checkpoint errors"}
+                  </p>
                 </div>
-              </div>
+              )}
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id={`final-${index}`}
-                  checked={checkpoint.isFinalPoint}
-                  onChange={(e) =>
-                    handleCheckpointChange(index, "isFinalPoint", e.target.checked)
-                  }
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <label htmlFor={`final-${index}`} className="ml-2 text-sm text-gray-700">
-                  Mark as final point
-                </label>
-              </div>
-            </div>
-          ))}
-        </div>
+              <div className="space-y-4">
+                {fields.map((field, index) => {
+                  const location = checkpointLocations.get(index);
+                  const pointError = form.formState.errors.points?.[index];
 
-        {/* Submit Button */}
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            onClick={() => router.push(`/dashboard/trips/${tripId}`)}
-            className="px-6 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
+                  return (
+                    <div
+                      key={field.id}
+                      className="border border-gray-200 rounded-xl p-5 space-y-4 bg-gray-50/30"
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <MapPinIcon className="h-5 w-5 text-indigo-600" />
+                          <h3 className="font-medium text-gray-900">
+                            Checkpoint {index + 1}
+                          </h3>
+                          {form.watch(`points.${index}.isFinalPoint`) && (
+                            <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-700 rounded-full">
+                              Final Point
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={ChevronUpIcon}
+                            onClick={() => moveCheckpoint(index, "up")}
+                            disabled={index === 0}
+                          >
+                            Up
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={ChevronDownIcon}
+                            onClick={() => moveCheckpoint(index, "down")}
+                            disabled={index === fields.length - 1}
+                          >
+                            Down
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="danger"
+                            size="sm"
+                            icon={TrashIcon}
+                            onClick={() => removeCheckpoint(index)}
+                            disabled={fields.length === 1}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div>
+                          <FormField
+                            label="Checkpoint Name"
+                            required
+                            error={pointError?.name}
+                          >
+                            <input
+                              type="text"
+                              {...form.register(`points.${index}.name`)}
+                              placeholder="e.g., Downtown Station"
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                            />
+                          </FormField>
+                        </div>
+
+                        <div>
+                          <Controller
+                            control={form.control}
+                            name={`points.${index}.isFinalPoint`}
+                            render={({ field: checkboxField }) => (
+                              <div className="flex items-center h-full pt-8">
+                                <input
+                                  type="checkbox"
+                                  id={`final-${index}`}
+                                  {...checkboxField}
+                                  checked={checkboxField.value}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                />
+                                <label
+                                  htmlFor={`final-${index}`}
+                                  className="ml-2 text-sm font-medium text-gray-700"
+                                >
+                                  Mark as final point
+                                </label>
+                              </div>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <LocationPicker
+                        value={location || undefined}
+                        onChange={(loc) => handleLocationChange(index, loc)}
+                        label="Location"
+                        placeholder="Search for a location or pick on map..."
+                        required
+                        error={
+                          pointError?.latitude || pointError?.longitude
+                            ? {
+                                type: "manual",
+                                message:
+                                  pointError.latitude?.message ||
+                                  pointError.longitude?.message ||
+                                  "Location is required",
+                              }
+                            : undefined
+                        }
+                        mapCenter={
+                          location
+                            ? {
+                                lat: location.latitude,
+                                lng: location.longitude,
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Section 4: Actions */}
+          <Card>
+            <CardBody>
+              <div className="flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => router.push(`/dashboard/trips/${tripId}`)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  loading={isSubmitting}
+                >
+                  {isSubmitting ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
         </div>
       </form>
     </div>
   );
 }
-

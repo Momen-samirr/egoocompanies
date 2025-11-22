@@ -2,59 +2,20 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "react-hot-toast";
 import api from "@/lib/api";
 import Card, { CardBody } from "@/components/common/Card";
 import Button from "@/components/common/Button";
-import StatusBadge from "@/components/common/StatusBadge";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import EmptyState from "@/components/common/EmptyState";
-import { 
-  PlusIcon, 
-  EyeIcon, 
-  PencilIcon, 
-  TrashIcon, 
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  XMarkIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
-  BarsArrowUpIcon
-} from "@heroicons/react/24/outline";
-import { formatDistanceToNow } from "date-fns";
-
-interface ScheduledTrip {
-  id: string;
-  name: string;
-  tripDate: string;
-  scheduledTime: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED" | "EMERGENCY_TERMINATED";
-  assignedCaptain: {
-    id: string;
-    name: string;
-    phone_number: string;
-    email: string;
-  };
-  createdBy: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  points: Array<{
-    id: string;
-    name: string;
-    latitude: number;
-    longitude: number;
-    order: number;
-    isFinalPoint: boolean;
-  }>;
-}
-
-interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  pages: number;
-}
+import TripsTable from "@/components/trips/TripsTable";
+import TripFilters from "@/components/trips/TripFilters";
+import TripSearch from "@/components/trips/TripSearch";
+import Pagination from "@/components/common/Pagination";
+import ExportButton from "@/components/common/ExportButton";
+import { PlusIcon } from "@heroicons/react/24/outline";
+import { ScheduledTrip, TripFilters as TripFiltersType, TripSort, Pagination as PaginationType } from "@/types/trip";
+import { exportTripsToCSV } from "@/lib/utils/export";
 
 type SortField = "name" | "date" | "captain" | "checkpoints" | "status";
 type SortDirection = "asc" | "desc";
@@ -62,76 +23,83 @@ type SortDirection = "asc" | "desc";
 export default function ScheduledTripsPage() {
   const router = useRouter();
   const [trips, setTrips] = useState<ScheduledTrip[]>([]);
-  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [pagination, setPagination] = useState<PaginationType | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  
-  // Filter states
-  const [statusFilter, setStatusFilter] = useState("");
-  const [nameFilter, setNameFilter] = useState("");
-  const [captainFilter, setCaptainFilter] = useState("");
-  const [checkpointsFilter, setCheckpointsFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  
-  // Sort states
+  const [pageSize, setPageSize] = useState(25);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<TripFiltersType>({});
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   useEffect(() => {
     fetchTrips();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, statusFilter]);
+  }, [page, pageSize, filters, sortField, sortDirection, searchQuery]);
 
   const fetchTrips = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: "50", // Increased limit for client-side filtering
+        limit: pageSize.toString(),
       });
-      if (statusFilter) params.append("status", statusFilter);
+
+      // Add filters to params
+      if (filters.status && filters.status.length > 0) {
+        filters.status.forEach((status) => {
+          params.append("status", status);
+        });
+      }
+      if (filters.name) params.append("name", filters.name);
+      if (filters.captain) params.append("captain", filters.captain);
+      if (filters.dateRange?.start) params.append("dateStart", filters.dateRange.start);
+      if (filters.dateRange?.end) params.append("dateEnd", filters.dateRange.end);
+      if (searchQuery) params.append("search", searchQuery);
 
       const response = await api.get(`/admin/trips?${params}`);
-      setTrips(response.data.trips);
-      setPagination(response.data.pagination);
-    } catch (error) {
+      setTrips(response.data.trips || []);
+      setPagination(response.data.pagination || {
+        page: 1,
+        limit: pageSize,
+        total: 0,
+        pages: 1,
+      });
+    } catch (error: any) {
       console.error("Error fetching scheduled trips:", error);
+      toast.error(error.response?.data?.message || "Failed to load trips");
     } finally {
       setLoading(false);
     }
   };
 
-  // Client-side filtering and sorting
+  // Client-side filtering and sorting for search
   const filteredAndSortedTrips = useMemo(() => {
     let filtered = [...trips];
 
-    // Apply filters
-    if (nameFilter) {
-      filtered = filtered.filter((trip) =>
-        trip.name.toLowerCase().includes(nameFilter.toLowerCase())
-      );
-    }
-
-    if (captainFilter) {
-      filtered = filtered.filter((trip) =>
-        trip.assignedCaptain?.name?.toLowerCase().includes(captainFilter.toLowerCase())
-      );
-    }
-
-    if (checkpointsFilter) {
-      const count = parseInt(checkpointsFilter);
-      if (!isNaN(count)) {
-        filtered = filtered.filter((trip) => (trip.points?.length || 0) === count);
-      }
-    }
-
-    if (dateFilter) {
+    // Apply client-side search if needed (for checkpoint names, etc.)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
       filtered = filtered.filter((trip) => {
-        const tripDate = new Date(trip.tripDate).toLocaleDateString();
-        const filterDate = new Date(dateFilter).toLocaleDateString();
-        return tripDate === filterDate;
+        const matchesName = trip.name.toLowerCase().includes(query);
+        const matchesCaptain = trip.assignedCaptain?.name?.toLowerCase().includes(query);
+        const matchesCheckpoints = trip.points?.some((point) =>
+          point.name.toLowerCase().includes(query)
+        );
+        return matchesName || matchesCaptain || matchesCheckpoints;
       });
+    }
+
+    // Apply client-side filters
+    if (filters.checkpoints?.min !== undefined) {
+      filtered = filtered.filter(
+        (trip) => (trip.points?.length || 0) >= filters.checkpoints!.min!
+      );
+    }
+    if (filters.checkpoints?.max !== undefined) {
+      filtered = filtered.filter(
+        (trip) => (trip.points?.length || 0) <= filters.checkpoints!.max!
+      );
     }
 
     // Apply sorting
@@ -172,378 +140,141 @@ export default function ScheduledTripsPage() {
     }
 
     return filtered;
-  }, [trips, nameFilter, captainFilter, checkpointsFilter, dateFilter, sortField, sortDirection]);
+  }, [trips, searchQuery, filters, sortField, sortDirection]);
 
-  const handleSort = (field: SortField) => {
+  const handleSort = (field: string) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      setSortField(field);
+      setSortField(field as SortField);
       setSortDirection("asc");
     }
   };
 
-  const clearFilters = () => {
-    setNameFilter("");
-    setCaptainFilter("");
-    setCheckpointsFilter("");
-    setDateFilter("");
-    setStatusFilter("");
+  const handleFilterChange = (newFilters: TripFiltersType) => {
+    setFilters(newFilters);
+    setPage(1); // Reset to first page when filters change
+  };
+
+  const handleClearFilters = () => {
+    setFilters({});
     setPage(1);
   };
 
-  const hasActiveFilters = nameFilter || captainFilter || checkpointsFilter || dateFilter || statusFilter;
-
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this trip?")) {
-      return;
-    }
-
     try {
       await api.delete(`/admin/trips/${id}`);
+      toast.success("Trip deleted successfully");
       fetchTrips();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting trip:", error);
-      alert("Failed to delete trip");
+      toast.error(error.response?.data?.message || "Failed to delete trip");
     }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return <BarsArrowUpIcon className="h-4 w-4 text-gray-400" />;
+  const handleExport = () => {
+    if (filteredAndSortedTrips.length === 0) {
+      toast.error("No trips to export");
+      return;
     }
-    return sortDirection === "asc" ? (
-      <ChevronUpIcon className="h-4 w-4 text-indigo-600" />
-    ) : (
-      <ChevronDownIcon className="h-4 w-4 text-indigo-600" />
-    );
+    exportTripsToCSV(filteredAndSortedTrips, `trips-${new Date().toISOString().split("T")[0]}.csv`);
+    toast.success("Trips exported successfully");
   };
+
+  const hasActiveFilters = Object.keys(filters).length > 0 || searchQuery;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Scheduled Trips</h1>
-        <Button
-          onClick={() => router.push("/dashboard/trips/create")}
-          icon={PlusIcon}
-        >
-          Create Trip
-        </Button>
+        <div className="flex items-center gap-3">
+          <ExportButton onClick={handleExport} disabled={loading || filteredAndSortedTrips.length === 0} />
+          <Button
+            onClick={() => router.push("/dashboard/trips/create")}
+            icon={PlusIcon}
+          >
+            Create Trip
+          </Button>
+        </div>
       </div>
 
       <Card>
         <CardBody>
-          {/* Filter Section */}
-          <div className="mb-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all duration-200 ${
-                    showFilters || hasActiveFilters
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  <FunnelIcon className="h-4 w-4" />
-                  <span className="text-sm font-medium">Filters</span>
-                  {hasActiveFilters && (
-                    <span className="ml-1 px-2 py-0.5 bg-indigo-600 text-white text-xs rounded-full">
-                      {[nameFilter, captainFilter, checkpointsFilter, dateFilter, statusFilter].filter(Boolean).length}
-                    </span>
-                  )}
-                </button>
-                {hasActiveFilters && (
-                  <button
-                    onClick={clearFilters}
-                    className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-                  >
-                    <XMarkIcon className="h-4 w-4" />
-                    Clear all
-                  </button>
-                )}
-              </div>
+          <div className="space-y-6">
+            {/* Search */}
+            <TripSearch
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search trips by name, captain, or checkpoint..."
+            />
+
+            {/* Filters */}
+            <TripFilters
+              filters={filters}
+              onChange={handleFilterChange}
+              onClear={handleClearFilters}
+            />
+
+            {/* Results count */}
+            {!loading && (
               <div className="text-sm text-gray-600">
-                Showing {filteredAndSortedTrips.length} of {trips.length} trips
-              </div>
-            </div>
-
-            {showFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Trip Name
-                  </label>
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={nameFilter}
-                      onChange={(e) => setNameFilter(e.target.value)}
-                      placeholder="Search by name..."
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Captain
-                  </label>
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={captainFilter}
-                      onChange={(e) => setCaptainFilter(e.target.value)}
-                      placeholder="Search by captain..."
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Checkpoints
-                  </label>
-                  <input
-                    type="number"
-                    value={checkpointsFilter}
-                    onChange={(e) => setCheckpointsFilter(e.target.value)}
-                    placeholder="Number of checkpoints..."
-                    min="0"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Status
-                  </label>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => {
-                      setStatusFilter(e.target.value);
-                      setPage(1);
-                    }}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
-                  >
-                    <option value="">All Status</option>
-                    <option value="SCHEDULED">Scheduled</option>
-                    <option value="ACTIVE">Active</option>
-                    <option value="COMPLETED">Completed</option>
-                    <option value="CANCELLED">Cancelled</option>
-                    <option value="FAILED">Failed</option>
-                    <option value="EMERGENCY_TERMINATED">Emergency Terminated</option>
-                  </select>
-                </div>
+                Showing {filteredAndSortedTrips.length} of{" "}
+                {pagination?.total || trips.length} trips
               </div>
             )}
-          </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <LoadingSpinner size="lg" text="Loading trips..." />
-            </div>
-          ) : filteredAndSortedTrips.length === 0 ? (
-            <EmptyState
-              title={hasActiveFilters ? "No trips match your filters" : "No scheduled trips found"}
-              description={
-                hasActiveFilters
-                  ? "Try adjusting your filters to see more results"
-                  : "Create your first scheduled trip to get started"
-              }
-              action={
-                hasActiveFilters
-                  ? undefined
-                  : {
-                      label: "Create Trip",
-                      onClick: () => router.push("/dashboard/trips/create"),
-                    }
-              }
-            />
-          ) : (
-            <>
-              <div className="overflow-x-auto -mx-6 px-6">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gradient-to-b from-gray-50 via-gray-50 to-gray-100/80 border-b-2 border-gray-200">
-                    <tr>
-                      <th
-                        className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
-                        onClick={() => handleSort("name")}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>Trip Name</span>
-                          <SortIcon field="name" />
-                        </div>
-                      </th>
-                      <th
-                        className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
-                        onClick={() => handleSort("date")}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>Date & Time</span>
-                          <SortIcon field="date" />
-                        </div>
-                      </th>
-                      <th
-                        className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
-                        onClick={() => handleSort("captain")}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>Captain</span>
-                          <SortIcon field="captain" />
-                        </div>
-                      </th>
-                      <th
-                        className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
-                        onClick={() => handleSort("checkpoints")}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>Checkpoints</span>
-                          <SortIcon field="checkpoints" />
-                        </div>
-                      </th>
-                      <th
-                        className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
-                        onClick={() => handleSort("status")}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>Status</span>
-                          <SortIcon field="status" />
-                        </div>
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200/60">
-                    {filteredAndSortedTrips.map((trip, index) => (
-                      <tr
-                        key={trip.id}
-                        className={`transition-all duration-150 ${
-                          index % 2 === 0
-                            ? "bg-white hover:bg-indigo-50/40"
-                            : "bg-gray-50/30 hover:bg-indigo-50/40"
-                        }`}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-semibold text-gray-900">{trip.name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {new Date(trip.tripDate).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {new Date(trip.scheduledTime).toLocaleTimeString("en-US", {
-                              hour: "numeric",
-                              minute: "2-digit",
-                              hour12: true,
-                            })}
-                          </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            {formatDistanceToNow(new Date(trip.scheduledTime), { addSuffix: true })}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {trip.assignedCaptain?.name || (
-                              <span className="text-gray-400 italic font-normal">Not assigned</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            {trip.points?.length || 0} checkpoint{trip.points?.length !== 1 ? "s" : ""}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <StatusBadge status={trip.status} size="sm" />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              icon={EyeIcon}
-                              onClick={() => router.push(`/dashboard/trips/${trip.id}`)}
-                            >
-                              View
-                            </Button>
-                            {(trip.status === "SCHEDULED" || trip.status === "FAILED") && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  icon={PencilIcon}
-                                  onClick={() => router.push(`/dashboard/trips/${trip.id}/edit`)}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  icon={TrashIcon}
-                                  onClick={() => handleDelete(trip.id)}
-                                >
-                                  Delete
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Table */}
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <LoadingSpinner size="lg" text="Loading trips..." />
               </div>
+            ) : filteredAndSortedTrips.length === 0 ? (
+              <EmptyState
+                title={hasActiveFilters ? "No trips match your filters" : "No scheduled trips found"}
+                description={
+                  hasActiveFilters
+                    ? "Try adjusting your filters to see more results"
+                    : "Create your first scheduled trip to get started"
+                }
+                action={
+                  hasActiveFilters
+                    ? undefined
+                    : {
+                        label: "Create Trip",
+                        onClick: () => router.push("/dashboard/trips/create"),
+                      }
+                }
+              />
+            ) : (
+              <>
+                <TripsTable
+                  trips={filteredAndSortedTrips}
+                  loading={loading}
+                  onDelete={handleDelete}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                />
 
-              {pagination && pagination.pages > 1 && (
-                <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-4">
-                  <div className="text-sm text-gray-700">
-                    Showing {((page - 1) * pagination.limit) + 1} to{" "}
-                    {Math.min(page * pagination.limit, pagination.total)} of{" "}
-                    {pagination.total} results
+                {/* Pagination */}
+                {pagination && pagination.pages > 1 && (
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <Pagination
+                      currentPage={page}
+                      totalPages={pagination.pages}
+                      totalItems={pagination.total}
+                      pageSize={pageSize}
+                      onPageChange={setPage}
+                      onPageSizeChange={(size) => {
+                        setPageSize(size);
+                        setPage(1);
+                      }}
+                    />
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setPage(page - 1)}
-                      disabled={page === 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setPage(page + 1)}
-                      disabled={page >= pagination.pages}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+                )}
+              </>
+            )}
+          </div>
         </CardBody>
       </Card>
     </div>
