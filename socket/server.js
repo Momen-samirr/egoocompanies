@@ -18,9 +18,43 @@ let userConnections = {};
 // Create HTTP server
 const server = http.createServer(app);
 
+// Allowed origins for WebSocket connections
+const allowedWebSocketOrigins = [
+  "https://dashapp.egoobus.com",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  // Add other allowed origins as needed
+];
+
 // Create WebSocket server attached to the HTTP server
 // This allows both HTTP and WebSocket to work on the same port (required for Render)
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ 
+  server,
+  verifyClient: (info) => {
+    const origin = info.origin;
+    
+    // Allow connections with no origin (like mobile apps, Postman, etc.)
+    if (!origin) {
+      return true;
+    }
+    
+    // In development, allow all origins
+    if (process.env.NODE_ENV !== "production") {
+      return true;
+    }
+    
+    // In production, verify origin
+    const isAllowed = allowedWebSocketOrigins.some(allowedOrigin => {
+      return origin === allowedOrigin || origin.startsWith(allowedOrigin);
+    });
+    
+    if (!isAllowed) {
+      console.log(`❌ WebSocket connection rejected from origin: ${origin}`);
+    }
+    
+    return isAllowed;
+  }
+});
 
 wss.on('listening', () => {
   console.log(`✅ WebSocket server ready on port ${PORT}`);

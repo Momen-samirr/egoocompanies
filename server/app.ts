@@ -9,9 +9,30 @@ import adminRouter from "./routes/admin.route";
 export const app = express();
 
 // CORS configuration
+const allowedOrigins = [
+  "https://dashapp.egoobus.com",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  // Add other allowed origins as needed
+];
+
 app.use(
   cors({
-    origin: "*",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === "development") {
+        callback(null, true);
+      } else {
+        // In production, only allow specific origins
+        if (process.env.NODE_ENV === "production") {
+          callback(new Error("Not allowed by CORS"));
+        } else {
+          callback(null, true);
+        }
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
