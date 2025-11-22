@@ -33,7 +33,7 @@ export const tripPointSchema = z.object({
     .min(-180, "Longitude must be between -180 and 180")
     .max(180, "Longitude must be between -180 and 180"),
   order: z.number().int().min(0),
-  isFinalPoint: z.boolean().default(false),
+  isFinalPoint: z.boolean(),
 });
 
 // Trip form validation schema
