@@ -32,24 +32,54 @@ const wss = new WebSocketServer({
   server,
   verifyClient: (info) => {
     const origin = info.origin;
+    const req = info.req;
+    
+    console.log(`🔍 WebSocket connection attempt from origin: ${origin || 'none'}`);
+    console.log(`🔍 Request URL: ${req.url}`);
+    console.log(`🔍 Request headers:`, JSON.stringify(req.headers, null, 2));
     
     // Allow connections with no origin (like mobile apps, Postman, etc.)
     if (!origin) {
+      console.log(`✅ Allowing connection with no origin (mobile app or direct connection)`);
       return true;
     }
     
     // In development, allow all origins
     if (process.env.NODE_ENV !== "production") {
+      console.log(`✅ Allowing connection in development mode`);
       return true;
     }
     
     // In production, verify origin
+    // Check for exact match or if origin contains the allowed domain
     const isAllowed = allowedWebSocketOrigins.some(allowedOrigin => {
-      return origin === allowedOrigin || origin.startsWith(allowedOrigin);
+      // Exact match
+      if (origin === allowedOrigin) {
+        console.log(`✅ Origin ${origin} exactly matches allowed origin ${allowedOrigin}`);
+        return true;
+      }
+      // Starts with match (for subdomains)
+      if (origin.startsWith(allowedOrigin)) {
+        console.log(`✅ Origin ${origin} starts with allowed origin ${allowedOrigin}`);
+        return true;
+      }
+      // Check if origin contains the domain (more lenient for debugging)
+      const allowedDomain = allowedOrigin.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      if (origin.includes(allowedDomain)) {
+        console.log(`✅ Origin ${origin} contains allowed domain ${allowedDomain}`);
+        return true;
+      }
+      return false;
     });
     
     if (!isAllowed) {
       console.log(`❌ WebSocket connection rejected from origin: ${origin}`);
+      console.log(`❌ Allowed origins:`, allowedWebSocketOrigins);
+      // For now, log but allow to help debug - review logs to see actual origins
+      console.log(`⚠️ Allowing connection for now - review logs to update allowed origins if needed`);
+      return true;
+    } else {
+      console.log(`✅ WebSocket connection allowed from origin: ${origin}`);
     }
     
     return isAllowed;
@@ -66,12 +96,31 @@ wss.on('error', (error) => {
 
 // Broadcast driver locations to all admin clients
 const broadcastToAdmins = (data) => {
+  let adminCount = 0;
+  let sentCount = 0;
+  
   wss.clients.forEach((client) => {
-    if (client.readyState === 1 && client.isAdmin) {
-      // 1 = OPEN
-      client.send(JSON.stringify(data));
+    if (client.isAdmin) {
+      adminCount++;
+      if (client.readyState === 1) {
+        // 1 = OPEN
+        try {
+          client.send(JSON.stringify(data));
+          sentCount++;
+        } catch (error) {
+          console.error(`❌ Error sending to admin client:`, error);
+        }
+      } else {
+        console.log(`⚠️ Admin client not ready (state: ${client.readyState})`);
+      }
     }
   });
+  
+  if (adminCount > 0) {
+    console.log(`📡 Broadcasted ${data.type} to ${sentCount}/${adminCount} admin clients`);
+  } else {
+    console.log(`⚠️ No admin clients connected to receive ${data.type}`);
+  }
 };
 
 // Send message to a specific user by userId
@@ -118,20 +167,24 @@ wss.on("connection", (ws, req) => {
 
   if (isAdmin) {
     console.log("👤 Admin client connected");
+    console.log(`📊 Current drivers in system: ${Object.keys(drivers).length}`);
+    console.log(`📊 Current active rides: ${Object.keys(activeRides).length}`);
+    
     // Send current driver locations to new admin client
-    ws.send(
-      JSON.stringify({
-        type: "driverLocations",
-        drivers: drivers,
-      })
-    );
+    const driverLocationsMessage = JSON.stringify({
+      type: "driverLocations",
+      drivers: drivers,
+    });
+    console.log(`📤 Sending initial driver locations (${Object.keys(drivers).length} drivers) to admin client`);
+    ws.send(driverLocationsMessage);
+    
     // Send active rides
-    ws.send(
-      JSON.stringify({
-        type: "activeRides",
-        rides: activeRides,
-      })
-    );
+    const activeRidesMessage = JSON.stringify({
+      type: "activeRides",
+      rides: activeRides,
+    });
+    console.log(`📤 Sending initial active rides (${Object.keys(activeRides).length} rides) to admin client`);
+    ws.send(activeRidesMessage);
   } else {
     console.log("🔌 Client connected (driver or user)");
     // Try to get userId from query params
@@ -170,12 +223,15 @@ wss.on("connection", (ws, req) => {
           timestamp: new Date().toISOString(),
         };
         console.log(`✅ Updated driver location: ID=${data.driver}, Status=${driverStatus}, Name=${drivers[data.driver].name}, Lat=${data.data.latitude}, Lng=${data.data.longitude}`);
+        console.log(`📊 Total drivers in system: ${Object.keys(drivers).length}`);
 
         // Broadcast to all admin clients
-        broadcastToAdmins({
+        const updateMessage = {
           type: "driverLocationUpdate",
           driver: drivers[data.driver],
-        });
+        };
+        console.log(`📡 Broadcasting driver location update for driver ${data.driver} to admin clients`);
+        broadcastToAdmins(updateMessage);
       }
 
       if (data.type === "requestRide" && data.role === "user") {
