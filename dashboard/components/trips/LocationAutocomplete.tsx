@@ -94,7 +94,7 @@ export default function LocationAutocomplete({
               address: place.formatted_address || place.name || "",
               placeId: place.place_id,
             };
-            setSearchValue(location.address);
+            setSearchValue(location.address || "");
             onChange(location);
           } else {
             onError?.("Invalid location selected.");
