@@ -73,6 +73,14 @@ export default function EditTripPage() {
         router.push(`/dashboard/trips/${tripId}`);
       }
     },
+    onError: (errors) => {
+      const firstError = Object.values(errors)[0] as any;
+      if (firstError?.message) {
+        toast.error(firstError.message);
+      } else {
+        toast.error("Please fix the errors in the form");
+      }
+    },
   });
 
   const { fields, append, remove, move } = useFieldArray({
@@ -205,15 +213,6 @@ export default function EditTripPage() {
     }
   };
 
-  const onSubmitError = (errors: any) => {
-    const firstError = Object.values(errors)[0] as any;
-    if (firstError?.message) {
-      toast.error(firstError.message);
-    } else {
-      toast.error("Please fix the errors in the form");
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -248,7 +247,9 @@ export default function EditTripPage() {
         </Button>
       </div>
 
-      <form onSubmit={form.handleSubmit(handleSubmit, onSubmitError)}>
+      <form onSubmit={(e) => {
+        handleSubmit(e);
+      }}>
         <div className="space-y-6">
           {/* Section 1: Basic Information */}
           <Card>

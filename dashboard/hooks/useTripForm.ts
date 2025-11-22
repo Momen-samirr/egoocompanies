@@ -10,11 +10,12 @@ interface UseTripFormOptions {
   defaultValues?: Partial<TripFormData>;
   onSubmit: (data: TripFormData) => Promise<void>;
   onDraftSave?: (data: Partial<TripFormData>) => void;
+  onError?: (errors: any) => void;
 }
 
 export interface UseTripFormReturn {
   form: UseFormReturn<TripFormData>;
-  handleSubmit: (e?: React.BaseSyntheticEvent) => Promise<void>;
+  handleSubmit: (e?: React.BaseSyntheticEvent) => void;
   handleDraftSave: () => void;
   isSubmitting: boolean;
   isDirty: boolean;
@@ -26,6 +27,7 @@ export function useTripForm({
   defaultValues,
   onSubmit,
   onDraftSave,
+  onError,
 }: UseTripFormOptions): UseTripFormReturn {
   const form = useForm<TripFormData>({
     resolver: zodResolver(tripFormSchema),
@@ -79,18 +81,23 @@ export function useTripForm({
     }
   }, [form, onDraftSave]);
 
-  const handleSubmit = form.handleSubmit(async (data) => {
-    try {
-      await onSubmit(data);
-      // Clear draft on successful submit
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(DRAFT_STORAGE_KEY);
+  const handleSubmit = form.handleSubmit(
+    async (data) => {
+      try {
+        await onSubmit(data);
+        // Clear draft on successful submit
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(DRAFT_STORAGE_KEY);
+        }
+      } catch (error) {
+        console.error("Form submission error:", error);
+        throw error;
       }
-    } catch (error) {
-      console.error("Form submission error:", error);
-      throw error;
+    },
+    (errors) => {
+      onError?.(errors);
     }
-  });
+  );
 
   const handleDraftSave = useCallback(() => {
     const currentValues = form.getValues();

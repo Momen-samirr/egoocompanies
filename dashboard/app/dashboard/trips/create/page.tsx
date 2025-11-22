@@ -65,6 +65,14 @@ export default function CreateTripPage() {
       onDraftSave: () => {
         toast.success("Draft saved", { duration: 2000 });
       },
+      onError: (errors) => {
+        const firstError = Object.values(errors)[0] as any;
+        if (firstError?.message) {
+          toast.error(firstError.message);
+        } else {
+          toast.error("Please fix the errors in the form");
+        }
+      },
     });
 
   const { fields, append, remove, move } = useFieldArray({
@@ -181,7 +189,7 @@ export default function CreateTripPage() {
         </Button>
       </div>
 
-      <form onSubmit={form.handleSubmit(handleSubmit, onSubmitError)}>
+      <form onSubmit={handleSubmit}>
         <div className="space-y-6">
           {/* Section 1: Basic Information */}
           <Card>
