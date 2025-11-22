@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { GoogleMap, LoadScript, Marker, InfoWindow, Polyline } from "@react-google-maps/api";
+import { GoogleMap, useLoadScript, Marker, InfoWindow, Polyline } from "@react-google-maps/api";
 import api from "@/lib/api";
 import { Driver, Ride } from "@/types";
 
@@ -34,6 +34,13 @@ interface ActiveRide extends Ride {
 }
 
 export default function MapPage() {
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+  
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: googleMapsApiKey,
+    libraries: libraries,
+  });
+
   const [drivers, setDrivers] = useState<Record<string, DriverLocation>>({});
   const [activeRides, setActiveRides] = useState<Record<string, ActiveRide>>({});
   const [selectedDriver, setSelectedDriver] = useState<DriverLocation | null>(null);
@@ -118,18 +125,29 @@ export default function MapPage() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log("📨 WebSocket message received:", data.type);
         
         if (data.type === "driverLocations") {
-          setDrivers(data.drivers);
+          console.log(`📍 Received ${Object.keys(data.drivers || {}).length} driver locations from WebSocket`);
+          setDrivers(data.drivers || {});
         } else if (data.type === "driverLocationUpdate") {
+          console.log(`📍 Driver location update: ${data.driver?.id} - ${data.driver?.name} (${data.driver?.status})`);
           setDrivers((prev) => ({
             ...prev,
             [data.driver.id]: data.driver,
           }));
+        } else if (data.type === "driverRemoved") {
+          console.log(`🗑️ Driver removed: ${data.driverId}`);
+          setDrivers((prev) => {
+            const updated = { ...prev };
+            delete updated[data.driverId];
+            return updated;
+          });
         } else if (data.type === "activeRides") {
-          setActiveRides(data.rides);
+          console.log(`🚗 Received ${Object.keys(data.rides || {}).length} active rides from WebSocket`);
+          setActiveRides(data.rides || {});
         } else if (data.type === "activeRidesUpdate") {
-          setActiveRides(data.rides);
+          setActiveRides(data.rides || {});
         }
       } catch (error) {
         console.error("Error parsing WebSocket message:", error);
@@ -145,6 +163,79 @@ export default function MapPage() {
       }
     };
   }, []);
+
+  // Fetch drivers from WebSocket server's HTTP API as fallback (optional)
+  useEffect(() => {
+    if (!isConnected) {
+      return;
+    }
+
+    const fetchDriversFromWebSocketServer = async () => {
+      try {
+        const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:8080";
+        // Convert WebSocket URL to HTTP URL
+        // Handle both ws:// and wss:// protocols
+        let httpUrl = wsUrl.replace(/^wss?:\/\//, "").replace(/\/$/, "");
+        
+        // For local development, use http://, for production wss:// should map to https://
+        if (wsUrl.startsWith("wss://")) {
+          httpUrl = `https://${httpUrl}`;
+        } else {
+          httpUrl = `http://${httpUrl}`;
+        }
+        
+        const apiUrl = `${httpUrl}/api/drivers`;
+        console.log(`📡 Attempting to fetch drivers from: ${apiUrl}`);
+        
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        try {
+          const response = await fetch(apiUrl, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const data = await response.json();
+            const wsDrivers = data.drivers || {};
+            console.log(`✅ Fetched ${Object.keys(wsDrivers).length} drivers from WebSocket server HTTP API`);
+            
+            // Merge with existing drivers
+            setDrivers((prev) => ({
+              ...prev,
+              ...wsDrivers,
+            }));
+          } else {
+            console.warn(`⚠️ WebSocket server HTTP API returned status ${response.status}`);
+          }
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      } catch (error: any) {
+        // Silently fail - this is an optional fallback
+        // WebSocket messages are the primary source of driver locations
+        if (error.name === "AbortError") {
+          console.debug("⏱️ WebSocket server HTTP API request timed out (this is optional)");
+        } else if (error.name === "TypeError" && error.message.includes("Failed to fetch")) {
+          console.debug("🌐 WebSocket server HTTP API not accessible (CORS or network issue - this is optional)");
+        } else {
+          console.debug("WebSocket server HTTP API not available (this is optional):", error.message);
+        }
+      }
+    };
+
+    // Only try once after connection, don't poll continuously
+    // WebSocket messages are the primary source of updates
+    const timeoutId = setTimeout(fetchDriversFromWebSocketServer, 2000); // Wait 2 seconds after connection
+    return () => clearTimeout(timeoutId);
+  }, [isConnected]);
 
   // Fetch active rides from API
   useEffect(() => {
@@ -209,7 +300,7 @@ export default function MapPage() {
   // Auto-fit map to show all drivers when they first appear
   // Only auto-fit once when drivers are first loaded, not on every filter change
   useEffect(() => {
-    if (mapRef.current && Object.keys(drivers).length > 0 && !hasAutoFitted) {
+    if (isLoaded && mapRef.current && Object.keys(drivers).length > 0 && !hasAutoFitted) {
       const filtered = Object.values(drivers).filter((driver) => {
         if (filterStatus !== "all" && driver.status !== filterStatus) return false;
         if (filterVehicleType !== "all" && driver.vehicleType !== filterVehicleType) return false;
@@ -259,7 +350,7 @@ export default function MapPage() {
         }
       }
     }
-  }, [drivers, filterStatus, filterVehicleType, showActiveRides, activeRides, userLocation, hasAutoFitted]);
+  }, [isLoaded, drivers, filterStatus, filterVehicleType, showActiveRides, activeRides, userLocation, hasAutoFitted]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -293,7 +384,7 @@ export default function MapPage() {
   };
 
   const fitAllDrivers = () => {
-    if (mapRef.current) {
+    if (isLoaded && mapRef.current) {
       const filtered = Object.values(drivers).filter((driver) => {
         if (filterStatus !== "all" && driver.status !== filterStatus) return false;
         if (filterVehicleType !== "all" && driver.vehicleType !== filterVehicleType) return false;
@@ -345,6 +436,9 @@ export default function MapPage() {
   };
 
   const getDriverIcon = (status: string, vehicleType: string) => {
+    if (!isLoaded) {
+      return undefined;
+    }
     const color = status === "active" ? "#10B981" : "#6B7280";
     // Use a simple colored circle as marker
     return {
@@ -363,8 +457,6 @@ export default function MapPage() {
     return true;
   });
 
-  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-
   if (!googleMapsApiKey) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -373,6 +465,27 @@ export default function MapPage() {
           <p className="text-gray-600 text-sm">
             Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your .env.local file
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <p className="text-red-600 mb-2">Error loading Google Maps</p>
+          <p className="text-gray-600 text-sm">{loadError.message}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <p className="text-gray-600">Loading Google Maps...</p>
         </div>
       </div>
     );
@@ -430,8 +543,13 @@ export default function MapPage() {
           </div>
 
           <div className="text-sm text-gray-600">
-            Drivers: {filteredDrivers.length} | Active Rides: {Object.keys(activeRides).length}
+            Drivers: {filteredDrivers.length} / {Object.keys(drivers).length} total | Active Rides: {Object.keys(activeRides).length}
           </div>
+          {Object.keys(drivers).length === 0 && isConnected && (
+            <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+              ⚠️ No drivers with location data. Drivers appear after sending location updates.
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button
@@ -448,6 +566,19 @@ export default function MapPage() {
             >
               🗺️ Fit Drivers
             </button>
+            <button
+              onClick={() => {
+                console.log("🔄 Current drivers state:", drivers);
+                console.log("🔄 Filtered drivers:", filteredDrivers);
+                console.log("🔄 WebSocket connected:", isConnected);
+                // Force a re-render by updating state
+                setDrivers({ ...drivers });
+              }}
+              className="px-3 py-1 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700"
+              title="Refresh driver data"
+            >
+              🔄 Refresh
+            </button>
           </div>
         </div>
         {locationError && (
@@ -462,35 +593,34 @@ export default function MapPage() {
 
       {/* Map */}
       <div className="flex-1 relative">
-        <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={libraries}>
-          <GoogleMap
-            mapContainerStyle={mapContainerStyle}
-            center={mapCenter}
-            zoom={mapZoom}
-            onLoad={onMapLoad}
-            options={{
-              disableDefaultUI: false,
-              zoomControl: true,
-              streetViewControl: false,
-              mapTypeControl: true,
-              fullscreenControl: true,
-            }}
-          >
-            {/* User Location Marker */}
-            {userLocation && (
-              <Marker
-                position={userLocation}
-                icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 10,
-                  fillColor: "#3B82F6",
-                  fillOpacity: 1,
-                  strokeColor: "#fff",
-                  strokeWeight: 3,
-                }}
-                title="Your Location"
-              />
-            )}
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={mapCenter}
+          zoom={mapZoom}
+          onLoad={onMapLoad}
+          options={{
+            disableDefaultUI: false,
+            zoomControl: true,
+            streetViewControl: false,
+            mapTypeControl: true,
+            fullscreenControl: true,
+          }}
+        >
+          {/* User Location Marker */}
+          {userLocation && (
+            <Marker
+              position={userLocation}
+              icon={{
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: "#3B82F6",
+                fillOpacity: 1,
+                strokeColor: "#fff",
+                strokeWeight: 3,
+              }}
+              title="Your Location"
+            />
+          )}
 
             {/* Driver Markers */}
             {filteredDrivers.map((driver) => {
@@ -550,8 +680,7 @@ export default function MapPage() {
                 </div>
               </InfoWindow>
             )}
-          </GoogleMap>
-        </LoadScript>
+        </GoogleMap>
       </div>
     </div>
   );

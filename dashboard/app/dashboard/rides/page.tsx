@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { Ride, Pagination } from "@/types";
+import Card, { CardBody } from "@/components/common/Card";
+import StatusBadge from "@/components/common/StatusBadge";
+import Button from "@/components/common/Button";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
+import EmptyState from "@/components/common/EmptyState";
+import { EyeIcon } from "@heroicons/react/24/outline";
 
 export default function RidesPage() {
   const router = useRouter();
@@ -43,146 +49,139 @@ export default function RidesPage() {
         <h1 className="text-3xl font-bold text-gray-900">Rides Management</h1>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="mb-4">
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Status</option>
-            <option value="Pending">Pending</option>
-            <option value="Accepted">Accepted</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option>
-            <option value="Cancelled">Cancelled</option>
-          </select>
-        </div>
+      <Card>
+        <CardBody>
+          <div className="mb-4">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white text-sm"
+            >
+              <option value="">All Status</option>
+              <option value="Pending">Pending</option>
+              <option value="Accepted">Accepted</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
 
-        {loading ? (
-          <div className="text-center py-8 text-gray-600">Loading...</div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Driver
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Route
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Distance
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Charge
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {rides.length > 0 ? (
-                    rides.map((ride) => (
-                      <tr key={ride.id}>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <LoadingSpinner size="lg" text="Loading rides..." />
+            </div>
+          ) : rides.length === 0 ? (
+            <EmptyState
+              title="No rides found"
+              description="Try adjusting your filters"
+            />
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200/60">
+                  <thead className="bg-gradient-to-b from-gray-50 to-gray-100/50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        User
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Driver
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Route
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Distance
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Charge
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200/60">
+                    {rides.map((ride) => (
+                      <tr key={ride.id} className="hover:bg-indigo-50/30 transition-colors duration-150">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(ride.cratedAt).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {ride.user?.name || ride.user?.phone_number || "N/A"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {ride.driver?.name || ride.driver?.phone_number || "N/A"}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
-                          <div>{ride.currentLocationName}</div>
-                          <div className="text-xs">→ {ride.destinationLocationName}</div>
+                          <div className="font-medium">{ride.currentLocationName}</div>
+                          <div className="text-xs text-gray-400">→ {ride.destinationLocationName}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {ride.distance}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                           ${ride.charge.toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              ride.status === "Completed"
-                                ? "bg-green-100 text-green-800"
-                                : ride.status === "In Progress"
-                                ? "bg-blue-100 text-blue-800"
-                                : ride.status === "Cancelled"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-yellow-100 text-yellow-800"
-                            }`}
-                          >
-                            {ride.status}
-                          </span>
+                          <StatusBadge status={ride.status} size="sm" />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={EyeIcon}
                             onClick={() => router.push(`/dashboard/rides/${ride.id}`)}
-                            className="text-indigo-600 hover:text-indigo-900"
                           >
-                            View Details
-                          </button>
+                            View
+                          </Button>
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
-                        No rides found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {pagination && pagination.pages > 1 && (
-              <div className="mt-4 flex items-center justify-between">
-                <div className="text-sm text-gray-700">
-                  Showing {((page - 1) * pagination.limit) + 1} to{" "}
-                  {Math.min(page * pagination.limit, pagination.total)} of{" "}
-                  {pagination.total} results
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={page >= pagination.pages}
-                    className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-          </>
-        )}
-      </div>
+
+              {pagination && pagination.pages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing {((page - 1) * pagination.limit) + 1} to{" "}
+                    {Math.min(page * pagination.limit, pagination.total)} of{" "}
+                    {pagination.total} results
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page >= pagination.pages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }

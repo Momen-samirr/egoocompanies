@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import api from "@/lib/api";
+import Card, { CardHeader, CardBody } from "@/components/common/Card";
+import StatusBadge from "@/components/common/StatusBadge";
+import Button from "@/components/common/Button";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
+import TripTimeline from "@/components/trips/TripTimeline";
+import { PencilIcon, TrashIcon, ArrowLeftIcon, UserIcon } from "@heroicons/react/24/outline";
 
 interface ScheduledTrip {
   id: string;
@@ -84,202 +90,157 @@ export default function TripDetailsPage() {
     }
   };
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case "SCHEDULED":
-        return "bg-yellow-100 text-yellow-800";
-      case "ACTIVE":
-        return "bg-blue-100 text-blue-800";
-      case "COMPLETED":
-        return "bg-green-100 text-green-800";
-      case "CANCELLED":
-        return "bg-red-100 text-red-800";
-      case "FAILED":
-        return "bg-red-200 text-red-900 font-bold border-2 border-red-500";
-      case "EMERGENCY_TERMINATED":
-        return "bg-orange-200 text-orange-900 font-bold border-2 border-orange-500";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-600">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading trip details..." />
+      </div>
+    );
   }
 
   if (!trip) {
-    return <div className="text-center py-8 text-gray-600">Trip not found</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-600">Trip not found</div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{trip.name}</h1>
-          <p className="text-gray-500 mt-1">
-            Created by {trip.createdBy.name} on{" "}
-            {new Date(trip.tripDate).toLocaleDateString()}
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={ArrowLeftIcon}
+            onClick={() => router.push("/dashboard/trips")}
+          >
+            Back
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{trip.name}</h1>
+            <p className="text-gray-500 mt-1">
+              Created by {trip.createdBy.name} on{" "}
+              {new Date(trip.tripDate).toLocaleDateString()}
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           {(trip.status === "SCHEDULED" || trip.status === "FAILED") &&
             trip.status !== "EMERGENCY_TERMINATED" && (
             <>
-              <button
+              <Button
+                variant="secondary"
+                icon={PencilIcon}
                 onClick={() => router.push(`/dashboard/trips/${tripId}/edit`)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
               >
                 Edit Trip
-              </button>
+              </Button>
               {!trip.assignedCaptain && (
-                <button
+                <Button
+                  icon={UserIcon}
                   onClick={() => router.push(`/dashboard/trips/${tripId}/edit`)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium"
                 >
                   Assign Captain
-                </button>
+                </Button>
               )}
-              <button
+              <Button
+                variant="danger"
+                icon={TrashIcon}
                 onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium"
               >
                 Delete
-              </button>
+              </Button>
             </>
           )}
-          <button
-            onClick={() => router.push("/dashboard/trips")}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700 font-medium"
-          >
-            Back to Trips
-          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Trip Information */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Trip Information</h2>
-          <dl className="space-y-3">
-            <div>
-              <dt className="text-sm font-medium text-gray-700">Status</dt>
-              <dd className="mt-1">
-                <span
-                  className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(
-                    trip.status
-                  )}`}
-                >
-                  {trip.status === "FAILED"
-                    ? "Failed"
-                    : trip.status === "EMERGENCY_TERMINATED"
-                    ? "Emergency Ended"
-                    : trip.status}
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-700">Trip Date</dt>
-              <dd className="mt-1 text-sm font-medium text-gray-900">
-                {new Date(trip.tripDate).toLocaleDateString()}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-700">Scheduled Time</dt>
-              <dd className="mt-1 text-sm font-medium text-gray-900">
-                {new Date(trip.scheduledTime).toLocaleString()}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-700">Assigned Captain</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {trip.assignedCaptain ? (
-                  <>
-                    {trip.assignedCaptain.name}
-                    <br />
-                    <span className="text-gray-500">{trip.assignedCaptain.phone_number}</span>
-                    <br />
-                    <span className="text-gray-500">{trip.assignedCaptain.vehicle_type}</span>
-                  </>
-                ) : (
-                  <span className="text-gray-500 italic">No captain assigned yet</span>
-                )}
-              </dd>
-            </div>
-            {trip.progress && (
-              <>
-                {trip.progress.startedAt && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-700">Started At</dt>
-                    <dd className="mt-1 text-sm font-medium text-gray-900">
-                      {new Date(trip.progress.startedAt).toLocaleString()}
-                    </dd>
-                  </div>
-                )}
-                {trip.progress.completedAt && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-700">Completed At</dt>
-                    <dd className="mt-1 text-sm font-medium text-gray-900">
-                      {new Date(trip.progress.completedAt).toLocaleString()}
-                    </dd>
-                  </div>
-                )}
-                <div>
-                  <dt className="text-sm font-medium text-gray-700">Current Checkpoint</dt>
-                  <dd className="mt-1 text-sm font-medium text-gray-900">
-                    {trip.progress.currentPointIndex + 1} of {trip.points.length}
-                  </dd>
-                </div>
-              </>
-            )}
-          </dl>
-        </div>
-
-        {/* Checkpoints */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Checkpoints</h2>
-          <div className="space-y-2">
-            {trip.points.map((point, index) => (
-              <div
-                key={point.id}
-                className={`p-3 border rounded-lg ${
-                  trip.progress &&
-                  index === trip.progress.currentPointIndex &&
-                  trip.status === "ACTIVE"
-                    ? "border-blue-500 bg-blue-50"
-                    : point.reachedAt
-                    ? "border-green-500 bg-green-50"
-                    : "border-gray-200"
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {index + 1}. {point.name}
-                      </span>
-                      {point.isFinalPoint && (
-                        <span className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded">
-                          Final
-                        </span>
-                      )}
-                      {point.reachedAt && (
-                        <span className="text-green-600">✓</span>
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {point.latitude.toFixed(6)}, {point.longitude.toFixed(6)}
-                    </div>
-                    {point.reachedAt && (
-                      <div className="text-xs text-gray-400 mt-1">
-                        Reached: {new Date(point.reachedAt).toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                </div>
+        <Card>
+          <CardHeader>
+            <h2 className="text-xl font-semibold text-gray-900">Trip Information</h2>
+          </CardHeader>
+          <CardBody>
+            <dl className="space-y-4">
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Status</dt>
+                <dd className="mt-1">
+                  <StatusBadge status={trip.status} />
+                </dd>
               </div>
-            ))}
-          </div>
-        </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Trip Date</dt>
+                <dd className="mt-1 text-sm font-semibold text-gray-900">
+                  {new Date(trip.tripDate).toLocaleDateString()}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Scheduled Time</dt>
+                <dd className="mt-1 text-sm font-semibold text-gray-900">
+                  {new Date(trip.scheduledTime).toLocaleString()}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Assigned Captain</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {trip.assignedCaptain ? (
+                    <div className="space-y-1">
+                      <div className="font-medium">{trip.assignedCaptain.name}</div>
+                      <div className="text-gray-500">{trip.assignedCaptain.phone_number}</div>
+                      <div className="text-gray-500">{trip.assignedCaptain.vehicle_type}</div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 italic">No captain assigned yet</span>
+                  )}
+                </dd>
+              </div>
+              {trip.progress && (
+                <>
+                  {trip.progress.startedAt && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Started At</dt>
+                      <dd className="mt-1 text-sm font-semibold text-gray-900">
+                        {new Date(trip.progress.startedAt).toLocaleString()}
+                      </dd>
+                    </div>
+                  )}
+                  {trip.progress.completedAt && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Completed At</dt>
+                      <dd className="mt-1 text-sm font-semibold text-gray-900">
+                        {new Date(trip.progress.completedAt).toLocaleString()}
+                      </dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Current Checkpoint</dt>
+                    <dd className="mt-1 text-sm font-semibold text-gray-900">
+                      {trip.progress.currentPointIndex + 1} of {trip.points.length}
+                    </dd>
+                  </div>
+                </>
+              )}
+            </dl>
+          </CardBody>
+        </Card>
+
+        {/* Checkpoints Timeline */}
+        <Card>
+          <CardHeader>
+            <h2 className="text-xl font-semibold text-gray-900">Checkpoints</h2>
+          </CardHeader>
+          <CardBody>
+            <TripTimeline
+              checkpoints={trip.points}
+              currentPointIndex={trip.progress?.currentPointIndex}
+              status={trip.status}
+            />
+          </CardBody>
+        </Card>
       </div>
 
       {/* Activation Checks History */}

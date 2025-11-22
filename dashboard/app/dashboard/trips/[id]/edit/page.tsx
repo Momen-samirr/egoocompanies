@@ -182,8 +182,29 @@ export default function EditTripPage() {
 
     try {
       setSaving(true);
+      
+      // Get user's timezone offset to preserve exact time
+      const now = new Date();
+      const timezoneOffset = -now.getTimezoneOffset();
+      const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+      const offsetMinutes = Math.abs(timezoneOffset) % 60;
+      const offsetSign = timezoneOffset >= 0 ? '+' : '-';
+      const timezoneString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+      
+      // Send time with timezone to preserve exact time
+      const scheduledTimeWithTimezone = formData.scheduledTime.includes('+') || formData.scheduledTime.includes('-')
+        ? formData.scheduledTime // Already has timezone
+        : `${formData.scheduledTime}:00${timezoneString}`;
+      
+      console.log("📅 Updating trip:");
+      console.log("   Date:", formData.tripDate);
+      console.log("   Time (with timezone):", scheduledTimeWithTimezone);
+      
       const response = await api.put(`/admin/trips/${tripId}`, {
-        ...formData,
+        name: formData.name,
+        tripDate: formData.tripDate,
+        scheduledTime: scheduledTimeWithTimezone,
+        assignedCaptainId: formData.assignedCaptainId,
         points: checkpoints,
       });
 
@@ -226,7 +247,7 @@ export default function EditTripPage() {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200/60 p-8 space-y-6">
         {/* Basic Trip Information */}
         <div className="space-y-4">
           <h2 className="text-xl font-semibold text-gray-900">Trip Information</h2>
@@ -241,7 +262,7 @@ export default function EditTripPage() {
               value={formData.name}
               onChange={handleInputChange}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
               placeholder="e.g., Morning Route - Downtown"
             />
           </div>
@@ -257,7 +278,7 @@ export default function EditTripPage() {
                 value={formData.tripDate}
                 onChange={handleInputChange}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
               />
             </div>
 
@@ -271,7 +292,7 @@ export default function EditTripPage() {
                 value={formData.scheduledTime}
                 onChange={handleInputChange}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
               />
             </div>
           </div>
@@ -285,7 +306,7 @@ export default function EditTripPage() {
               value={formData.assignedCaptainId}
               onChange={handleInputChange}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
             >
               <option value="">Select a captain</option>
               {drivers.map((driver) => (
@@ -311,7 +332,7 @@ export default function EditTripPage() {
           </div>
 
           {checkpoints.map((checkpoint, index) => (
-            <div key={checkpoint.id || index} className="border border-gray-200 rounded-lg p-4 space-y-3">
+            <div key={checkpoint.id || index} className="border border-gray-200/60 rounded-xl p-5 space-y-4 bg-gray-50/30">
               <div className="flex justify-between items-center">
                 <h3 className="font-medium">Checkpoint {index + 1}</h3>
                 <div className="flex gap-2">
@@ -351,7 +372,7 @@ export default function EditTripPage() {
                   value={checkpoint.name}
                   onChange={(e) => handleCheckpointChange(index, "name", e.target.value)}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                   placeholder="e.g., Downtown Station"
                 />
               </div>
@@ -369,7 +390,7 @@ export default function EditTripPage() {
                       handleCheckpointChange(index, "latitude", parseFloat(e.target.value) || 0)
                     }
                     required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                     placeholder="e.g., 23.8103"
                   />
                 </div>
@@ -386,7 +407,7 @@ export default function EditTripPage() {
                       handleCheckpointChange(index, "longitude", parseFloat(e.target.value) || 0)
                     }
                     required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                     placeholder="e.g., 90.4125"
                   />
                 </div>
