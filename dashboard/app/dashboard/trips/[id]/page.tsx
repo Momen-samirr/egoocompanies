@@ -128,8 +128,7 @@ export default function TripDetailsPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {(trip.status === "SCHEDULED" || trip.status === "FAILED") &&
-            trip.status !== "EMERGENCY_TERMINATED" && (
+          {(trip.status === "SCHEDULED" || trip.status === "FAILED") && (
             <>
               <Button
                 variant="secondary"
