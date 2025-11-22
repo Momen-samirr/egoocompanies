@@ -14,7 +14,8 @@ import TripSearch from "@/components/trips/TripSearch";
 import Pagination from "@/components/common/Pagination";
 import ExportButton from "@/components/common/ExportButton";
 import { PlusIcon } from "@heroicons/react/24/outline";
-import { ScheduledTrip, TripFilters as TripFiltersType, TripSort, Pagination as PaginationType } from "@/types/trip";
+import { ScheduledTrip, TripFilters as TripFiltersType, TripSort } from "@/types/trip";
+import { Pagination as PaginationType } from "@/types";
 import { exportTripsToCSV } from "@/lib/utils/export";
 
 type SortField = "name" | "date" | "captain" | "checkpoints" | "status";
