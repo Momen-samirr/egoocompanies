@@ -8,7 +8,7 @@ const libraries: ("places" | "drawing" | "geometry")[] = ["places"];
 export interface UseGoogleMapsReturn {
   isLoaded: boolean;
   loadError: Error | undefined;
-  google: typeof google | undefined;
+  google: typeof window.google | undefined;
 }
 
 export function useGoogleMaps(): UseGoogleMapsReturn {
@@ -19,7 +19,7 @@ export function useGoogleMaps(): UseGoogleMapsReturn {
     libraries,
   });
 
-  const [google, setGoogle] = useState<typeof google | undefined>(undefined);
+  const [google, setGoogle] = useState<typeof window.google | undefined>(undefined);
 
   useEffect(() => {
     if (isLoaded && typeof window !== "undefined" && window.google) {
