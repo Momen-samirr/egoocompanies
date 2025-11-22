@@ -7,7 +7,7 @@ import { ReactNode } from "react";
 
 function getBreadcrumbs(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
-  const breadcrumbs = [];
+  const breadcrumbs: Array<{ label: string; href?: string }> = [];
 
   if (segments.length === 0 || (segments.length === 1 && segments[0] === "dashboard")) {
     return [];
