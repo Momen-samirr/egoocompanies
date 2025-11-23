@@ -98,12 +98,6 @@ const ensureUrlScheme = (url: string | undefined, defaultScheme: string = "http"
 export const getServerUri = (): string => {
   const envUri = process.env.EXPO_PUBLIC_SERVER_URI;
   
-  console.log('Environment check:', {
-    hasEnvVar: !!envUri,
-    envUriValue: envUri,
-    allEnvKeys: Object.keys(process.env).filter(key => key.startsWith('EXPO_PUBLIC')),
-  });
-  
   if (!envUri) {
     console.warn('EXPO_PUBLIC_SERVER_URI not found, using default');
     // Default fallback based on platform
@@ -115,7 +109,6 @@ export const getServerUri = (): string => {
   }
   
   const cleanedUri = ensureUrlScheme(envUri, "http");
-  console.log('Server URI - Original:', envUri, 'Cleaned:', cleanedUri);
   return cleanedUri;
 };
 

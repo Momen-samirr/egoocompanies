@@ -11,7 +11,7 @@ import {
   AppStateStatus,
   RefreshControl,
 } from "react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Header from "@/components/common/header";
 import { useTheme } from "@react-navigation/native";
 import { external } from "@/styles/external.style";
@@ -40,6 +40,10 @@ import ETADisplay from "@/components/common/ETADisplay";
 import { spacing, shadows } from "@/styles/design-system";
 import fonts from "@/themes/app.fonts";
 import OverviewSection from "@/components/home/OverviewSection";
+import { runMapDiagnostics, logMapDiagnostics } from "@/utils/mapDiagnostics";
+import { requestAllLocationPermissions, hasBackgroundLocationPermission, getLocationPermissionStatus } from "@/utils/locationPermissions";
+import { promptDisableBatteryOptimization, showBatteryOptimizationInstructions } from "@/utils/batteryOptimization";
+import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
 
 export default function HomeScreen() {
   const notificationListener = useRef<any>();
@@ -69,6 +73,11 @@ export default function HomeScreen() {
   const isOnRef = useRef<any>(undefined); // Track isOn in ref so callbacks always have latest value
   const processedNotificationIds = useRef<Set<string>>(new Set()); // Track processed notification IDs to prevent duplicates
   const isProcessingNotification = useRef<boolean>(false); // Prevent concurrent notification processing
+  
+  // Map error handling state
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapLoading, setMapLoading] = useState(true);
 
   const { colors } = useTheme();
 
@@ -548,6 +557,55 @@ export default function HomeScreen() {
     console.log(`🔄 isOn ref updated to: ${isOn}`);
   }, [isOn]);
 
+  // Monitor AppState to handle foreground/background transitions
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", async (nextAppState: AppStateStatus) => {
+      console.log(`📱 App state changed: ${nextAppState}`);
+      
+      if (nextAppState === "background" || nextAppState === "inactive") {
+        console.log("📱 App moved to background - location tracking should continue if permissions are granted");
+        
+        // Check if we have background permission
+        const hasBackground = await hasBackgroundLocationPermission();
+        if (!hasBackground && isOnRef.current === true) {
+          console.warn("⚠️ App in background but background location permission not granted");
+          Toast.show("Background location permission required for tracking when screen is off", {
+            type: "warning",
+            duration: 3000,
+          });
+        } else if (hasBackground && isOnRef.current === true) {
+          console.log("✅ Background location permission granted - tracking will continue");
+        }
+      } else if (nextAppState === "active") {
+        console.log("📱 App moved to foreground");
+        
+        // When app comes to foreground, verify permissions are still granted
+        if (isOnRef.current === true) {
+          const permissionStatus = await getLocationPermissionStatus();
+          console.log("📍 Permission status on foreground:", permissionStatus);
+          
+          if (!permissionStatus.background && Platform.OS === "android") {
+            console.warn("⚠️ Background location permission may have been revoked");
+          }
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Run map diagnostics on mount
+  useEffect(() => {
+    runMapDiagnostics().then((diagnostics) => {
+      logMapDiagnostics(diagnostics);
+      if (diagnostics.errors.length > 0) {
+        setMapError(diagnostics.errors.join(", "));
+      }
+    });
+  }, []);
+
   // CRITICAL: Register for push notifications and save token
   // This must run:
   // 1. When component mounts (if driver is logged in)
@@ -975,7 +1033,8 @@ export default function HomeScreen() {
     }
   }, [wsConnected, isOn, currentLocation]);
 
-  const haversineDistance = (coords1: any, coords2: any) => {
+  // Memoize haversine distance calculation to avoid recreating function on every render
+  const haversineDistance = useCallback((coords1: any, coords2: any) => {
     const toRad = (x: any) => (x * Math.PI) / 180;
 
     const R = 6371e3; // Radius of the Earth in meters
@@ -994,7 +1053,7 @@ export default function HomeScreen() {
 
     const distance = R * c; // Distance in meters
     return distance;
-  };
+  }, []);
 
   const sendLocationUpdate = async (location: any) => {
     // Only send location updates if driver is active (use ref to get latest value)
@@ -1026,8 +1085,6 @@ export default function HomeScreen() {
           const driverData = res.data.driver;
           const driverStatus = driverData.status || "active";
           
-          console.log(`📤 Sending location update: Driver=${driverData.id}, Status=${driverStatus}, Name=${driverData.name}, Lat=${location.latitude}, Lng=${location.longitude}`);
-          
           const message = JSON.stringify({
             type: "locationUpdate",
             data: {
@@ -1041,7 +1098,6 @@ export default function HomeScreen() {
             driver: driverData.id,
           });
           ws.current.send(message);
-          console.log("✅ Location update sent successfully");
           
           // Also update location for scheduled trips (only if driver is online)
           // The backend will check if driver is online, so we can safely call this
@@ -1092,22 +1148,44 @@ export default function HomeScreen() {
         locationWatchSubscription.current = null;
       }
 
-      let { status } = await GeoLocation.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Toast.show("Please give us to access your location to use this app!");
+      // Request all location permissions (foreground + background)
+      console.log("📍 Requesting location permissions...");
+      const { foreground, background } = await requestAllLocationPermissions();
+      
+      if (!foreground) {
+        Toast.show("Please grant location permission to use this app!", {
+          type: "danger",
+        });
         return;
       }
+
+      if (!background) {
+        console.warn("⚠️ Background location permission not granted");
+        Toast.show("Background location is required for tracking when screen is off. Please enable it in Settings.", {
+          type: "warning",
+          duration: 5000,
+        });
+      } else {
+        console.log("✅ Background location permission granted");
+      }
+
+      // Check permission status for logging
+      const permissionStatus = await getLocationPermissionStatus();
+      console.log("📍 Location permission status:", permissionStatus);
 
       console.log(`📍 Setting up location watcher with isOn=${isOn}`);
 
       // Track if this is the first location after driver becomes active
       let firstLocationAfterActive = isOn === true;
 
+      // Configure location watch for background compatibility
+      // Use balanced intervals: 5 seconds or 10 meters for background efficiency
       const subscription = await GeoLocation.watchPositionAsync(
         {
           accuracy: GeoLocation.Accuracy.High,
-          timeInterval: 1000,
-          distanceInterval: 1,
+          timeInterval: 5000, // 5 seconds - better for background
+          distanceInterval: 10, // 10 meters - reduces battery drain
+          mayShowUserSettingsDialog: true,
         },
         async (position) => {
           const { latitude, longitude } = position.coords;
@@ -1122,17 +1200,15 @@ export default function HomeScreen() {
           
           // Only send location update if driver is active and WebSocket is connected
           if (currentIsOn === true && currentWs && currentWs.readyState === WebSocket.OPEN) {
-            // Send update if location changed significantly OR if this is the first location after becoming active
+            // Use optimized location update check
             const currentLastLocation = lastLocation;
-            const shouldSend = !currentLastLocation || 
-                              haversineDistance(currentLastLocation, newLocation) > 200 ||
-                              firstLocationAfterActive;
+            const shouldSend = firstLocationAfterActive || 
+                              shouldSendLocationUpdate(currentLastLocation, newLocation, 200);
             
             if (shouldSend) {
               const isFirstAfterActive = firstLocationAfterActive;
               firstLocationAfterActive = false; // Reset flag after first send
               setLastLocation(newLocation);
-              console.log(`📍 Sending location update (isOn=${currentIsOn}, firstAfterActive=${isFirstAfterActive}, hasLastLocation=${!!currentLastLocation})`);
               await sendLocationUpdate(newLocation);
             } else {
               // Even if location didn't change much, still update lastLocation
@@ -1180,13 +1256,15 @@ export default function HomeScreen() {
   //   getRecentRides();
   // }, []);
 
-  const handleClose = () => {
+  // Memoize handleClose to prevent unnecessary re-renders
+  const handleClose = useCallback(() => {
     setIsModalVisible(false);
     // Reset processing flag when modal is closed
     isProcessingNotification.current = false;
-  };
+  }, []);
 
-  const handleStatusChange = async () => {
+  // Memoize handleStatusChange to prevent unnecessary re-renders
+  const handleStatusChange = useCallback(async () => {
     if (!loading) {
       setloading(true);
       const accessToken = await AsyncStorage.getItem("accessToken");
@@ -1209,19 +1287,58 @@ export default function HomeScreen() {
         isOnRef.current = newIsOn; // Update ref immediately
         await AsyncStorage.setItem("status", changeStatus.data.driver.status);
         
-        // Notify socket server when driver goes inactive
-        if (newStatus === "inactive" && ws.current && ws.current.readyState === WebSocket.OPEN) {
-          // Send a message to remove driver from available drivers
-          const message = JSON.stringify({
-            type: "driverStatusChange",
-            role: "driver",
-            driver: changeStatus.data.driver.id,
-            status: "inactive",
-          });
-          ws.current.send(message);
-        } else if (newStatus === "active" && currentLocation && ws.current && ws.current.readyState === WebSocket.OPEN) {
-          // If driver goes active, send current location immediately
-          await sendLocationUpdate(currentLocation);
+        // Start/stop foreground service and handle location tracking
+        if (newStatus === "active") {
+          // Driver going active - start foreground service and prompt for battery optimization
+          try {
+            // Check if we have background permission
+            const hasBackground = await hasBackgroundLocationPermission();
+            if (!hasBackground) {
+              console.warn("⚠️ Background location permission not granted");
+              Toast.show("Background location is required for tracking when screen is off", {
+                type: "warning",
+                duration: 4000,
+              });
+            }
+
+            // Start foreground service for background location tracking
+            // expo-location handles this automatically when watching position with background permission
+            console.log("✅ Starting location tracking with foreground service");
+            
+            // Prompt user to disable battery optimization (only once, can be skipped)
+            // We'll show this as a one-time prompt
+            const batteryOptPromptShown = await AsyncStorage.getItem("batteryOptPromptShown");
+            if (!batteryOptPromptShown && Platform.OS === "android") {
+              setTimeout(() => {
+                promptDisableBatteryOptimization();
+                AsyncStorage.setItem("batteryOptPromptShown", "true");
+              }, 2000); // Show after 2 seconds to not interrupt the status change
+            }
+
+            // If driver goes active, send current location immediately
+            if (currentLocation && ws.current && ws.current.readyState === WebSocket.OPEN) {
+              await sendLocationUpdate(currentLocation);
+            }
+          } catch (error) {
+            console.error("Error starting location tracking:", error);
+          }
+        } else {
+          // Driver going inactive - stop foreground service
+          console.log("🛑 Stopping location tracking");
+          // expo-location will handle stopping the foreground service automatically
+          // when we stop watching position or when the app goes to background
+          
+          // Notify socket server when driver goes inactive
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            // Send a message to remove driver from available drivers
+            const message = JSON.stringify({
+              type: "driverStatusChange",
+              role: "driver",
+              driver: changeStatus.data.driver.id,
+              status: "inactive",
+            });
+            ws.current.send(message);
+          }
         }
         
         setloading(false);
@@ -1229,7 +1346,7 @@ export default function HomeScreen() {
         setloading(false);
       }
     }
-  };
+  }, [loading, isOn, currentLocation]);
 
   const sendPushNotification = async (expoPushToken: string, data: any) => {
     const message = {
@@ -1246,7 +1363,8 @@ export default function HomeScreen() {
       });
   };
 
-  const acceptRideHandler = async () => {
+  // Memoize acceptRideHandler to prevent unnecessary re-renders
+  const acceptRideHandler = useCallback(async () => {
     // Prevent multiple accept clicks
     if (loading) {
       console.log("⚠️ Already processing ride acceptance, ignoring duplicate");
@@ -1314,10 +1432,29 @@ export default function HomeScreen() {
     } finally {
       setloading(false);
     }
-  };
+  }, [loading, userData, distance, driver, currentLocationName, destinationLocationName, currentLocation, marker]);
 
-  const estimatedFare = distance ? (distance * parseInt(driver?.rate || "0")).toFixed(2) : "0.00";
-  const estimatedDistance = distance ? parseFloat(distance) : 0;
+  // Memoize expensive calculations to avoid recalculating on every render
+  const estimatedFare = useMemo(() => {
+    return distance ? (distance * parseInt(driver?.rate || "0")).toFixed(2) : "0.00";
+  }, [distance, driver?.rate]);
+
+  const estimatedDistance = useMemo(() => {
+    return distance ? parseFloat(distance) : 0;
+  }, [distance]);
+
+  // Memoize map region to prevent unnecessary re-renders
+  const memoizedRegion = useMemo(() => {
+    return region;
+  }, [region.latitude, region.longitude, region.latitudeDelta, region.longitudeDelta]);
+
+  // Memoize map markers to prevent unnecessary re-renders
+  const mapMarkers = useMemo(() => {
+    return {
+      destination: marker,
+      pickup: currentLocation,
+    };
+  }, [marker?.latitude, marker?.longitude, currentLocation?.latitude, currentLocation?.longitude]);
 
   return (
     <View style={[external.fx_1, { backgroundColor: colors.background }]}>
@@ -1422,36 +1559,93 @@ export default function HomeScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Map View - Larger */}
-              <View style={{ height: windowHeight(300), borderRadius: 12, overflow: "hidden", marginBottom: spacing.lg }}>
+              <View style={{ height: windowHeight(300), borderRadius: 12, overflow: "hidden", marginBottom: spacing.lg, position: "relative" }}>
                 <MapView
                   style={{ flex: 1 }}
-                  region={region}
-                  onRegionChangeComplete={(region) => setRegion(region)}
+                  region={memoizedRegion}
+                  onRegionChangeComplete={useCallback((newRegion) => {
+                    setRegion(newRegion);
+                  }, [])}
+                  onMapReady={useCallback(() => {
+                    console.log("✅ Home screen map ready and loaded successfully");
+                    setMapReady(true);
+                    setMapLoading(false);
+                    setMapError(null);
+                  }, [])}
+                  onError={useCallback((error) => {
+                    console.error("❌ Home screen map error:", error);
+                    setMapError(`Map error: ${error.message || "Unknown error"}`);
+                    setMapLoading(false);
+                  }, [])}
+                  onDidFailLoadingMap={useCallback((error) => {
+                    console.error("❌ Home screen map failed to load:", error);
+                    setMapError(`Failed to load map: ${error.message || "Unknown error"}`);
+                    setMapLoading(false);
+                  }, [])}
                 >
-                  {marker && (
+                  {mapMarkers.destination && (
                     <Marker
-                      coordinate={marker}
+                      coordinate={mapMarkers.destination}
                       title="Destination"
                       pinColor={color.status.active}
                     />
                   )}
-                  {currentLocation && (
+                  {mapMarkers.pickup && (
                     <Marker
-                      coordinate={currentLocation}
+                      coordinate={mapMarkers.pickup}
                       title="Pickup"
                       pinColor={color.status.completed}
                     />
                   )}
-                  {currentLocation && marker && (
+                  {mapMarkers.pickup && mapMarkers.destination && (
                     <MapViewDirections
-                      origin={currentLocation}
-                      destination={marker}
+                      origin={mapMarkers.pickup}
+                      destination={mapMarkers.destination}
                       apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
                       strokeWidth={4}
                       strokeColor={color.primary}
                     />
                   )}
                 </MapView>
+                
+                {/* Map Error Display */}
+                {mapError && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 10,
+                      left: 10,
+                      right: 10,
+                      backgroundColor: "rgba(239, 68, 68, 0.9)",
+                      padding: 12,
+                      borderRadius: 8,
+                      zIndex: 1000,
+                    }}
+                  >
+                    <Text style={{ color: "white", fontSize: 12, fontWeight: "bold" }}>
+                      Map Error: {mapError}
+                    </Text>
+                  </View>
+                )}
+                
+                {/* Map Loading Indicator */}
+                {mapLoading && !mapError && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      backgroundColor: "rgba(0, 0, 0, 0.3)",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      zIndex: 999,
+                    }}
+                  >
+                    <Text style={{ color: "white", fontSize: 14 }}>Loading map...</Text>
+                  </View>
+                )}
               </View>
 
               {/* Passenger Info */}

@@ -16,7 +16,11 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
+        "UIBackgroundModes": [
+          "location",
+          "locationAlways"
+        ]
       },
       "bundleIdentifier": "com.becodemy.ridewavedriver"
     },
@@ -35,6 +39,7 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "INTERNET",
         "POST_NOTIFICATIONS"
       ],

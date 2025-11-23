@@ -35,7 +35,7 @@ interface StatCardProps {
   onPress?: () => void;
 }
 
-function StatCard({ icon, value, label, color: textColor, backgroundColor, onPress }: StatCardProps) {
+const StatCard = React.memo(function StatCard({ icon, value, label, color: textColor, backgroundColor, onPress }: StatCardProps) {
   const { colors } = useTheme();
   const CardWrapper = onPress ? TouchableOpacity : View;
 
@@ -63,50 +63,75 @@ function StatCard({ icon, value, label, color: textColor, backgroundColor, onPre
       </View>
     </CardWrapper>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if props change
+  return (
+    prevProps.value === nextProps.value &&
+    prevProps.label === nextProps.label &&
+    prevProps.color === nextProps.color &&
+    prevProps.backgroundColor === nextProps.backgroundColor
+  );
+});
 
 interface OverviewSectionProps {
   refreshTrigger?: number;
 }
 
-export default function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
+function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
   const { colors } = useTheme();
   const [stats, setStats] = useState<DriverStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const accessToken = await AsyncStorage.getItem("accessToken");
-      
-      if (!accessToken) {
-        setError("Please login first");
-        return;
-      }
-
-      const response = await axios.get(`${getServerUri()}/driver/stats`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (response.data.success) {
-        setStats(response.data.stats);
-      } else {
-        setError("Failed to load statistics");
-      }
-    } catch (err: any) {
-      console.error("Error fetching driver stats:", err);
-      setError(err.response?.data?.message || "Failed to load statistics");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    // Create AbortController for request cancellation
+    const abortController = new AbortController();
+
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const accessToken = await AsyncStorage.getItem("accessToken");
+        
+        if (!accessToken) {
+          setError("Please login first");
+          return;
+        }
+
+        const response = await axios.get(`${getServerUri()}/driver/stats`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          signal: abortController.signal, // Add signal for cancellation
+        });
+
+        if (response.data.success) {
+          setStats(response.data.stats);
+        } else {
+          setError("Failed to load statistics");
+        }
+      } catch (err: any) {
+        // Don't set error if request was cancelled
+        if (axios.isCancel(err) || err.name === "AbortError") {
+          console.log("Request cancelled");
+          return;
+        }
+        console.error("Error fetching driver stats:", err);
+        setError(err.response?.data?.message || "Failed to load statistics");
+      } finally {
+        // Only update loading state if component is still mounted
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
     fetchStats();
+
+    // Cleanup: cancel request if component unmounts
+    return () => {
+      abortController.abort();
+    };
   }, [refreshTrigger]);
 
 
@@ -407,5 +432,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontWeight: "600",
   },
+});
+
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(OverviewSection, (prevProps, nextProps) => {
+  // Only re-render if refreshTrigger changes
+  return prevProps.refreshTrigger === nextProps.refreshTrigger;
 });
 

@@ -6,6 +6,7 @@ import { ToastProvider } from "react-native-toast-notifications";
 import { LogBox } from "react-native";
 import { useFonts } from "expo-font";
 import React from "react";
+import { DriverProvider } from "@/contexts/DriverContext";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -71,10 +72,12 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   return (
-    <ToastProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-      </Stack>
-    </ToastProvider>
+    <DriverProvider>
+      <ToastProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+        </Stack>
+      </ToastProvider>
+    </DriverProvider>
   );
 }

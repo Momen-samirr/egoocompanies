@@ -20,7 +20,7 @@ interface PassengerCardProps {
   onMessagePress?: () => void;
 }
 
-export default function PassengerCard({
+function PassengerCard({
   passenger,
   onCallPress,
   onMessagePress,
@@ -153,5 +153,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+});
+
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(PassengerCard, (prevProps, nextProps) => {
+  // Only re-render if passenger data changes
+  return (
+    prevProps.passenger?.id === nextProps.passenger?.id &&
+    prevProps.passenger?.name === nextProps.passenger?.name &&
+    prevProps.passenger?.phone_number === nextProps.passenger?.phone_number &&
+    prevProps.passenger?.rating === nextProps.passenger?.rating &&
+    prevProps.passenger?.photo === nextProps.passenger?.photo
+  );
 });
 

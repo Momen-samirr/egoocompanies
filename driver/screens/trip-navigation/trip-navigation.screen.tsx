@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
 } from "react-native";
 import React, { useEffect, useState, useRef } from "react";
 import { useTheme } from "@react-navigation/native";
@@ -25,6 +26,15 @@ import ETADisplay from "@/components/common/ETADisplay";
 import EmergencyEndSlider from "@/components/trip/EmergencyEndSlider";
 import { spacing, shadows } from "@/styles/design-system";
 import fonts from "@/themes/app.fonts";
+import NavigationArrow from "@/components/navigation/NavigationArrow";
+import NavigationScreen from "@/components/navigation/NavigationScreen";
+import { calculateBearing, calculateHeadingFromMovement, Coordinate as NavCoordinate } from "@/utils/navigation.utils";
+import { Coordinate } from "@/services/navigationService";
+import { animateCameraToDriver } from "@/utils/mapCamera";
+import { useNavigation } from "@/hooks/useNavigation";
+import TurnByTurnCard from "@/components/navigation/TurnByTurnCard";
+import { decodePolyline } from "@/services/navigationService";
+import Constants from "expo-constants";
 
 interface ScheduledTrip {
   id: string;
@@ -60,6 +70,69 @@ export default function TripNavigationScreen() {
   const [emergencyDisabledMessage, setEmergencyDisabledMessage] = useState<string>("");
   const mapRef = useRef<MapView>(null);
   const locationWatchSubscription = useRef<Location.LocationSubscription | null>(null);
+  
+  // Navigation state
+  const [driverHeading, setDriverHeading] = useState<number | null>(null);
+  const [bearingToCheckpoint, setBearingToCheckpoint] = useState<number | null>(null);
+  const [isNavigationMode, setIsNavigationMode] = useState(false);
+  const [isFullScreenNavigation, setIsFullScreenNavigation] = useState(false);
+  const previousLocation = useRef<{ latitude: number; longitude: number } | null>(null);
+  const hasShownProximityNotification = useRef<number | null>(null);
+  
+  // Navigation hook state
+  const [navigationOrigin, setNavigationOrigin] = useState<Coordinate | null>(null);
+  const [navigationDestination, setNavigationDestination] = useState<Coordinate | null>(null);
+  
+  // Track if we've manually started navigation to avoid conflicts
+  const hasManuallyStartedNavigation = useRef(false);
+  const navigationStartRequested = useRef(false);
+  
+  // Initialize navigation hook
+  const {
+    state: navigationState,
+    startNavigation,
+    stopNavigation,
+    recalculateCurrentRoute,
+  } = useNavigation({
+    origin: navigationOrigin,
+    destination: navigationDestination,
+    mode: "destination",
+    enabled: false, // Don't auto-start, we'll control it manually
+    onArrival: () => {
+      Toast.show("Arrived at checkpoint!", { type: "success" });
+    },
+    onDeviation: () => {
+      console.log("⚠️ Route deviation detected, recalculating...");
+    },
+  });
+  
+  // Manually control navigation start/stop based on isNavigationMode
+  useEffect(() => {
+    if (isNavigationMode && navigationOrigin && navigationDestination) {
+      // Only start if we haven't already requested it
+      if (!navigationStartRequested.current) {
+        navigationStartRequested.current = true;
+        hasManuallyStartedNavigation.current = true;
+        startNavigation().catch((error) => {
+          console.error("Error starting navigation:", error);
+          navigationStartRequested.current = false;
+          hasManuallyStartedNavigation.current = false;
+        });
+      }
+    } else if (!isNavigationMode) {
+      navigationStartRequested.current = false;
+      hasManuallyStartedNavigation.current = false;
+      if (navigationState.isActive) {
+        stopNavigation();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNavigationMode]);
+  
+  // Reset navigation start flag when origin/destination change
+  useEffect(() => {
+    navigationStartRequested.current = false;
+  }, [navigationOrigin?.latitude, navigationOrigin?.longitude, navigationDestination?.latitude, navigationDestination?.longitude]);
 
   useEffect(() => {
     if (tripId) {
@@ -68,6 +141,43 @@ export default function TripNavigationScreen() {
       checkEmergencyUsageStatus();
     }
   }, [tripId]);
+
+  // Update navigation origin when current location changes
+  useEffect(() => {
+    if (currentLocation) {
+      setNavigationOrigin({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLocation?.coords.latitude, currentLocation?.coords.longitude]);
+
+  // Update navigation destination when current checkpoint changes
+  useEffect(() => {
+    if (trip) {
+      const currentPointIndex = trip.progress?.currentPointIndex || 0;
+      const currentPoint = trip.points[currentPointIndex];
+      
+      if (currentPoint && !currentPoint.reachedAt) {
+        setNavigationDestination({
+          latitude: currentPoint.latitude,
+          longitude: currentPoint.longitude,
+        });
+      } else {
+        setNavigationDestination(null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPointIndex]);
+
+  // Cleanup navigation when mode is disabled
+  useEffect(() => {
+    if (!isNavigationMode && navigationState.isActive) {
+      stopNavigation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNavigationMode]);
 
   const checkEmergencyUsageStatus = async () => {
     try {
@@ -118,6 +228,11 @@ export default function TripNavigationScreen() {
       if (response.data.success) {
         const activeTrip = response.data.trips.find((t: ScheduledTrip) => t.id === tripId);
         if (activeTrip) {
+          // Reset proximity notification flag when trip data changes
+          const newCurrentPointIndex = activeTrip.progress?.currentPointIndex || 0;
+          if (hasShownProximityNotification.current !== newCurrentPointIndex) {
+            hasShownProximityNotification.current = null;
+          }
           setTrip(activeTrip);
           // Wait for location to be available before updating map
           setTimeout(() => {
@@ -157,13 +272,84 @@ export default function TripNavigationScreen() {
     locationWatchSubscription.current = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
-        timeInterval: 5000, // Update every 5 seconds
-        distanceInterval: 10, // Update every 10 meters
+        timeInterval: 2000, // Update every 2 seconds for better navigation
+        distanceInterval: 5, // Update every 5 meters
+        mayShowUserSettingsDialog: true,
       },
       (location) => {
         setCurrentLocation(location);
         updateDistanceAndETA(location);
-        updateMapRegion();
+        
+        // Update heading
+        const { latitude, longitude, heading } = location.coords;
+        if (heading !== null && heading !== undefined && heading >= 0) {
+          setDriverHeading(heading);
+        } else if (previousLocation.current) {
+          // Calculate heading from movement
+          const calculatedHeading = calculateHeadingFromMovement(
+            previousLocation.current as NavCoordinate,
+            { latitude, longitude } as NavCoordinate
+          );
+          if (calculatedHeading !== null) {
+            setDriverHeading(calculatedHeading);
+          }
+        }
+        
+        // Update bearing to current checkpoint and check proximity
+        if (trip) {
+          const currentPointIndex = trip.progress?.currentPointIndex || 0;
+          const currentPoint = trip.points[currentPointIndex];
+          if (currentPoint && !currentPoint.reachedAt) {
+            const bearing = calculateBearing(
+              { latitude, longitude } as NavCoordinate,
+              { latitude: currentPoint.latitude, longitude: currentPoint.longitude } as NavCoordinate
+            );
+            setBearingToCheckpoint(bearing);
+            
+            // Check if driver is within 500m of checkpoint
+            const distance = calculateDistance(
+              latitude,
+              longitude,
+              currentPoint.latitude,
+              currentPoint.longitude
+            );
+            
+            // Show proximity notification if within 500m and not already shown for this checkpoint
+            if (distance <= 500 && hasShownProximityNotification.current !== currentPointIndex) {
+              hasShownProximityNotification.current = currentPointIndex;
+              Toast.show(`You've reached ${currentPoint.name}! Please press "Reached".`, {
+                type: "success",
+                duration: 5000,
+              });
+            }
+          }
+        }
+        
+        previousLocation.current = { latitude, longitude };
+        
+        // Update map region with smooth following
+        if (isNavigationMode && navigationState.isActive) {
+          // Use navigation hook's current location if available
+          const navLocation = navigationState.currentLocation || {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          };
+          const navHeading = navigationState.driverHeading || driverHeading;
+          
+          if (navigationDestination) {
+            animateCameraToDriver(
+              mapRef.current!,
+              navLocation,
+              navigationDestination,
+              navHeading,
+              true // navigation mode
+            );
+          }
+        } else if (isNavigationMode) {
+          updateMapRegionWithNavigation(location);
+        } else {
+          updateMapRegion();
+        }
       }
     );
   };
@@ -176,19 +362,25 @@ export default function TripNavigationScreen() {
     
     if (!currentPoint || currentPoint.reachedAt) return;
 
-    const distance = calculateDistance(
-      location.coords.latitude,
-      location.coords.longitude,
-      currentPoint.latitude,
-      currentPoint.longitude
-    );
+    // Use navigation state if available, otherwise calculate manually
+    if (isNavigationMode && navigationState.isActive && navigationState.distanceToDestination) {
+      setDistanceToCheckpoint(navigationState.distanceToDestination);
+      setEtaToCheckpoint(navigationState.etaToDestination);
+    } else {
+      const distance = calculateDistance(
+        location.coords.latitude,
+        location.coords.longitude,
+        currentPoint.latitude,
+        currentPoint.longitude
+      );
 
-    setDistanceToCheckpoint(distance / 1000); // Convert to km
+      setDistanceToCheckpoint(distance / 1000); // Convert to km
 
-    // Estimate ETA (assuming average speed of 30 km/h in city)
-    const estimatedSpeed = 30; // km/h
-    const etaMinutes = (distance / 1000 / estimatedSpeed) * 60;
-    setEtaToCheckpoint(etaMinutes);
+      // Estimate ETA (assuming average speed of 30 km/h in city)
+      const estimatedSpeed = 30; // km/h
+      const etaMinutes = (distance / 1000 / estimatedSpeed) * 60;
+      setEtaToCheckpoint(etaMinutes);
+    }
   };
 
   const updateMapRegion = (tripData?: ScheduledTrip) => {
@@ -209,6 +401,52 @@ export default function TripNavigationScreen() {
       latitudeDelta: Math.max(latDelta, 0.05),
       longitudeDelta: Math.max(lngDelta, 0.05),
     }, 1000);
+  };
+
+  const updateMapRegionWithNavigation = (location: Location.LocationObject) => {
+    if (!trip || !mapRef.current) return;
+    
+    const currentPointIndex = trip.progress?.currentPointIndex || 0;
+    const currentPoint = trip.points[currentPointIndex];
+    if (!currentPoint || currentPoint.reachedAt) return;
+
+    const driverLocation: Coordinate = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    };
+
+    const destination: Coordinate = {
+      latitude: currentPoint.latitude,
+      longitude: currentPoint.longitude,
+    };
+
+    animateCameraToDriver(
+      mapRef.current,
+      driverLocation,
+      destination,
+      driverHeading,
+      true // navigation mode
+    );
+  };
+
+  const startFullScreenNavigation = () => {
+    if (!currentLocation || !trip) {
+      Toast.show("Location data not available", { type: "warning" });
+      return;
+    }
+
+    const currentPointIndex = trip.progress?.currentPointIndex || 0;
+    const currentPoint = trip.points[currentPointIndex];
+    if (!currentPoint || currentPoint.reachedAt) {
+      Toast.show("No active checkpoint to navigate to", { type: "warning" });
+      return;
+    }
+
+    setIsFullScreenNavigation(true);
+  };
+
+  const stopFullScreenNavigation = () => {
+    setIsFullScreenNavigation(false);
   };
 
   useEffect(() => {
@@ -275,6 +513,12 @@ export default function TripNavigationScreen() {
                   }, 2000);
                 } else {
                   // Refresh trip data
+                  // Reset proximity notification flag when moving to next checkpoint
+                  hasShownProximityNotification.current = null;
+                  // Reset navigation when checkpoint changes
+                  if (isNavigationMode) {
+                    stopNavigation();
+                  }
                   fetchTrip();
                 }
               }
@@ -383,8 +627,45 @@ export default function TripNavigationScreen() {
     return distance <= 500; // 500 meters
   };
 
+  // Get origin and destination for full-screen navigation
+  const getNavigationOrigin = (): Coordinate | null => {
+    if (!currentLocation) return null;
+    return {
+      latitude: currentLocation.coords.latitude,
+      longitude: currentLocation.coords.longitude,
+    };
+  };
+
+  const getNavigationDestination = (): Coordinate | null => {
+    if (!trip || !currentPoint || currentPoint.reachedAt) return null;
+    return {
+      latitude: currentPoint.latitude,
+      longitude: currentPoint.longitude,
+    };
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Full-Screen Navigation Modal */}
+      {isFullScreenNavigation && getNavigationOrigin() && getNavigationDestination() && (
+        <Modal
+          visible={isFullScreenNavigation}
+          animationType="slide"
+          presentationStyle="fullScreen"
+        >
+          <NavigationScreen
+            origin={getNavigationOrigin()!}
+            destination={getNavigationDestination()!}
+            mode="destination"
+            onClose={stopFullScreenNavigation}
+            onArrival={() => {
+              Toast.show("Arrived at checkpoint!", { type: "success" });
+              setIsFullScreenNavigation(false);
+            }}
+          />
+        </Modal>
+      )}
+
       {/* Map View */}
       <View style={{ height: windowHeight(400), position: "relative" }}>
         <MapView
@@ -398,6 +679,10 @@ export default function TripNavigationScreen() {
           }}
           showsUserLocation={true}
           followsUserLocation={false}
+          rotateEnabled={isNavigationMode && navigationState.isActive}
+          pitchEnabled={isNavigationMode && navigationState.isActive}
+          scrollEnabled={!(isNavigationMode && navigationState.isActive)}
+          zoomEnabled={!(isNavigationMode && navigationState.isActive)}
         >
           {/* Current Location - Using showsUserLocation instead */}
 
@@ -425,49 +710,210 @@ export default function TripNavigationScreen() {
 
           {/* Route to current checkpoint */}
           {currentLocation && currentPoint && !currentPoint.reachedAt && (
-            <MapViewDirections
-              origin={{
-                latitude: currentLocation.coords.latitude,
-                longitude: currentLocation.coords.longitude,
-              }}
-              destination={{
-                latitude: currentPoint.latitude,
-                longitude: currentPoint.longitude,
-              }}
-              apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
-              strokeWidth={4}
-              strokeColor={color.primary}
-              onReady={(result) => {
-                // Update distance and ETA when route is calculated
-                if (result.distance && result.duration) {
-                  setDistanceToCheckpoint(result.distance / 1000); // Convert to km
-                  setEtaToCheckpoint(result.duration / 60); // Convert to minutes
-                }
-              }}
-            />
+            <>
+              {/* Use navigation hook route if available, otherwise fallback to MapViewDirections */}
+              {isNavigationMode && navigationState.isActive && navigationState.route ? (
+                <Polyline
+                  coordinates={decodePolyline(navigationState.route.overview_polyline.points)}
+                  strokeColor={color.primary}
+                  strokeWidth={5}
+                  lineCap="round"
+                  lineJoin="round"
+                />
+              ) : (
+                <MapViewDirections
+                  origin={{
+                    latitude: currentLocation.coords.latitude,
+                    longitude: currentLocation.coords.longitude,
+                  }}
+                  destination={{
+                    latitude: currentPoint.latitude,
+                    longitude: currentPoint.longitude,
+                  }}
+                  apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                  strokeWidth={4}
+                  strokeColor={color.primary}
+                  onReady={(result) => {
+                    // Update distance and ETA when route is calculated
+                    if (result.distance && result.duration) {
+                      setDistanceToCheckpoint(result.distance / 1000); // Convert to km
+                      setEtaToCheckpoint(result.duration / 60); // Convert to minutes
+                    }
+                  }}
+                />
+              )}
+            </>
           )}
         </MapView>
-        {/* Center on me button */}
-        {currentLocation && (
-          <TouchableOpacity
+        
+        {/* Turn-by-Turn Instructions Overlay */}
+        {isNavigationMode && navigationState.isActive && navigationState.nextTurn && (
+          <TurnByTurnCard
+            step={navigationState.nextTurn.step}
+            distanceToTurn={navigationState.nextTurn.distanceToTurn}
+            visible={true}
+          />
+        )}
+        
+        {/* Navigation Arrow */}
+        {isNavigationMode && navigationState.isActive ? (
+          navigationState.bearingToDestination !== null && (
+            <NavigationArrow
+              bearingToDestination={navigationState.bearingToDestination}
+              driverHeading={navigationState.driverHeading || driverHeading}
+              size={70}
+              color={color.status.active}
+              visible={true}
+            />
+          )
+        ) : (
+          bearingToCheckpoint !== null && 
+          currentLocation && 
+          currentPoint && 
+          !currentPoint.reachedAt && (
+            <NavigationArrow
+              bearingToDestination={bearingToCheckpoint}
+              driverHeading={driverHeading}
+              size={70}
+              color={color.status.active}
+              visible={true}
+            />
+          )
+        )}
+        
+        {/* ETA and Distance Overlay - Bottom of Map */}
+        {isNavigationMode && navigationState.isActive && currentPoint && !currentPoint.reachedAt && (
+          <View
             style={{
               position: "absolute",
-              bottom: spacing.md,
+              bottom: spacing.xl + 50, // Above the control buttons
+              left: spacing.md,
               right: spacing.md,
-              backgroundColor: "#fff",
-              width: 44,
-              height: 44,
-              borderRadius: 22,
+              backgroundColor: colors.card,
+              borderRadius: 16,
+              padding: spacing.md,
+              ...shadows.lg,
+              zIndex: 999,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: fontSizes.FONT12,
+                fontFamily: fonts.medium,
+                color: color.text.secondary,
+                marginBottom: spacing.xs,
+              }}
+            >
+              To {currentPoint.name}
+            </Text>
+            <ETADisplay
+              distance={navigationState.distanceToDestination}
+              duration={navigationState.etaToDestination}
+              size="md"
+            />
+          </View>
+        )}
+        
+        {/* Loading Overlay for Route Calculation */}
+        {isNavigationMode && navigationState.isLoading && (
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.3)",
               justifyContent: "center",
               alignItems: "center",
-              ...shadows.md,
+              zIndex: 2000,
             }}
-            onPress={updateMapRegion}
-            activeOpacity={0.7}
           >
-            <Text style={{ fontSize: 20 }}>📍</Text>
-          </TouchableOpacity>
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderRadius: 12,
+                padding: spacing.lg,
+                alignItems: "center",
+              }}
+            >
+              <ActivityIndicator size="large" color={color.primary} />
+              <Text
+                style={{
+                  marginTop: spacing.md,
+                  fontSize: fontSizes.FONT14,
+                  fontFamily: fonts.medium,
+                  color: colors.text,
+                }}
+              >
+                Calculating route...
+              </Text>
+            </View>
+          </View>
         )}
+        
+        {/* Error Message */}
+        {isNavigationMode && navigationState.error && (
+          <View
+            style={{
+              position: "absolute",
+              top: spacing.xl + 60,
+              left: spacing.md,
+              right: spacing.md,
+              backgroundColor: color.semantic.errorLight,
+              padding: spacing.md,
+              borderRadius: 8,
+              zIndex: 2000,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: fontSizes.FONT14,
+                fontFamily: fonts.medium,
+                color: color.semantic.error,
+                textAlign: "center",
+              }}
+            >
+              {navigationState.error}
+            </Text>
+          </View>
+        )}
+        
+        {/* Map Control Buttons */}
+        <View style={{ position: "absolute", bottom: spacing.md, right: spacing.md, gap: spacing.sm }}>
+          {/* Center on me button */}
+          {currentLocation && (
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#fff",
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                justifyContent: "center",
+                alignItems: "center",
+                ...shadows.md,
+              }}
+              onPress={() => {
+                if (isNavigationMode && navigationState.isActive && navigationState.currentLocation && navigationDestination) {
+                  animateCameraToDriver(
+                    mapRef.current!,
+                    navigationState.currentLocation,
+                    navigationDestination,
+                    navigationState.driverHeading || driverHeading,
+                    true
+                  );
+                } else if (isNavigationMode && currentLocation && trip) {
+                  updateMapRegionWithNavigation(currentLocation);
+                } else {
+                  updateMapRegion();
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 20 }}>📍</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Trip Info and Checkpoints */}

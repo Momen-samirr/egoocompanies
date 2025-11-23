@@ -17,7 +17,7 @@ interface ETADisplayProps {
   size?: "sm" | "md" | "lg";
 }
 
-export default function ETADisplay({
+function ETADisplay({
   distance,
   duration,
   distanceUnit = "km",
@@ -104,5 +104,17 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: fonts.medium,
   },
+});
+
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(ETADisplay, (prevProps, nextProps) => {
+  // Only re-render if distance, duration, or size changes
+  return (
+    prevProps.distance === nextProps.distance &&
+    prevProps.duration === nextProps.duration &&
+    prevProps.distanceUnit === nextProps.distanceUnit &&
+    prevProps.size === nextProps.size &&
+    prevProps.showIcon === nextProps.showIcon
+  );
 });
 
