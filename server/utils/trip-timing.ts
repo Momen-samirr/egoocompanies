@@ -28,11 +28,50 @@ export function calculateTimingDifference(
     return null;
   }
 
+  // Validate that both dates are valid Date objects
+  const expectedDate = expectedTime instanceof Date ? expectedTime : new Date(expectedTime);
+  const reachedDate = reachedAt instanceof Date ? reachedAt : new Date(reachedAt);
+
+  if (isNaN(expectedDate.getTime()) || isNaN(reachedDate.getTime())) {
+    console.error('[Timing] Invalid date objects:', { expectedTime, reachedAt });
+    return null;
+  }
+
+  // Log timestamps for debugging (in both UTC and ISO format)
+  const expectedUTC = expectedDate.toISOString();
+  const reachedUTC = reachedDate.toISOString();
+  const expectedLocal = expectedDate.toLocaleString();
+  const reachedLocal = reachedDate.toLocaleString();
+  
+  console.log('[Timing] Calculating timing difference:');
+  console.log('  Expected (UTC):', expectedUTC, '| Local:', expectedLocal);
+  console.log('  Reached (UTC):', reachedUTC, '| Local:', reachedLocal);
+
   // Calculate difference in milliseconds
-  const differenceMs = reachedAt.getTime() - expectedTime.getTime();
+  // getTime() returns milliseconds since epoch (UTC), so this comparison is timezone-independent
+  const differenceMs = reachedDate.getTime() - expectedDate.getTime();
   
   // Convert to minutes
   const minutes = Math.round(differenceMs / (1000 * 60));
+  
+  // Validate difference is reasonable (warn if > 24 hours, likely timezone bug)
+  const hoursDifference = Math.abs(minutes) / 60;
+  if (hoursDifference > 24) {
+    console.warn('[Timing] ⚠️ Unusually large time difference detected:', {
+      minutes,
+      hours: hoursDifference.toFixed(2),
+      expectedUTC,
+      reachedUTC,
+      message: 'This may indicate a timezone conversion issue'
+    });
+  }
+  
+  console.log('[Timing] Difference:', {
+    milliseconds: differenceMs,
+    minutes,
+    hours: (minutes / 60).toFixed(2),
+    status: minutes < 0 ? 'early' : minutes > 1 ? 'late' : 'on-time'
+  });
   
   // Determine status
   // Consider "on-time" if within 1 minute (early or late)

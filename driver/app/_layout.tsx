@@ -1,14 +1,20 @@
+import React, { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useState } from "react";
 import "react-native-reanimated";
 import { Stack } from "expo-router";
 import { ToastProvider } from "react-native-toast-notifications";
 import { LogBox } from "react-native";
 import { useFonts } from "expo-font";
-import React from "react";
 import { DriverProvider } from "@/contexts/DriverContext";
-// Import background location task to register it
-import "@/services/backgroundLocationTask";
+// Lazy import background location task to avoid initialization errors
+// The task will be registered when the module is actually used
+if (typeof require !== 'undefined') {
+  try {
+    require("@/services/backgroundLocationTask");
+  } catch (error) {
+    console.warn("⚠️ Could not load background location task:", error);
+  }
+}
 
 export {
   // Catch any errors thrown by the Layout component.

@@ -30,10 +30,35 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
       return null;
     }
 
+    // Parse dates - ensure they're valid Date objects
     const expectedTime = new Date(checkpoint.expectedTime);
     const reachedAt = new Date(checkpoint.reachedAt);
+    
+    // Validate dates
+    if (isNaN(expectedTime.getTime()) || isNaN(reachedAt.getTime())) {
+      console.error('[TripTimeline] Invalid date objects:', {
+        expectedTime: checkpoint.expectedTime,
+        reachedAt: checkpoint.reachedAt
+      });
+      return null;
+    }
+
+    // Calculate difference in milliseconds
+    // getTime() returns milliseconds since epoch (UTC), so this comparison is timezone-independent
     const differenceMs = reachedAt.getTime() - expectedTime.getTime();
     const minutes = Math.round(differenceMs / (1000 * 60));
+    
+    // Validate difference is reasonable (warn if > 24 hours, likely timezone bug)
+    const hoursDifference = Math.abs(minutes) / 60;
+    if (hoursDifference > 24) {
+      console.warn('[TripTimeline] ⚠️ Unusually large time difference detected:', {
+        minutes,
+        hours: hoursDifference.toFixed(2),
+        expectedTime: expectedTime.toISOString(),
+        reachedAt: reachedAt.toISOString(),
+        message: 'This may indicate a timezone conversion issue'
+      });
+    }
     
     // Consider "on-time" if within 1 minute
     if (Math.abs(minutes) <= 1) {

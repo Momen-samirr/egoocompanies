@@ -1,8 +1,15 @@
-import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { getServerUri, getWebSocketUrl } from "@/configs/constants";
+
+// Conditionally import TaskManager to avoid errors if native module isn't ready
+let TaskManager: any = null;
+try {
+  TaskManager = require("expo-task-manager");
+} catch (error) {
+  console.warn("⚠️ expo-task-manager not available:", error);
+}
 
 // Task name for background location tracking
 export const BACKGROUND_LOCATION_TASK = "background-location-tracking";
@@ -92,26 +99,34 @@ async function sendLocationToServer(location: Location.LocationObject) {
   }
 }
 
-// Define the background location task
-TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
-  if (error) {
-    console.error("❌ Background location task error:", error);
-    return;
-  }
+// Define the background location task only if TaskManager is available
+if (TaskManager && TaskManager.defineTask) {
+  try {
+    TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+      if (error) {
+        console.error("❌ Background location task error:", error);
+        return;
+      }
 
-  if (data) {
-    const { locations } = data as { locations: Location.LocationObject[] };
-    
-    // Process each location update
-    for (const location of locations) {
-      console.log(`📍 Background location update: Lat=${location.coords.latitude}, Lng=${location.coords.longitude}, Heading=${location.coords.heading || 'N/A'}`);
-      
-      // Send to WebSocket
-      await sendLocationToWebSocket(location);
-      
-      // Send to server API
-      await sendLocationToServer(location);
-    }
+      if (data) {
+        const { locations } = data as { locations: Location.LocationObject[] };
+        
+        // Process each location update
+        for (const location of locations) {
+          console.log(`📍 Background location update: Lat=${location.coords.latitude}, Lng=${location.coords.longitude}, Heading=${location.coords.heading || 'N/A'}`);
+          
+          // Send to WebSocket
+          await sendLocationToWebSocket(location);
+          
+          // Send to server API
+          await sendLocationToServer(location);
+        }
+      }
+    });
+  } catch (error) {
+    console.warn("⚠️ Failed to define background location task:", error);
   }
-});
+} else {
+  console.warn("⚠️ TaskManager not available - background location task not registered");
+}
 

@@ -1570,12 +1570,12 @@ export const createScheduledTrip = async (req: any, res: Response) => {
             let expectedTimeValue = null;
             if (point.expectedTime) {
               // expectedTime comes as "HH:MM" format, combine with tripDate
-              // Create date in UTC to avoid timezone conversion issues
-              // We'll store it as UTC but the time value represents the local time entered
+              // Store without "Z" suffix so it's interpreted in server timezone
+              // This ensures the time stored represents the local time entered by the user
               const [hours, minutes] = point.expectedTime.split(':');
-              // Create UTC date to preserve the exact time entered
-              // This ensures the time stored matches what the user entered
-              const dateTimeString = `${tripDate}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00Z`;
+              // Create date string without "Z" - will be interpreted in server timezone
+              // Both expectedTime and reachedAt will be compared in UTC (via getTime())
+              const dateTimeString = `${tripDate}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00`;
               expectedTimeValue = new Date(dateTimeString);
             }
 
@@ -2080,15 +2080,15 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
           let expectedTimeValue = null;
           if (point.expectedTime) {
             // expectedTime comes as "HH:MM" format, combine with tripDate
-            // Create date in UTC to avoid timezone conversion issues
-            // We'll store it as UTC but the time value represents the local time entered
+            // Store without "Z" suffix so it's interpreted in server timezone
+            // This ensures the time stored represents the local time entered by the user
             const tripDateStr = tripDateForPoints instanceof Date 
               ? tripDateForPoints.toISOString().split('T')[0]
               : tripDateForPoints;
             const [hours, minutes] = point.expectedTime.split(':');
-            // Create UTC date to preserve the exact time entered
-            // This ensures the time stored matches what the user entered
-            const dateTimeString = `${tripDateStr}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00Z`;
+            // Create date string without "Z" - will be interpreted in server timezone
+            // Both expectedTime and reachedAt will be compared in UTC (via getTime())
+            const dateTimeString = `${tripDateStr}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00`;
             expectedTimeValue = new Date(dateTimeString);
           }
 

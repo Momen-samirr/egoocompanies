@@ -45,7 +45,13 @@ import { requestAllLocationPermissions, hasBackgroundLocationPermission, getLoca
 import { promptDisableBatteryOptimization, showBatteryOptimizationInstructions } from "@/utils/batteryOptimization";
 import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
 import { setWebSocketConnection, BACKGROUND_LOCATION_TASK } from "@/services/backgroundLocationTask";
-import * as TaskManager from "expo-task-manager";
+// Conditionally import TaskManager to avoid errors if native module isn't ready
+let TaskManager: any = null;
+try {
+  TaskManager = require("expo-task-manager");
+} catch (error) {
+  console.warn("⚠️ expo-task-manager not available:", error);
+}
 
 export default function HomeScreen() {
   const notificationListener = useRef<any>();
@@ -1250,9 +1256,13 @@ export default function HomeScreen() {
       let firstLocationAfterActive = isOn === true;
 
       // Check if background task is registered
-      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-      if (!isTaskRegistered) {
-        console.warn("⚠️ Background location task not registered - location updates may not work in background");
+      if (TaskManager && TaskManager.isTaskRegisteredAsync) {
+        const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+        if (!isTaskRegistered) {
+          console.warn("⚠️ Background location task not registered - location updates may not work in background");
+        }
+      } else {
+        console.warn("⚠️ TaskManager not available - cannot check task registration");
       }
 
       // Start background location updates using task manager
@@ -1343,13 +1353,17 @@ export default function HomeScreen() {
         if (!isOn) {
           (async () => {
             try {
-              const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-              if (isTaskRegistered) {
-                const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-                if (hasStarted) {
-                  await GeoLocation.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-                  console.log("🛑 Background location tracking stopped");
+              if (TaskManager && TaskManager.isTaskRegisteredAsync) {
+                const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+                if (isTaskRegistered) {
+                  const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+                  if (hasStarted) {
+                    await GeoLocation.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+                    console.log("🛑 Background location tracking stopped");
+                  }
                 }
+              } else {
+                console.warn("⚠️ TaskManager not available - cannot stop background location tracking");
               }
             } catch (error: any) {
               console.error("❌ Error stopping background location tracking:", error);
