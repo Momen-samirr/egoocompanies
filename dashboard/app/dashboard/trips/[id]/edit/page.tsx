@@ -150,7 +150,7 @@ export default function EditTripPage() {
           assignedCaptainId: tripData.assignedCaptainId || "",
           companyId: tripData.companyId,
           price: tripData.price,
-          points: tripData.points.map((point) => ({
+          points: tripData.points.map((point: ScheduledTrip["points"][number]) => ({
             id: point.id,
             name: point.name,
             latitude: point.latitude,
