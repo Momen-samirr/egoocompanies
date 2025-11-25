@@ -58,6 +58,7 @@ model driver {
   notificationToken   String?
   ratings             Float            @default(0)
   totalEarning        Float            @default(0)
+  scheduledTripBalance Float            @default(0)
   totalRides          Float            @default(0)
   pendingRides        Float            @default(0)
   cancelRides         Float            @default(0)
@@ -67,6 +68,7 @@ model driver {
   rides               rides[]          @relation("DriverRides")
   assignedTrips       ScheduledTrip[]  @relation("AssignedCaptain")
   emergencyUsages     EmergencyUsage[] @relation("DriverEmergencyUsages")
+  scheduledTripLedger ScheduledTripLedger[] @relation("LedgerCaptain")
 }
 
 model EmergencyUsage {
@@ -85,12 +87,20 @@ enum ScheduledTripStatus {
   CANCELLED
   FAILED
   EMERGENCY_TERMINATED
+  EMERGENCY_ENDED
 }
 
 enum ScheduledTripFinancialStatus {
   NONE
   PAID
   PENALIZED
+}
+
+enum ScheduledTripFinancialRule {
+  NONE
+  COMPLETED_FULL
+  FAILED_DOUBLE
+  EMERGENCY_DEDUCTION
 }
 
 model Company {
@@ -113,6 +123,10 @@ model ScheduledTrip {
   companyId         String?             @db.ObjectId
   price             Float?              @default(0)
   financialStatus   ScheduledTripFinancialStatus @default(NONE)
+  financialRule     ScheduledTripFinancialRule @default(NONE)
+  financialAdjustment Float             @default(0)
+  netAmount         Float               @default(0)
+  financialAppliedAt DateTime?
   emergencyTerminatedAt DateTime?
   emergencyTerminatedBy String?         @db.ObjectId
   createdAt         DateTime            @default(now())
@@ -123,6 +137,7 @@ model ScheduledTrip {
   points            TripPoint[]
   progress          TripProgress?
   activationChecks  TripActivationCheck[]
+  ledgerEntries     ScheduledTripLedger[]
 }
 
 model TripPoint {
@@ -167,6 +182,22 @@ model TripActivationCheck {
   distanceToFirstPoint Float?
   scheduledTrip     ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
   createdAt         DateTime       @default(now())
+}
+
+model ScheduledTripLedger {
+  id                  String                     @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId     String                     @db.ObjectId
+  captainId           String                     @db.ObjectId
+  baseAmount          Float                      @default(0)
+  adjustmentAmount    Float                      @default(0)
+  netAmount           Float                      @default(0)
+  rule                ScheduledTripFinancialRule @default(NONE)
+  statusAtCalculation ScheduledTripStatus
+  calculatedAt        DateTime                   @default(now())
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  scheduledTrip       ScheduledTrip              @relation(fields: [scheduledTripId], references: [id])
+  captain             driver                     @relation("LedgerCaptain", fields: [captainId], references: [id])
 }
 
 model rides {

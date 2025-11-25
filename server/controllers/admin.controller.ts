@@ -4,6 +4,122 @@ import prisma from "../utils/prisma";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
+type LedgerSummary = {
+  totalTrips: number;
+  netAmount: number;
+  earnings: number;
+  deductions: number;
+  statusCounts: Record<string, { trips: number; netAmount: number }>;
+  ruleBreakdown: Record<string, { trips: number; netAmount: number }>;
+};
+
+const summarizeLedgerEntries = (entries: any[]): LedgerSummary => {
+  return entries.reduce<LedgerSummary>(
+    (acc, entry) => {
+      const net = entry.netAmount ?? 0;
+      const statusKey = entry.statusAtCalculation || "UNKNOWN";
+      const ruleKey = entry.rule || "NONE";
+
+      acc.totalTrips += 1;
+      acc.netAmount += net;
+      acc.statusCounts[statusKey] = acc.statusCounts[statusKey] || { trips: 0, netAmount: 0 };
+      acc.ruleBreakdown[ruleKey] = acc.ruleBreakdown[ruleKey] || { trips: 0, netAmount: 0 };
+
+      acc.statusCounts[statusKey].trips += 1;
+      acc.statusCounts[statusKey].netAmount += net;
+      acc.ruleBreakdown[ruleKey].trips += 1;
+      acc.ruleBreakdown[ruleKey].netAmount += net;
+
+      if (net >= 0) {
+        acc.earnings += net;
+      } else {
+        acc.deductions += net;
+      }
+
+      return acc;
+    },
+    {
+      totalTrips: 0,
+      netAmount: 0,
+      earnings: 0,
+      deductions: 0,
+      statusCounts: {},
+      ruleBreakdown: {},
+    }
+  );
+};
+
+const normalizeRange = (start: Date, end: Date) => {
+  const normalizedStart = new Date(start);
+  normalizedStart.setHours(0, 0, 0, 0);
+
+  const normalizedEnd = new Date(end);
+  normalizedEnd.setHours(23, 59, 59, 999);
+
+  if (normalizedStart > normalizedEnd) {
+    throw new Error("Start date must be before end date");
+  }
+
+  return { start: normalizedStart, end: normalizedEnd };
+};
+
+const fetchLedgerEntries = async (params: { start: Date; end: Date; withTrips?: boolean }) => {
+  const { start, end, withTrips } = params;
+
+  return prisma.scheduledTripLedger.findMany({
+    where: {
+      calculatedAt: {
+        gte: start,
+        lte: end,
+      },
+    },
+    orderBy: { calculatedAt: "asc" },
+    include: withTrips
+      ? {
+          scheduledTrip: {
+            select: {
+              id: true,
+              name: true,
+              tripDate: true,
+              scheduledTime: true,
+              status: true,
+              price: true,
+              financialRule: true,
+              financialAdjustment: true,
+              netAmount: true,
+              company: {
+                select: { id: true, name: true },
+              },
+              assignedCaptain: {
+                select: {
+                  id: true,
+                  name: true,
+                  phone_number: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        }
+      : undefined,
+  });
+};
+
+const buildRangeBounds = (startInput?: string, endInput?: string) => {
+  if (!startInput || !endInput) {
+    throw new Error("Start date and end date are required");
+  }
+
+  const startDate = new Date(startInput);
+  const endDate = new Date(endInput);
+
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    throw new Error("Invalid date values");
+  }
+
+  return normalizeRange(startDate, endDate);
+};
+
 // Admin Login
 export const adminLogin = async (req: Request, res: Response) => {
   try {
@@ -156,7 +272,7 @@ export const getDashboardStats = async (req: any, res: Response) => {
 
     // Emergency terminated trips count
     const emergencyTerminatedTrips = await prisma.scheduledTrip.count({
-      where: { status: "EMERGENCY_TERMINATED" },
+      where: { status: { in: ["EMERGENCY_TERMINATED", "EMERGENCY_ENDED"] } },
     });
 
     // Emergency terminations today
@@ -1079,6 +1195,164 @@ export const getScheduledTrips = async (req: any, res: Response) => {
   }
 };
 
+export const getScheduledTripEarningsSummary = async (req: any, res: Response) => {
+  try {
+    const today = new Date();
+    const todayBounds = normalizeRange(today, today);
+
+    const lastTwoWeeksStart = new Date(today);
+    lastTwoWeeksStart.setDate(lastTwoWeeksStart.getDate() - 13);
+    const lastTwoWeeksBounds = normalizeRange(lastTwoWeeksStart, today);
+
+    const [todayEntries, lastTwoWeeksEntries] = await Promise.all([
+      fetchLedgerEntries({ start: todayBounds.start, end: todayBounds.end }),
+      fetchLedgerEntries({ start: lastTwoWeeksBounds.start, end: lastTwoWeeksBounds.end }),
+    ]);
+
+    const todaySummary = summarizeLedgerEntries(todayEntries);
+    const lastTwoWeeksSummary = summarizeLedgerEntries(lastTwoWeeksEntries);
+
+    res.status(200).json({
+      success: true,
+      summary: {
+        today: {
+          range: {
+            start: todayBounds.start.toISOString(),
+            end: todayBounds.end.toISOString(),
+          },
+          ...todaySummary,
+        },
+        lastTwoWeeks: {
+          range: {
+            start: lastTwoWeeksBounds.start.toISOString(),
+            end: lastTwoWeeksBounds.end.toISOString(),
+          },
+          ...lastTwoWeeksSummary,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error("Get scheduled trip summary error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+export const getScheduledTripEarningsRange = async (req: any, res: Response) => {
+  try {
+    const { startDate, endDate, includeTrips } = req.query;
+
+    let bounds;
+    try {
+      bounds = buildRangeBounds(startDate as string, endDate as string);
+    } catch (rangeError: any) {
+      return res.status(400).json({
+        success: false,
+        message: rangeError.message || "Invalid date range",
+      });
+    }
+
+    const withTrips = includeTrips === "true";
+    const entries = await fetchLedgerEntries({
+      start: bounds.start,
+      end: bounds.end,
+      withTrips,
+    });
+    const summary = summarizeLedgerEntries(entries);
+    const summaryWithRange = {
+      range: {
+        start: bounds.start.toISOString(),
+        end: bounds.end.toISOString(),
+      },
+      ...summary,
+    };
+
+    res.status(200).json({
+      success: true,
+      range: {
+        start: bounds.start.toISOString(),
+        end: bounds.end.toISOString(),
+      },
+      summary: summaryWithRange,
+      entries: withTrips ? entries : undefined,
+    });
+  } catch (error: any) {
+    console.error("Get scheduled trip earnings range error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+export const getScheduledTripInvoice = async (req: any, res: Response) => {
+  try {
+    const { startDate, endDate } = req.body;
+
+    let bounds;
+    try {
+      bounds = buildRangeBounds(startDate, endDate);
+    } catch (rangeError: any) {
+      return res.status(400).json({
+        success: false,
+        message: rangeError.message || "Invalid date range",
+      });
+    }
+
+    const entries = await fetchLedgerEntries({
+      start: bounds.start,
+      end: bounds.end,
+      withTrips: true,
+    });
+
+    const summary = summarizeLedgerEntries(entries);
+    const totals = {
+      range: {
+        start: bounds.start.toISOString(),
+        end: bounds.end.toISOString(),
+      },
+      ...summary,
+    };
+    const invoice = {
+      range: {
+        start: bounds.start.toISOString(),
+        end: bounds.end.toISOString(),
+      },
+      totals,
+      completedTrips: summary.statusCounts.COMPLETED?.trips || 0,
+      failedTrips: summary.statusCounts.FAILED?.trips || 0,
+      emergencyTrips:
+        (summary.statusCounts.EMERGENCY_ENDED?.trips || 0) +
+        (summary.statusCounts.EMERGENCY_TERMINATED?.trips || 0),
+      lineItems: entries.map((entry) => ({
+        ledgerId: entry.id,
+        tripId: entry.scheduledTripId,
+        tripName: entry.scheduledTrip?.name,
+        status: entry.statusAtCalculation,
+        rule: entry.rule,
+        price: entry.scheduledTrip?.price ?? 0,
+        netAmount: entry.netAmount,
+        calculatedAt: entry.calculatedAt,
+        captain: entry.scheduledTrip?.assignedCaptain,
+        company: entry.scheduledTrip?.company,
+      })),
+    };
+
+    res.status(200).json({
+      success: true,
+      invoice,
+    });
+  } catch (error: any) {
+    console.error("Get scheduled trip invoice error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
 // Get Scheduled Trip By ID
 export const getScheduledTripById = async (req: any, res: Response) => {
   try {
@@ -1153,7 +1427,11 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
-    if (existingTrip.status === "ACTIVE" || existingTrip.status === "EMERGENCY_TERMINATED") {
+    if (
+      existingTrip.status === "ACTIVE" ||
+      existingTrip.status === "EMERGENCY_TERMINATED" ||
+      existingTrip.status === "EMERGENCY_ENDED"
+    ) {
       return res.status(400).json({
         success: false,
         message: `Cannot update a trip with status: ${existingTrip.status}`,
@@ -1327,7 +1605,11 @@ export const deleteScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
-    if (trip.status === "ACTIVE" || trip.status === "EMERGENCY_TERMINATED") {
+    if (
+      trip.status === "ACTIVE" ||
+      trip.status === "EMERGENCY_TERMINATED" ||
+      trip.status === "EMERGENCY_ENDED"
+    ) {
       return res.status(400).json({
         success: false,
         message: `Cannot delete a trip with status: ${trip.status}`,

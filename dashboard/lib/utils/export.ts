@@ -1,4 +1,5 @@
 import { ScheduledTrip } from "@/types/trip";
+import { deriveTripFinance } from "./tripFinance";
 
 export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv") {
   if (trips.length === 0) {
@@ -11,11 +12,14 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
     "Date",
     "Time",
     "Status",
+    "Finance Rule",
     "Captain",
     "Captain Phone",
     "Captain Email",
     "Company",
     "Price",
+    "Applied Adjustment",
+    "Net Amount",
     "Checkpoints",
     "Created At",
   ];
@@ -25,17 +29,21 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
     const tripDate = new Date(trip.tripDate).toLocaleDateString();
     const tripTime = new Date(trip.scheduledTime).toLocaleTimeString();
     const createdAt = new Date(trip.createdAt).toLocaleString();
+    const finance = deriveTripFinance(trip);
 
     return [
       trip.name,
       tripDate,
       tripTime,
       trip.status,
+      finance.ruleLabel,
       trip.assignedCaptain?.name || "Not assigned",
       trip.assignedCaptain?.phone_number || "",
       trip.assignedCaptain?.email || "",
       trip.company?.name || "",
       trip.price !== undefined ? trip.price.toFixed(2) : "",
+      finance.appliedAmount.toFixed(2),
+      finance.netAmount.toFixed(2),
       trip.points?.length || 0,
       createdAt,
     ];

@@ -19,6 +19,9 @@ import {
   getScheduledTripById,
   updateScheduledTrip,
   deleteScheduledTrip,
+  getScheduledTripEarningsSummary,
+  getScheduledTripEarningsRange,
+  getScheduledTripInvoice,
   getEmergencyLogs,
   getCompanies,
   createCompany,
@@ -67,6 +70,9 @@ adminRouter.get("/active-rides", isAuthenticatedAdmin, getActiveRidesWithLocatio
 
 // Scheduled Trips
 adminRouter.post("/trips", isAuthenticatedAdmin, createScheduledTrip);
+adminRouter.get("/trips/earnings/summary", isAuthenticatedAdmin, getScheduledTripEarningsSummary);
+adminRouter.get("/trips/earnings/range", isAuthenticatedAdmin, getScheduledTripEarningsRange);
+adminRouter.post("/trips/earnings/invoice", isAuthenticatedAdmin, getScheduledTripInvoice);
 adminRouter.get("/trips", isAuthenticatedAdmin, getScheduledTrips);
 adminRouter.get("/trips/:id", isAuthenticatedAdmin, getScheduledTripById);
 adminRouter.put("/trips/:id", isAuthenticatedAdmin, updateScheduledTrip);

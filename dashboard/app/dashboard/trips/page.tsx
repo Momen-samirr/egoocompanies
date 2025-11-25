@@ -14,9 +14,17 @@ import TripSearch from "@/components/trips/TripSearch";
 import Pagination from "@/components/common/Pagination";
 import ExportButton from "@/components/common/ExportButton";
 import { PlusIcon } from "@heroicons/react/24/outline";
-import { ScheduledTrip, TripFilters as TripFiltersType, TripSort } from "@/types/trip";
+import {
+  ScheduledTrip,
+  TripFilters as TripFiltersType,
+  TripSort,
+  TripFinanceSummary,
+  TripInvoice,
+} from "@/types/trip";
 import { Pagination as PaginationType } from "@/types";
 import { exportTripsToCSV } from "@/lib/utils/export";
+import TripFinanceSummaryCards from "@/components/trips/TripFinanceSummaryCards";
+import TripInvoiceGenerator from "@/components/trips/TripInvoiceGenerator";
 
 type SortField = "name" | "date" | "captain" | "checkpoints" | "status";
 type SortDirection = "asc" | "desc";
@@ -32,11 +40,23 @@ export default function ScheduledTripsPage() {
   const [filters, setFilters] = useState<TripFiltersType>({});
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [financeSummary, setFinanceSummary] = useState<{
+    today?: TripFinanceSummary;
+    lastTwoWeeks?: TripFinanceSummary;
+  }>({});
+  const [financeSummaryLoading, setFinanceSummaryLoading] = useState(true);
+  const [invoiceRange, setInvoiceRange] = useState({ start: "", end: "" });
+  const [invoiceData, setInvoiceData] = useState<TripInvoice | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
 
   useEffect(() => {
     fetchTrips();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, filters, sortField, sortDirection, searchQuery]);
+
+  useEffect(() => {
+    fetchFinanceSummary();
+  }, []);
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (
@@ -88,6 +108,41 @@ export default function ScheduledTripsPage() {
       toast.error(getErrorMessage(error, "Failed to load trips"));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFinanceSummary = async () => {
+    try {
+      setFinanceSummaryLoading(true);
+      const response = await api.get("/admin/trips/earnings/summary");
+      setFinanceSummary(response.data.summary || {});
+    } catch (error) {
+      console.error("Error fetching finance summary:", error);
+      toast.error(getErrorMessage(error, "Failed to load earnings summary"));
+    } finally {
+      setFinanceSummaryLoading(false);
+    }
+  };
+
+  const handleGenerateInvoice = async () => {
+    if (!invoiceRange.start || !invoiceRange.end) {
+      toast.error("Select both start and end dates");
+      return;
+    }
+
+    try {
+      setInvoiceLoading(true);
+      const response = await api.post("/admin/trips/earnings/invoice", {
+        startDate: invoiceRange.start,
+        endDate: invoiceRange.end,
+      });
+      setInvoiceData(response.data.invoice);
+      toast.success("Invoice calculated");
+    } catch (error) {
+      console.error("Error generating invoice:", error);
+      toast.error(getErrorMessage(error, "Failed to generate invoice"));
+    } finally {
+      setInvoiceLoading(false);
     }
   };
 
@@ -216,6 +271,20 @@ export default function ScheduledTripsPage() {
           </Button>
         </div>
       </div>
+
+      <TripFinanceSummaryCards
+        today={financeSummary.today}
+        lastTwoWeeks={financeSummary.lastTwoWeeks}
+        loading={financeSummaryLoading}
+      />
+
+      <TripInvoiceGenerator
+        range={invoiceRange}
+        onRangeChange={setInvoiceRange}
+        onGenerate={handleGenerateInvoice}
+        loading={invoiceLoading}
+        invoice={invoiceData}
+      />
 
       <Card>
         <CardBody>

@@ -69,20 +69,24 @@ export default function CreateTripPage() {
       onDraftSave: () => {
         toast.success("Draft saved", { duration: 2000 });
       },
-    onError: (errors: FieldErrors<TripFormData>) => {
-      const firstError = Object.values(errors)[0];
-      const firstMessage =
-        typeof firstError === "object" && firstError && "message" in firstError
-          ? (firstError as { message?: string }).message
-          : undefined;
+      onError: (errors: FieldErrors<TripFormData>) => {
+        const firstError = Object.values(errors)[0];
+        const firstMessage =
+          typeof firstError === "object" &&
+          firstError &&
+          "message" in firstError
+            ? (firstError as { message?: string }).message
+            : undefined;
 
-      if (firstMessage) {
-        toast.error(firstMessage);
-      } else {
-        toast.error("Please fix the errors in the form");
-      }
-    },
+        if (firstMessage) {
+          toast.error(firstMessage);
+        } else {
+          toast.error("Please fix the errors in the form");
+        }
+      },
     });
+
+  const companyIdRegister = form.register("companyId");
 
   const { fields, append, remove, move } = useFieldArray({
     control: form.control,
@@ -121,7 +125,9 @@ export default function CreateTripPage() {
     if (companies.length > 0 && !form.getValues("companyId")) {
       const defaultCompany = companies[0];
       form.setValue("companyId", defaultCompany.id, { shouldValidate: true });
-      form.setValue("price", defaultCompany.defaultScheduledTripPrice, { shouldValidate: true });
+      form.setValue("price", defaultCompany.defaultScheduledTripPrice, {
+        shouldValidate: true,
+      });
     }
   }, [companies, form]);
 
@@ -190,7 +196,9 @@ export default function CreateTripPage() {
   };
 
   const handleCompanyChange = (companyId: string) => {
-    const selectedCompany = companies.find((company) => company.id === companyId);
+    const selectedCompany = companies.find(
+      (company) => company.id === companyId
+    );
     if (selectedCompany) {
       form.setValue("price", selectedCompany.defaultScheduledTripPrice, {
         shouldDirty: true,
@@ -464,7 +472,9 @@ export default function CreateTripPage() {
                           <Controller
                             control={form.control}
                             name={`points.${index}.isFinalPoint`}
-                            render={({ field: { value, onChange, onBlur, name, ref } }) => (
+                            render={({
+                              field: { value, onChange, onBlur, name, ref },
+                            }) => (
                               <div className="flex items-center h-full pt-8">
                                 <input
                                   type="checkbox"

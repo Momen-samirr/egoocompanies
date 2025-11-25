@@ -6,7 +6,16 @@ export type ScheduledTripStatus =
   | "COMPLETED"
   | "CANCELLED"
   | "FAILED"
-  | "EMERGENCY_TERMINATED";
+  | "EMERGENCY_TERMINATED"
+  | "EMERGENCY_ENDED";
+
+export type ScheduledTripFinancialStatus = "NONE" | "PAID" | "PENALIZED";
+
+export type ScheduledTripFinancialRule =
+  | "NONE"
+  | "COMPLETED_FULL"
+  | "FAILED_DOUBLE"
+  | "EMERGENCY_DEDUCTION";
 
 export interface TripPoint {
   id?: string;
@@ -28,6 +37,11 @@ export interface ScheduledTrip {
   createdById: string;
   companyId?: string;
   price?: number;
+  financialStatus?: ScheduledTripFinancialStatus;
+  financialRule?: ScheduledTripFinancialRule;
+  financialAdjustment?: number;
+  netAmount?: number;
+  financialAppliedAt?: string;
   emergencyTerminatedAt?: string;
   emergencyTerminatedBy?: string;
   createdAt: string;
@@ -45,6 +59,57 @@ export interface ScheduledTrip {
   };
   company?: Company;
   points: TripPoint[];
+}
+
+export interface TripFinanceBreakdown {
+  trips: number;
+  netAmount: number;
+}
+
+export interface TripFinanceSummary {
+  range: {
+    start: string;
+    end: string;
+  };
+  totalTrips: number;
+  netAmount: number;
+  earnings: number;
+  deductions: number;
+  statusCounts: Record<string, TripFinanceBreakdown>;
+  ruleBreakdown: Record<string, TripFinanceBreakdown>;
+}
+
+export interface TripInvoiceLineItem {
+  ledgerId: string;
+  tripId: string;
+  tripName?: string;
+  status: ScheduledTripStatus;
+  rule: ScheduledTripFinancialRule;
+  price: number;
+  netAmount: number;
+  calculatedAt: string;
+  captain?: {
+    id: string;
+    name: string;
+    phone_number: string;
+    email: string;
+  } | null;
+  company?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface TripInvoice {
+  range: {
+    start: string;
+    end: string;
+  };
+  totals: TripFinanceSummary;
+  completedTrips: number;
+  failedTrips: number;
+  emergencyTrips: number;
+  lineItems: TripInvoiceLineItem[];
 }
 
 export interface LocationData {

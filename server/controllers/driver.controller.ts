@@ -5,7 +5,10 @@ import prisma from "../utils/prisma";
 import jwt from "jsonwebtoken";
 import { sendToken } from "../utils/send-token";
 import { sendEmail } from "../utils/send-email";
-import { applyTripCompletionPayout } from "../services/trip-finance";
+import {
+  applyEmergencyTerminationPenalty,
+  applyTripCompletionPayout,
+} from "../services/trip-finance";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken, {
@@ -1478,12 +1481,12 @@ export const emergencyTerminateTrip = async (req: any, res: Response) => {
       });
     }
 
-    // Update trip status to EMERGENCY_TERMINATED
+    // Update trip status to EMERGENCY_ENDED
     const now = new Date();
     const updatedTrip = await prisma.scheduledTrip.update({
       where: { id: tripId },
       data: {
-        status: "EMERGENCY_TERMINATED",
+        status: "EMERGENCY_ENDED",
         emergencyTerminatedAt: now,
         emergencyTerminatedBy: driverId,
       },
@@ -1502,6 +1505,8 @@ export const emergencyTerminateTrip = async (req: any, res: Response) => {
         },
       },
     });
+
+    await applyEmergencyTerminationPenalty(tripId);
 
     // Record emergency usage
     await prisma.emergencyUsage.create({

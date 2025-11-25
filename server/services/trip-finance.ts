@@ -1,3 +1,4 @@
+import { ScheduledTripFinancialRule, ScheduledTripStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 
 interface FinanceResult {
@@ -6,14 +7,41 @@ interface FinanceResult {
   reason?: string;
 }
 
-export async function applyTripCompletionPayout(tripId: string): Promise<FinanceResult> {
+type FinanceRuleConfig = {
+  rule: ScheduledTripFinancialRule;
+  multiplier: number;
+};
+
+const STATUS_FINANCE_RULES: Record<ScheduledTripStatus, FinanceRuleConfig | undefined> = {
+  SCHEDULED: undefined,
+  ACTIVE: undefined,
+  CANCELLED: undefined,
+  COMPLETED: { rule: "COMPLETED_FULL", multiplier: 1 },
+  FAILED: { rule: "FAILED_DOUBLE", multiplier: -2 },
+  EMERGENCY_TERMINATED: { rule: "EMERGENCY_DEDUCTION", multiplier: -1 },
+  EMERGENCY_ENDED: { rule: "EMERGENCY_DEDUCTION", multiplier: -1 },
+};
+
+const deriveFinancialStatus = (netAmount: number) => {
+  if (netAmount > 0) return "PAID";
+  if (netAmount < 0) return "PENALIZED";
+  return "NONE";
+};
+
+async function applyScheduledTripFinance(
+  tripId: string,
+  overrideStatus?: ScheduledTripStatus
+): Promise<FinanceResult> {
   const trip = await prisma.scheduledTrip.findUnique({
     where: { id: tripId },
     select: {
       id: true,
+      status: true,
       assignedCaptainId: true,
       price: true,
-      financialStatus: true,
+      financialRule: true,
+      netAmount: true,
+      financialAppliedAt: true,
     },
   });
 
@@ -25,74 +53,96 @@ export async function applyTripCompletionPayout(tripId: string): Promise<Finance
     return { success: false, reason: "Trip has no assigned captain" };
   }
 
-  if (trip.financialStatus === "PAID") {
+  const effectiveStatus = overrideStatus ?? trip.status;
+  const ruleConfig = STATUS_FINANCE_RULES[effectiveStatus];
+
+  if (!ruleConfig) {
+    return { success: true, skipped: true, reason: "Status not eligible for finance rule" };
+  }
+
+  const baseAmount = trip.price ?? 0;
+  const netAmount = baseAmount * ruleConfig.multiplier;
+  const existingLedger = await prisma.scheduledTripLedger.findFirst({
+    where: { scheduledTripId: tripId },
+  });
+
+  if (existingLedger && existingLedger.rule === ruleConfig.rule && existingLedger.netAmount === netAmount) {
     return { success: true, skipped: true };
   }
 
-  const amount = trip.price ?? 0;
+  const netDelta = existingLedger ? netAmount - existingLedger.netAmount : netAmount;
+  const financialStatus = deriveFinancialStatus(netAmount);
+  const financialAppliedAt = new Date();
 
-  await prisma.$transaction([
+  const transactionOps = [
     prisma.driver.update({
       where: { id: trip.assignedCaptainId },
       data: {
         totalEarning: {
-          increment: amount,
+          increment: netDelta,
+        },
+        scheduledTripBalance: {
+          increment: netDelta,
         },
       },
     }),
     prisma.scheduledTrip.update({
       where: { id: tripId },
       data: {
-        financialStatus: "PAID",
+        financialStatus,
+        financialRule: ruleConfig.rule,
+        financialAdjustment: netAmount,
+        netAmount,
+        financialAppliedAt,
       },
     }),
-  ]);
+  ];
+
+  if (existingLedger) {
+    transactionOps.push(
+      prisma.scheduledTripLedger.update({
+        where: { id: existingLedger.id },
+        data: {
+          baseAmount,
+          adjustmentAmount: netAmount,
+          netAmount,
+          rule: ruleConfig.rule,
+          statusAtCalculation: effectiveStatus,
+          calculatedAt: financialAppliedAt,
+        },
+      })
+    );
+  } else {
+    transactionOps.push(
+      prisma.scheduledTripLedger.create({
+        data: {
+          scheduledTripId: tripId,
+          captainId: trip.assignedCaptainId,
+          baseAmount,
+          adjustmentAmount: netAmount,
+          netAmount,
+          rule: ruleConfig.rule,
+          statusAtCalculation: effectiveStatus,
+          calculatedAt: financialAppliedAt,
+        },
+      })
+    );
+  }
+
+  await prisma.$transaction(transactionOps);
 
   return { success: true };
 }
 
+export async function applyTripCompletionPayout(tripId: string): Promise<FinanceResult> {
+  return applyScheduledTripFinance(tripId, "COMPLETED");
+}
+
 export async function applyTripFailurePenalty(tripId: string): Promise<FinanceResult> {
-  const trip = await prisma.scheduledTrip.findUnique({
-    where: { id: tripId },
-    select: {
-      id: true,
-      assignedCaptainId: true,
-      price: true,
-      financialStatus: true,
-    },
-  });
+  return applyScheduledTripFinance(tripId, "FAILED");
+}
 
-  if (!trip) {
-    return { success: false, reason: "Trip not found" };
-  }
-
-  if (!trip.assignedCaptainId) {
-    return { success: false, reason: "Trip has no assigned captain" };
-  }
-
-  if (trip.financialStatus === "PENALIZED") {
-    return { success: true, skipped: true };
-  }
-
-  const amount = trip.price ?? 0;
-
-  await prisma.$transaction([
-    prisma.driver.update({
-      where: { id: trip.assignedCaptainId },
-      data: {
-        totalEarning: {
-          decrement: amount,
-        },
-      },
-    }),
-    prisma.scheduledTrip.update({
-      where: { id: tripId },
-      data: {
-        financialStatus: "PENALIZED",
-      },
-    }),
-  ]);
-
-  return { success: true };
+export async function applyEmergencyTerminationPenalty(tripId: string): Promise<FinanceResult> {
+  return applyScheduledTripFinance(tripId, "EMERGENCY_ENDED");
 }
 

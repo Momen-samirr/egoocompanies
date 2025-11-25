@@ -15,7 +15,14 @@ interface ScheduledTrip {
   name: string;
   tripDate: string;
   scheduledTime: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED" | "EMERGENCY_TERMINATED";
+  status:
+    | "SCHEDULED"
+    | "ACTIVE"
+    | "COMPLETED"
+    | "CANCELLED"
+    | "FAILED"
+    | "EMERGENCY_TERMINATED"
+    | "EMERGENCY_ENDED";
   assignedCaptain: {
     id: string;
     name: string;
@@ -35,6 +42,9 @@ interface ScheduledTrip {
   };
   companyId: string;
   price: number;
+  financialRule?: "NONE" | "COMPLETED_FULL" | "FAILED_DOUBLE" | "EMERGENCY_DEDUCTION";
+  financialAdjustment?: number;
+  netAmount?: number;
   points: Array<{
     id: string;
     name: string;

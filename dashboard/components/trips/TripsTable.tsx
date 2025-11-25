@@ -30,6 +30,7 @@ const SortIndicator = ({ field, activeField, direction }: SortIndicatorProps) =>
   );
 };
 import { formatDistanceToNow } from "date-fns";
+import { deriveTripFinance, formatCurrency } from "@/lib/utils/tripFinance";
 
 interface TripsTableProps {
   trips: ScheduledTrip[];
@@ -113,6 +114,9 @@ export default function TripsTable({
             <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
               Price
             </th>
+            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+              Net Amount
+            </th>
             <th
               className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
               onClick={() => handleSort("captain")}
@@ -158,8 +162,11 @@ export default function TripsTable({
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200/60">
-          {trips.map((trip, index) => (
-            <tr
+          {trips.map((trip, index) => {
+            const finance = deriveTripFinance(trip);
+            const netIsPositive = finance.netAmount >= 0;
+            return (
+              <tr
               key={trip.id}
               className={`transition-all duration-150 ${
                 index % 2 === 0
@@ -204,6 +211,16 @@ export default function TripsTable({
                 <div className="text-sm font-semibold text-gray-900">
                   ${trip.price?.toFixed(2) ?? "0.00"}
                 </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div
+                  className={`text-sm font-semibold ${
+                    netIsPositive ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  {formatCurrency(finance.netAmount)}
+                </div>
+                <div className="text-xs text-gray-500">{finance.ruleLabel}</div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm font-medium text-gray-900">
@@ -258,8 +275,9 @@ export default function TripsTable({
                   )}
                 </div>
               </td>
-            </tr>
-          ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

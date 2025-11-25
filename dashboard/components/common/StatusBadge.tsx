@@ -19,6 +19,7 @@ const statusIcons: Record<string, React.ComponentType<{ className?: string }>> =
   cancelled: XCircleIcon,
   failed: ExclamationTriangleIcon,
   emergency_terminated: ExclamationTriangleIcon,
+  emergency_ended: ExclamationTriangleIcon,
   inactive: XCircleIcon,
 };
 
@@ -34,16 +35,23 @@ const iconSizes = {
   lg: "h-4 w-4",
 };
 
+const toTitleCase = (value: string) =>
+  value
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
 export default function StatusBadge({ status, size = "md", showIcon = true }: StatusBadgeProps) {
   const normalizedStatus = status.toLowerCase().replace(/\s+/g, "_") as StatusType;
   const colorClass = statusColors[normalizedStatus] || statusColors.inactive;
   const Icon = statusIcons[normalizedStatus] || InformationCircleIcon;
 
-  const displayStatus = status === "FAILED"
-    ? "Failed"
-    : status === "EMERGENCY_TERMINATED"
-    ? "Emergency Ended"
-    : status;
+  const uppercaseValue = status.toUpperCase();
+  const displayStatus =
+    uppercaseValue === "EMERGENCY_TERMINATED" || uppercaseValue === "EMERGENCY_ENDED"
+      ? "Emergency Ended"
+      : toTitleCase(status);
 
   return (
     <span

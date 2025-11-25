@@ -29,6 +29,7 @@ const statusOptions: StatusOption[] = [
   { value: "COMPLETED", label: "Completed" },
   { value: "CANCELLED", label: "Cancelled" },
   { value: "FAILED", label: "Failed" },
+  { value: "EMERGENCY_ENDED", label: "Emergency Ended" },
   { value: "EMERGENCY_TERMINATED", label: "Emergency Terminated" },
 ];
 
