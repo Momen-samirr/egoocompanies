@@ -10,6 +10,11 @@ export default function RenderRideItem({ item, colors }: any) {
   const iconIndex = parseInt(item.id) - 1;
   const icon = rideIcons[iconIndex];
 
+  // Skip rendering "Total Earning" items
+  if (item.title === "Total Earning") {
+    return null;
+  }
+
   return (
     <View style={styles.main}>
       <View
@@ -21,9 +26,7 @@ export default function RenderRideItem({ item, colors }: any) {
         <View style={styles.cardTop}>
           <View>
             <Text style={styles.data}>
-              {item.title === "Total Earning"
-                ? driver?.totalEarning + " Bdt"
-                : item.title === "Complete Scheduled Trips"
+              {item.title === "Complete Scheduled Trips"
                 ? driver?.completedScheduledTrips ?? 0
                 : item.title === "Pending Ride"
                 ? driver?.pendingRides

@@ -28,10 +28,6 @@ export default function RideCard({ item }: { item: any }) {
           <View style={styles.rate}>
             <Star />
             <Text style={[styles.rating, { color: colors.text }]}>5</Text>
-            <View
-              style={[styles.verticalBorder, { borderColor: colors.border }]}
-            />
-            <Text style={styles.price}>BDT {item.charge}</Text>
           </View>
         </View>
         <View style={[styles.alignment, { flexDirection: "row" }]}>
@@ -114,17 +110,6 @@ const styles = StyleSheet.create({
   rating: {
     marginHorizontal: windowWidth(5),
     fontFamily: fonts.medium,
-    fontSize: fontSizes.FONT20,
-  },
-  verticalBorder: {
-    borderLeftWidth: 1,
-    height: windowHeight(15),
-    marginHorizontal: windowWidth(5),
-  },
-  price: {
-    color: color.primary,
-    marginHorizontal: windowWidth(0.4),
-    fontFamily: fonts.bold,
     fontSize: fontSizes.FONT20,
   },
   border: {

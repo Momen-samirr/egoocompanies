@@ -34,6 +34,7 @@ export function useTripForm({
       name: "",
       tripDate: "",
       scheduledTime: "",
+      tripType: "" as any, // No default - user must select
       assignedCaptainId: "",
       companyId: "",
       price: 0,

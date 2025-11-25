@@ -12,6 +12,7 @@ import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import color from "@/themes/app.colors";
+import fonts from "@/themes/app.fonts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { Toast } from "react-native-toast-notifications";
@@ -323,17 +324,6 @@ export default function ScheduledTripDetailsScreen() {
                     {trip.company.name}
                   </Text>
                 </View>
-              )}
-              {typeof trip.price === "number" && (
-                <Text
-                  style={{
-                    color: color.secondaryFont,
-                    fontSize: fontSizes.FONT14,
-                    fontFamily: fonts.medium,
-                  }}
-                >
-                  ${trip.price.toFixed(2)}
-                </Text>
               )}
             </View>
 

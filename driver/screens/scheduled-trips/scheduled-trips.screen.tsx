@@ -5,8 +5,10 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
 } from "react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useTheme } from "@react-navigation/native";
 import Header from "@/components/common/header";
 import { Toast } from "react-native-toast-notifications";
@@ -25,6 +27,13 @@ import StatusBadge from "@/components/common/StatusBadge";
 import { Location as LocationIcon, Calender } from "@/utils/icons";
 import EmptyState from "@/components/common/EmptyState";
 import { SkeletonList } from "@/components/common/LoadingSkeleton";
+import DateSelector from "@/components/trip/DateSelector";
+import {
+  getCurrentWeek,
+  getWeekStart,
+  formatDateForAPI,
+  isSameDay,
+} from "@/utils/weekGenerator";
 
 interface ScheduledTrip {
   id: string;
@@ -65,9 +74,14 @@ export default function ScheduledTripsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [startingTrip, setStartingTrip] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(false);
+  
+  // Date selector state
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [weekDates, setWeekDates] = useState<Date[]>(getCurrentWeek());
+  const [weekStart, setWeekStart] = useState<Date>(getWeekStart());
 
+  // Initial mount: check online status
   useEffect(() => {
-    fetchTrips();
     checkOnlineStatus();
   }, []);
 
@@ -77,6 +91,47 @@ export default function ScheduledTripsScreen() {
       setIsOnline(driver.status === "active");
     }
   }, [driver?.status]);
+
+  // Check for week changes and auto-update week dates
+  useEffect(() => {
+    const checkWeekChange = () => {
+      const today = new Date();
+      const currentWeekStart = getWeekStart(today);
+      
+      // Compare week start dates to detect week change
+      if (
+        currentWeekStart.getTime() !== weekStart.getTime()
+      ) {
+        // Week changed - regenerate dates and reset selected date to today
+        const newWeekDates = getCurrentWeek();
+        setWeekDates(newWeekDates);
+        setSelectedDate(today);
+        setWeekStart(currentWeekStart);
+        console.log("📅 Week changed - updated date selector");
+      }
+    };
+
+    // Check on mount
+    checkWeekChange();
+
+    // Check when app comes to foreground
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (nextAppState === "active") {
+          checkWeekChange();
+        }
+      }
+    );
+
+    // Also check periodically (every 5 minutes) to catch week changes
+    const intervalId = setInterval(checkWeekChange, 5 * 60 * 1000);
+
+    return () => {
+      subscription?.remove();
+      clearInterval(intervalId);
+    };
+  }, [weekStart]);
 
   const checkOnlineStatus = async () => {
     try {
@@ -131,7 +186,7 @@ export default function ScheduledTripsScreen() {
     }
   };
 
-  const fetchTrips = async () => {
+  const fetchTrips = useCallback(async () => {
     try {
       setLoading(true);
       const accessToken = await AsyncStorage.getItem("accessToken");
@@ -142,6 +197,10 @@ export default function ScheduledTripsScreen() {
 
       // Get current location to send with request
       const queryParams: string[] = [];
+      
+      // Add date parameter for filtering
+      const dateParam = formatDateForAPI(selectedDate);
+      queryParams.push(`date=${dateParam}`);
       
       try {
         const { status: locationPermission } = await Location.requestForegroundPermissionsAsync();
@@ -165,7 +224,17 @@ export default function ScheduledTripsScreen() {
       });
 
       if (response.data.success) {
-        setTrips(response.data.trips);
+        // Client-side backup filtering (in case API filtering doesn't work as expected)
+        let filteredTrips = response.data.trips || [];
+        
+        // Additional client-side filtering by date as backup
+        filteredTrips = filteredTrips.filter((trip: ScheduledTrip) => {
+          if (!trip.tripDate) return false;
+          const tripDate = new Date(trip.tripDate);
+          return isSameDay(tripDate, selectedDate);
+        });
+
+        setTrips(filteredTrips);
         // Update online status from driver data
         if (driver?.status) {
           setIsOnline(driver.status === "active");
@@ -180,7 +249,12 @@ export default function ScheduledTripsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedDate, driver?.status]);
+
+  // Fetch trips on mount and when selected date changes
+  useEffect(() => {
+    fetchTrips();
+  }, [fetchTrips]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -296,8 +370,6 @@ export default function ScheduledTripsScreen() {
     // Trip can only be started if: captain is online AND activation conditions are met
     const canStart = isOnline && item.activationStatus?.canActivate && item.status === "SCHEDULED";
     const activationMessage = getActivationMessage(item);
-    const formattedPrice =
-      typeof item.price === "number" ? `$${item.price.toFixed(2)}` : null;
 
     return (
       <View
@@ -339,17 +411,6 @@ export default function ScheduledTripsScreen() {
                       {item.company.name}
                     </Text>
                   </View>
-                )}
-                {formattedPrice && (
-                  <Text
-                    style={{
-                      color: colors.text,
-                      fontSize: fontSizes.FONT12,
-                      fontFamily: fonts.medium,
-                    }}
-                  >
-                    {formattedPrice}
-                  </Text>
                 )}
               </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
@@ -508,6 +569,10 @@ export default function ScheduledTripsScreen() {
     router.push("/(tabs)/home");
   };
 
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+  };
+
   if (loading && trips.length === 0) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -588,6 +653,11 @@ export default function ScheduledTripsScreen() {
           </Text>
         </View>
       )}
+      <DateSelector
+        dates={weekDates}
+        selectedDate={selectedDate}
+        onDateSelect={handleDateSelect}
+      />
       <FlatList
         data={trips}
         renderItem={renderTripItem}
@@ -599,7 +669,7 @@ export default function ScheduledTripsScreen() {
         ListEmptyComponent={
           <EmptyState
             title="No Scheduled Trips"
-            message="You don't have any scheduled trips at the moment. Check back later for new trips."
+            message={`You don't have any scheduled trips for ${selectedDate.toLocaleDateString()}. Try selecting a different date.`}
             actionLabel="Go to Home"
             onAction={() => router.push("/(tabs)/home")}
           />

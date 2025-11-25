@@ -68,6 +68,7 @@ export default function EditTripPage() {
         name: data.name,
         tripDate: data.tripDate,
         scheduledTime: scheduledTimeWithTimezone,
+        tripType: data.tripType,
         assignedCaptainId: data.assignedCaptainId || undefined,
         companyId: data.companyId,
         price: data.price,
@@ -130,11 +131,19 @@ export default function EditTripPage() {
         const dateStr = scheduledDate.toISOString().split("T")[0];
         const timeStr = scheduledDate.toTimeString().slice(0, 5);
 
+        // Format expectedTime for points if available
+        const formatExpectedTime = (expectedTime: string | null | undefined) => {
+          if (!expectedTime) return undefined;
+          const time = new Date(expectedTime);
+          return time.toTimeString().slice(0, 5); // HH:MM format
+        };
+
         // Pre-populate form
         form.reset({
           name: tripData.name,
           tripDate: dateStr,
           scheduledTime: timeStr,
+          tripType: tripData.tripType || ("DEPARTURE" as any),
           assignedCaptainId: tripData.assignedCaptainId || "",
           companyId: tripData.companyId,
           price: tripData.price,
@@ -145,6 +154,7 @@ export default function EditTripPage() {
             longitude: point.longitude,
             order: point.order,
             isFinalPoint: point.isFinalPoint,
+            expectedTime: formatExpectedTime(point.expectedTime),
           })),
         });
 
@@ -353,6 +363,38 @@ export default function EditTripPage() {
                     />
                   </FormField>
                 </div>
+
+                <FormField
+                  label="Trip Type"
+                  required
+                  error={form.formState.errors.tripType}
+                  hint="Arrival trips require expected times for all checkpoints. Departure trips have optional checkpoint times."
+                >
+                  <div className="flex gap-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="ARRIVAL"
+                        {...form.register("tripType")}
+                        className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        Arrival (Hodoor)
+                      </span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="DEPARTURE"
+                        {...form.register("tripType")}
+                        className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        Departure (Ensraf)
+                      </span>
+                    </label>
+                  </div>
+                </FormField>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
@@ -567,6 +609,39 @@ export default function EditTripPage() {
                           />
                         </div>
                       </div>
+
+                      {form.watch("tripType") === "ARRIVAL" && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          <FormField
+                            label="Expected Time"
+                            required
+                            error={pointError?.expectedTime}
+                            hint="The time the captain should reach this checkpoint"
+                          >
+                            <input
+                              type="time"
+                              {...form.register(`points.${index}.expectedTime`)}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                            />
+                          </FormField>
+                        </div>
+                      )}
+
+                      {form.watch("tripType") === "DEPARTURE" && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          <FormField
+                            label="Expected Time (Optional)"
+                            error={pointError?.expectedTime}
+                            hint="Optional: The expected time for this checkpoint"
+                          >
+                            <input
+                              type="time"
+                              {...form.register(`points.${index}.expectedTime`)}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                            />
+                          </FormField>
+                        </div>
+                      )}
 
                       <LocationPicker
                         value={location || undefined}

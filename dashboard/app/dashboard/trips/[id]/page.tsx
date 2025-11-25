@@ -234,6 +234,22 @@ export default function TripDetailsPage() {
                   {new Date(trip.scheduledTime).toLocaleString()}
                 </dd>
               </div>
+              {trip.tripType && (
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Trip Type</dt>
+                  <dd className="mt-1">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        trip.tripType === "ARRIVAL"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {trip.tripType === "ARRIVAL" ? "Arrival (Hodoor)" : "Departure (Ensraf)"}
+                    </span>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-sm font-medium text-gray-500">Assigned Captain</dt>
                 <dd className="mt-1 text-sm text-gray-900">
@@ -300,6 +316,7 @@ export default function TripDetailsPage() {
               checkpoints={trip.points}
               currentPointIndex={trip.progress?.currentPointIndex}
               status={trip.status}
+              tripType={trip.tripType}
             />
           </CardBody>
         </Card>

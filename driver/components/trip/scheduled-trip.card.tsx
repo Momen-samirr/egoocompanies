@@ -125,17 +125,6 @@ export default function ScheduledTripCard({ item }: { item: ScheduledTrip }) {
               </Text>
             </View>
           )}
-          {typeof item.price === "number" && (
-            <Text
-              style={{
-                fontFamily: fonts.medium,
-                fontSize: fontSizes.FONT12,
-                color: color.secondaryFont,
-              }}
-            >
-              ${item.price.toFixed(2)}
-            </Text>
-          )}
         </View>
         <View style={[styles.alignment, { flexDirection: "row" }]}>
           <Text style={styles.timing}>

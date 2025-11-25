@@ -5,7 +5,7 @@ import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
 import { spacing, shadows } from "@/styles/design-system";
-import { Wallet, SmartCar, Driving, Calender } from "@/utils/icons";
+import { SmartCar, Driving, Calender } from "@/utils/icons";
 import { Info } from "@/assets/icons/info";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -22,7 +22,6 @@ interface DriverStats {
     id: string;
     name: string;
   } | null;
-  totalEarnings: number;
   totalCompletedTrips: number;
 }
 
@@ -140,7 +139,7 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
       <View style={styles.container}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
         <View style={styles.cardsContainer}>
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3].map((i) => (
             <View key={i} style={styles.statCard}>
               <SkeletonCard />
             </View>
@@ -181,29 +180,11 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
     return null;
   }
 
-  const formatEarnings = (amount: number) => {
-    return new Intl.NumberFormat("en-BD", {
-      style: "currency",
-      currency: "BDT",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
       
       <View style={styles.cardsContainer}>
-        {/* Total Earnings */}
-        <StatCard
-          icon={<Wallet colors={color.primary} width={24} height={24} />}
-          value={formatEarnings(stats.totalEarnings)}
-          label="Total Earnings"
-          color={color.primary}
-          backgroundColor={`${color.primary}20`}
-        />
-
         {/* Completed Trips Today */}
         <StatCard
           icon={<SmartCar width={24} height={24} />}

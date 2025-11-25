@@ -40,6 +40,7 @@ interface ScheduledTrip {
   id: string;
   name: string;
   status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FORCE_CLOSED";
+  tripType?: "ARRIVAL" | "DEPARTURE";
   companyId?: string;
   price?: number;
   company?: {
@@ -53,6 +54,7 @@ interface ScheduledTrip {
     longitude: number;
     order: number;
     isFinalPoint: boolean;
+    expectedTime?: string | null;
     reachedAt: string | null;
   }>;
   progress: {
@@ -514,12 +516,34 @@ export default function TripNavigationScreen() {
               );
 
               if (response.data.success) {
-                Toast.show(
-                  checkpoint.isFinalPoint
-                    ? "Trip completed successfully!"
-                    : "Checkpoint reached!",
-                  { type: "success" }
-                );
+                // Show timing message for ARRIVAL trips
+                if (trip.tripType === "ARRIVAL" && response.data.timing) {
+                  const timing = response.data.timing;
+                  let timingMessage = "";
+                  
+                  if (timing.status === "on-time") {
+                    timingMessage = "You arrived on time";
+                  } else if (timing.status === "early") {
+                    timingMessage = `You arrived ${timing.minutes} minute${timing.minutes !== 1 ? "s" : ""} early`;
+                  } else if (timing.status === "late") {
+                    timingMessage = `You arrived ${timing.minutes} minute${timing.minutes !== 1 ? "s" : ""} late`;
+                  }
+                  
+                  if (timingMessage) {
+                    Toast.show(timingMessage, {
+                      type: timing.status === "late" ? "warning" : "success",
+                      duration: 5000,
+                    });
+                  }
+                } else {
+                  // Default success message
+                  Toast.show(
+                    checkpoint.isFinalPoint
+                      ? "Trip completed successfully!"
+                      : "Checkpoint reached!",
+                    { type: "success" }
+                  );
+                }
 
                 if (checkpoint.isFinalPoint) {
                   // Trip completed, go back to scheduled trips
@@ -962,17 +986,6 @@ export default function TripNavigationScreen() {
                   {trip.company.name}
                 </Text>
               </View>
-            )}
-            {typeof trip.price === "number" && (
-              <Text
-                style={{
-                  color: color.secondaryFont,
-                  fontSize: fontSizes.FONT12,
-                  fontFamily: fonts.medium,
-                }}
-              >
-                ${trip.price.toFixed(2)}
-              </Text>
             )}
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>

@@ -74,6 +74,12 @@ export default function HomeScreen() {
   const processedNotificationIds = useRef<Set<string>>(new Set()); // Track processed notification IDs to prevent duplicates
   const isProcessingNotification = useRef<boolean>(false); // Prevent concurrent notification processing
   
+  // Push notification registration state tracking
+  const isRegisteringToken = useRef<boolean>(false); // Prevent concurrent token registrations
+  const tokenRegistrationCompleted = useRef<boolean>(false); // Track if token registration was completed
+  const lastSavedToken = useRef<string | null>(null); // Store the last successfully saved token
+  const appStateRegistrationTimeout = useRef<NodeJS.Timeout | null>(null); // For debouncing AppState listener
+  
   // Map error handling state
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -619,6 +625,12 @@ export default function HomeScreen() {
     const checkAndRegister = async () => {
       if (!isMounted) return;
       
+      // Guard: Prevent concurrent registrations
+      if (isRegisteringToken.current) {
+        console.log("⚠️ Token registration already in progress, skipping...");
+        return;
+      }
+      
       try {
         const accessToken = await AsyncStorage.getItem("accessToken");
         if (accessToken) {
@@ -632,14 +644,29 @@ export default function HomeScreen() {
       }
     };
     
-    // Register immediately when driver data is loaded
-    checkAndRegister();
+    // Only register if driver ID exists (not just when driver object changes)
+    if (driver?.id) {
+      // Register immediately when driver data is loaded
+      // The token comparison inside registerForPushNotificationsAsync will prevent duplicate saves
+      checkAndRegister();
+    }
     
     // Also register when app comes to foreground to ensure token is fresh and valid
+    // Add debouncing to prevent rapid successive calls
     appStateSubscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
       if (nextAppState === "active" && isMounted) {
-        console.log("📱 App came to foreground - refreshing push token...");
-        checkAndRegister();
+        // Clear any pending timeout
+        if (appStateRegistrationTimeout.current) {
+          clearTimeout(appStateRegistrationTimeout.current);
+        }
+        
+        // Debounce: Wait 1 second before checking (prevents rapid triggers)
+        appStateRegistrationTimeout.current = setTimeout(() => {
+          if (isMounted && !isRegisteringToken.current) {
+            console.log("📱 App came to foreground - checking push token...");
+            checkAndRegister();
+          }
+        }, 1000);
       }
     });
     
@@ -648,25 +675,38 @@ export default function HomeScreen() {
       if (appStateSubscription) {
         appStateSubscription.remove();
       }
+      if (appStateRegistrationTimeout.current) {
+        clearTimeout(appStateRegistrationTimeout.current);
+      }
     };
-  }, [driver]); // Re-run when driver data is loaded
+  }, [driver?.id]); // Only re-run when driver ID changes (not on every object reference change)
 
   // CRITICAL: Register for push notifications and get fresh token
   // This function generates a NEW token every time it's called
   // Expo push tokens are stable but we should refresh on app launch to ensure validity
   async function registerForPushNotificationsAsync() {
-    console.log("🔔 ===== STARTING PUSH NOTIFICATION REGISTRATION =====");
-    console.log("🔔 Timestamp:", new Date().toISOString());
-    
-    if (!isPhysicalDevice()) {
-      console.warn("⚠️ Not a physical device - push notifications not available");
-      Toast.show("Must use physical device for Push Notifications", {
-        type: "danger",
-      });
+    // Early return guard: Prevent concurrent registrations
+    if (isRegisteringToken.current) {
+      console.log("⚠️ Token registration already in progress, skipping duplicate call...");
       return;
     }
     
+    // Set registration in progress flag
+    isRegisteringToken.current = true;
+    
     try {
+      console.log("🔔 ===== STARTING PUSH NOTIFICATION REGISTRATION =====");
+      console.log("🔔 Timestamp:", new Date().toISOString());
+      
+      if (!isPhysicalDevice()) {
+        console.warn("⚠️ Not a physical device - push notifications not available");
+        Toast.show("Must use physical device for Push Notifications", {
+          type: "danger",
+        });
+        isRegisteringToken.current = false;
+        return;
+      }
+    
       // Step 1: Request/check notification permissions
       console.log("📋 Step 1: Checking notification permissions...");
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -683,6 +723,7 @@ export default function HomeScreen() {
         Toast.show("Failed to get push token for push notification!", {
           type: "danger",
         });
+        isRegisteringToken.current = false;
         return;
       }
       
@@ -701,6 +742,7 @@ export default function HomeScreen() {
         Toast.show("Failed to get project id for push notification!", {
           type: "danger",
         });
+        isRegisteringToken.current = false;
         return;
       }
       
@@ -721,6 +763,7 @@ export default function HomeScreen() {
         Toast.show("Failed to get push token", {
           type: "danger",
         });
+        isRegisteringToken.current = false;
         return;
       }
       
@@ -730,6 +773,7 @@ export default function HomeScreen() {
         Toast.show("Invalid push token format", {
           type: "danger",
         });
+        isRegisteringToken.current = false;
         return;
       }
       
@@ -740,6 +784,15 @@ export default function HomeScreen() {
       console.log("✅ Device is device:", isPhysicalDevice());
       console.log("✅ Platform:", Platform.OS);
       console.log("✅ Timestamp:", new Date().toISOString());
+      
+      // Early return guard: Check if this token was already saved
+      if (lastSavedToken.current === pushTokenString) {
+        console.log("✅ Token already saved previously, skipping save operation...");
+        console.log("✅ Token:", pushTokenString);
+        tokenRegistrationCompleted.current = true;
+        isRegisteringToken.current = false;
+        return;
+      }
         
         // CRITICAL: Save notification token to database
         // This token must match what's in the database for notifications to work
@@ -805,10 +858,19 @@ export default function HomeScreen() {
               // Verify token matches
               if (response.data?.driver?.notificationToken === pushTokenString) {
                 console.log("✅ Token verification: MATCH - notifications should work!");
-                Toast.show("Push notifications enabled!", {
-                  type: "success",
-                  duration: 2000,
-                });
+                
+                // Only show toast if this is a new token (not already saved)
+                const isNewToken = lastSavedToken.current !== pushTokenString;
+                if (isNewToken) {
+                  Toast.show("Push notifications enabled!", {
+                    type: "success",
+                    duration: 2000,
+                  });
+                }
+                
+                // Update tracking refs
+                lastSavedToken.current = pushTokenString;
+                tokenRegistrationCompleted.current = true;
               } else {
                 console.error("❌ Token verification: MISMATCH!");
                 console.error("❌ Expected:", pushTokenString);
@@ -858,9 +920,9 @@ export default function HomeScreen() {
           }
         };
         
-        // Save token asynchronously (don't block)
-        // Use await to ensure it completes
-        saveTokenToDatabase().catch(err => {
+        // Save token to database and wait for completion
+        // This ensures the registration flag is only reset after save completes
+        await saveTokenToDatabase().catch(err => {
           console.error("❌ Unexpected error in token save process:", err);
           console.error("❌ Error stack:", err.stack);
         });
@@ -887,6 +949,9 @@ export default function HomeScreen() {
             duration: 3000,
           });
         }
+      } finally {
+        // Always reset the registration flag, even if there was an error
+        isRegisteringToken.current = false;
       }
 
     if (Platform.OS === "android") {

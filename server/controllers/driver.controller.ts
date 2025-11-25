@@ -9,6 +9,7 @@ import {
   applyEmergencyTerminationPenalty,
   applyTripCompletionPayout,
 } from "../services/trip-finance";
+import { calculateTimingDifference } from "../utils/trip-timing";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken, {
@@ -360,9 +361,12 @@ export const getLoggedInDriverData = async (req: any, res: Response) => {
       },
     });
 
+    // Exclude totalEarning from driver data
+    const { totalEarning, ...driverWithoutEarnings } = driver;
+
     // Add completed scheduled trips count to driver data
     const driverWithStats = {
-      ...driver,
+      ...driverWithoutEarnings,
       completedScheduledTrips: completedScheduledTripsCount,
     };
 
@@ -732,12 +736,6 @@ export const getDriverStats = async (req: any, res: Response) => {
       },
     });
 
-    // Total earnings from driver model
-    const driver = await prisma.driver.findUnique({
-      where: { id: driverId },
-      select: { totalEarning: true },
-    });
-
     // Total completed trips (all time)
     const totalCompletedTrips = await prisma.rides.count({
       where: {
@@ -770,7 +768,6 @@ export const getDriverStats = async (req: any, res: Response) => {
                   `${activeRide?.currentLocationName} → ${activeRide?.destinationLocationName}`,
               }
             : null,
-        totalEarnings: driver?.totalEarning || 0,
         totalCompletedTrips: totalCompletedTrips + totalCompletedScheduledTrips,
       },
     });
@@ -786,7 +783,7 @@ export const getDriverStats = async (req: any, res: Response) => {
 // Get Scheduled Trips for Captain
 export const getScheduledTrips = async (req: any, res: Response) => {
   try {
-    const { status, latitude, longitude } = req.query;
+    const { status, latitude, longitude, date } = req.query;
     const captainId = req.driver?.id;
 
     if (!captainId) {
@@ -804,6 +801,28 @@ export const getScheduledTrips = async (req: any, res: Response) => {
 
     if (status) {
       where.status = status;
+    }
+
+    // Add date filtering if date parameter is provided
+    if (date) {
+      try {
+        const selectedDate = new Date(date as string);
+        // Set to start of day (00:00:00.000)
+        const startOfDay = new Date(selectedDate);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        // Set to end of day (23:59:59.999)
+        const endOfDay = new Date(selectedDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        where.tripDate = {
+          gte: startOfDay,
+          lte: endOfDay,
+        };
+      } catch (error) {
+        console.error("Error parsing date parameter:", error);
+        // If date parsing fails, continue without date filtering
+      }
     }
 
     // Get current location from query params if provided
@@ -1067,7 +1086,7 @@ export const updateTripProgress = async (req: any, res: Response) => {
     }
 
     // Get the trip
-    const trip = await prisma.scheduledTrip.findUnique({
+    const trip = (await prisma.scheduledTrip.findUnique({
       where: { id: tripId },
       include: {
         points: {
@@ -1075,7 +1094,7 @@ export const updateTripProgress = async (req: any, res: Response) => {
         },
         progress: true,
       },
-    });
+    })) as any; // Type assertion needed until Prisma client is regenerated after migration
 
     if (!trip) {
       return res.status(404).json({
@@ -1123,12 +1142,19 @@ export const updateTripProgress = async (req: any, res: Response) => {
 
     // Mark the checkpoint as reached
     const checkpoint = trip.points[checkpointIndex];
+    const reachedAt = new Date();
     await prisma.tripPoint.update({
       where: { id: checkpoint.id },
       data: {
-        reachedAt: new Date(),
+        reachedAt,
       },
     });
+
+    // Calculate timing difference for ARRIVAL trips
+    let timing = null;
+    if (trip.tripType === "ARRIVAL" && checkpoint.expectedTime) {
+      timing = calculateTimingDifference(checkpoint.expectedTime, reachedAt);
+    }
 
     // Update progress
     const isFinalPoint = checkpoint.isFinalPoint;
@@ -1172,13 +1198,20 @@ export const updateTripProgress = async (req: any, res: Response) => {
       },
     });
 
-    res.status(200).json({
+    const response: any = {
       success: true,
       trip: updatedTrip,
       message: isFinalPoint
         ? "Trip completed successfully"
         : "Checkpoint reached",
-    });
+    };
+
+    // Include timing data if available (for ARRIVAL trips)
+    if (timing) {
+      response.timing = timing;
+    }
+
+    res.status(200).json(response);
   } catch (error: any) {
     console.error("Update trip progress error:", error);
     res.status(500).json({

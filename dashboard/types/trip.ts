@@ -19,6 +19,8 @@ export type ScheduledTripFinancialRule =
   | "EMERGENCY_DEDUCTION"
   | "FORCE_CLOSED_DEDUCTION";
 
+export type TripType = "ARRIVAL" | "DEPARTURE";
+
 export interface TripPoint {
   id?: string;
   name: string;
@@ -26,6 +28,7 @@ export interface TripPoint {
   longitude: number;
   order: number;
   isFinalPoint: boolean;
+  expectedTime?: string;
   reachedAt?: string;
 }
 
@@ -35,6 +38,7 @@ export interface ScheduledTrip {
   tripDate: string;
   scheduledTime: string;
   status: ScheduledTripStatus;
+  tripType?: TripType;
   assignedCaptainId?: string;
   createdById: string;
   companyId?: string;
@@ -128,6 +132,7 @@ export interface TripFormData {
   name: string;
   tripDate: string;
   scheduledTime: string;
+  tripType: TripType;
   assignedCaptainId?: string;
   companyId: string;
   price: number;

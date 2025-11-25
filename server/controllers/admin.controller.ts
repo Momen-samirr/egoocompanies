@@ -1031,6 +1031,7 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       points,
       companyId,
       price,
+      tripType,
     } = req.body;
 
     if (
@@ -1048,12 +1049,34 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
+    // Validate tripType
+    if (tripType && tripType !== "ARRIVAL" && tripType !== "DEPARTURE") {
+      return res.status(400).json({
+        success: false,
+        message: "tripType must be either 'ARRIVAL' or 'DEPARTURE'",
+      });
+    }
+
     const hasFinalPoint = points.some((p: any) => p.isFinalPoint === true);
     if (!hasFinalPoint) {
       return res.status(400).json({
         success: false,
         message: "At least one point must be marked as final point",
       });
+    }
+
+    // For ARRIVAL trips, validate that all checkpoints have expectedTime
+    const isArrivalTrip = tripType === "ARRIVAL";
+    if (isArrivalTrip) {
+      const missingExpectedTimes = points.filter(
+        (p: any) => !p.expectedTime || p.expectedTime.trim() === ""
+      );
+      if (missingExpectedTimes.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "For Arrival trips, all checkpoints must have an expected time",
+        });
+      }
     }
 
     if (assignedCaptainId) {
@@ -1097,18 +1120,30 @@ export const createScheduledTrip = async (req: any, res: Response) => {
         name,
         tripDate: new Date(tripDate),
         scheduledTime: scheduledDateTime,
+        ...(tripType && { tripType }),
         ...(assignedCaptainId && { assignedCaptainId }),
         createdById: req.admin.id,
         companyId,
         price: resolvedPrice,
         points: {
-          create: points.map((point: any, index: number) => ({
-            name: point.name,
-            latitude: parseFloat(point.latitude),
-            longitude: parseFloat(point.longitude),
-            order: point.order !== undefined ? point.order : index,
-            isFinalPoint: point.isFinalPoint === true,
-          })),
+          create: points.map((point: any, index: number) => {
+            // Parse expectedTime if provided
+            let expectedTimeValue = null;
+            if (point.expectedTime) {
+              // expectedTime comes as "HH:MM" format, combine with tripDate
+              const expectedDateTime = new Date(`${tripDate}T${point.expectedTime}`);
+              expectedTimeValue = expectedDateTime;
+            }
+
+            return {
+              name: point.name,
+              latitude: parseFloat(point.latitude),
+              longitude: parseFloat(point.longitude),
+              order: point.order !== undefined ? point.order : index,
+              isFinalPoint: point.isFinalPoint === true,
+              ...(expectedTimeValue && { expectedTime: expectedTimeValue }),
+            };
+          }),
         },
       },
       include: {
@@ -1435,7 +1470,7 @@ export const getScheduledTripById = async (req: any, res: Response) => {
 export const updateScheduledTrip = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, tripDate, scheduledTime, assignedCaptainId, points, companyId, price } = req.body;
+    const { name, tripDate, scheduledTime, assignedCaptainId, points, companyId, price, tripType } = req.body;
 
     // Check if trip exists and is not already active
     const existingTrip = await prisma.scheduledTrip.findUnique({
@@ -1460,6 +1495,14 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
+    // Validate tripType if provided
+    if (tripType && tripType !== "ARRIVAL" && tripType !== "DEPARTURE") {
+      return res.status(400).json({
+        success: false,
+        message: "tripType must be either 'ARRIVAL' or 'DEPARTURE'",
+      });
+    }
+
     // Prepare update data
     const updateData: any = {};
     if (name) updateData.name = name;
@@ -1467,6 +1510,7 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
     if (scheduledTime && tripDate) {
       updateData.scheduledTime = new Date(`${tripDate}T${scheduledTime}`);
     }
+    if (tripType) updateData.tripType = tripType;
     if (assignedCaptainId) {
       // Validate captain exists
       const captain = await prisma.driver.findUnique({
@@ -1545,6 +1589,22 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
         });
       }
 
+      // Get current trip type (use updated value if provided, otherwise existing)
+      const currentTripType = tripType || existingTrip.tripType;
+
+      // For ARRIVAL trips, validate that all checkpoints have expectedTime
+      if (currentTripType === "ARRIVAL") {
+        const missingExpectedTimes = points.filter(
+          (p: any) => !p.expectedTime || p.expectedTime.trim() === ""
+        );
+        if (missingExpectedTimes.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: "For Arrival trips, all checkpoints must have an expected time",
+          });
+        }
+      }
+
       // Validate points have required fields
       for (let i = 0; i < points.length; i++) {
         const point = points[i];
@@ -1561,16 +1621,33 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
         where: { scheduledTripId: id },
       });
 
+      // Get the trip date for expectedTime calculation
+      const tripDateForPoints = tripDate || existingTrip.tripDate;
+
       // Create new points
       await prisma.tripPoint.createMany({
-        data: points.map((point: any, index: number) => ({
-          scheduledTripId: id,
-          name: point.name,
-          latitude: parseFloat(point.latitude),
-          longitude: parseFloat(point.longitude),
-          order: point.order !== undefined ? point.order : index,
-          isFinalPoint: point.isFinalPoint === true,
-        })),
+        data: points.map((point: any, index: number) => {
+          // Parse expectedTime if provided
+          let expectedTimeValue = null;
+          if (point.expectedTime) {
+            // expectedTime comes as "HH:MM" format, combine with tripDate
+            const tripDateStr = tripDateForPoints instanceof Date 
+              ? tripDateForPoints.toISOString().split('T')[0]
+              : tripDateForPoints;
+            const expectedDateTime = new Date(`${tripDateStr}T${point.expectedTime}`);
+            expectedTimeValue = expectedDateTime;
+          }
+
+          return {
+            scheduledTripId: id,
+            name: point.name,
+            latitude: parseFloat(point.latitude),
+            longitude: parseFloat(point.longitude),
+            order: point.order !== undefined ? point.order : index,
+            isFinalPoint: point.isFinalPoint === true,
+            ...(expectedTimeValue && { expectedTime: expectedTimeValue }),
+          };
+        }),
       });
 
       // Fetch updated trip with new points

@@ -34,6 +34,12 @@ export const tripPointSchema = z.object({
     .max(180, "Longitude must be between -180 and 180"),
   order: z.number().int().min(0),
   isFinalPoint: z.boolean(),
+  expectedTime: z
+    .string()
+    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+      message: "Invalid time format. Use HH:MM format",
+    })
+    .optional(),
 });
 
 // Trip form validation schema
@@ -57,6 +63,10 @@ export const tripFormSchema = z
     ),
     scheduledTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
       message: "Invalid time format. Use HH:MM format",
+    }),
+    tripType: z.enum(["ARRIVAL", "DEPARTURE"], {
+      required_error: "Trip type is required",
+      invalid_type_error: "Trip type must be either ARRIVAL or DEPARTURE",
     }),
     assignedCaptainId: z.string().optional(),
     companyId: z.string().min(1, "Company is required"),
@@ -109,6 +119,24 @@ export const tripFormSchema = z
     {
       message: "Trip date cannot be more than 1 year in the future",
       path: ["tripDate"],
+    }
+  )
+  .refine(
+    (data) => {
+      // For ARRIVAL trips, all checkpoints must have expectedTime
+      if (data.tripType === "ARRIVAL") {
+        const missingExpectedTimes = data.points.filter(
+          (p) => !p.expectedTime || p.expectedTime.trim() === ""
+        );
+        if (missingExpectedTimes.length > 0) {
+          return false;
+        }
+      }
+      return true;
+    },
+    {
+      message: "For Arrival trips, all checkpoints must have an expected time",
+      path: ["points"],
     }
   );
 

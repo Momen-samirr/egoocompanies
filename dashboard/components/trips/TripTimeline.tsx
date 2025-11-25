@@ -8,6 +8,7 @@ interface Checkpoint {
   name: string;
   order: number;
   isFinalPoint: boolean;
+  expectedTime?: string | null;
   reachedAt: string | null;
 }
 
@@ -15,11 +16,35 @@ interface TripTimelineProps {
   checkpoints: Checkpoint[];
   currentPointIndex?: number;
   status: string;
+  tripType?: "ARRIVAL" | "DEPARTURE";
 }
 
-export default function TripTimeline({ checkpoints, currentPointIndex = -1, status }: TripTimelineProps) {
+export default function TripTimeline({ checkpoints, currentPointIndex = -1, status, tripType }: TripTimelineProps) {
   const isActive = status === "ACTIVE";
   const isCompleted = status === "COMPLETED";
+  const isArrivalTrip = tripType === "ARRIVAL";
+
+  // Calculate timing difference for reached checkpoints
+  const calculateTimingStatus = (checkpoint: Checkpoint) => {
+    if (!isArrivalTrip || !checkpoint.expectedTime || !checkpoint.reachedAt) {
+      return null;
+    }
+
+    const expectedTime = new Date(checkpoint.expectedTime);
+    const reachedAt = new Date(checkpoint.reachedAt);
+    const differenceMs = reachedAt.getTime() - expectedTime.getTime();
+    const minutes = Math.round(differenceMs / (1000 * 60));
+    
+    // Consider "on-time" if within 1 minute
+    if (Math.abs(minutes) <= 1) {
+      return { status: "on-time", minutes: 0 };
+    }
+    
+    return {
+      status: minutes < 0 ? "early" : "late",
+      minutes: Math.abs(minutes),
+    };
+  };
 
   return (
     <div className="space-y-4">
@@ -27,6 +52,7 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
         const isReached = checkpoint.reachedAt !== null;
         const isCurrent = isActive && index === currentPointIndex;
         const isPast = index < currentPointIndex || isReached || isCompleted;
+        const timingStatus = calculateTimingStatus(checkpoint);
 
         let icon;
         let bgColor;
@@ -78,9 +104,35 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
                   </span>
                 )}
               </div>
+              {checkpoint.expectedTime && isArrivalTrip && (
+                <p className="text-sm text-gray-600 mt-1">
+                  <span className="font-medium">Expected:</span>{" "}
+                  {new Date(checkpoint.expectedTime).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              )}
               {checkpoint.reachedAt && (
                 <p className="text-sm text-gray-500 mt-1">
                   Reached: {new Date(checkpoint.reachedAt).toLocaleString()}
+                </p>
+              )}
+              {timingStatus && (
+                <p
+                  className={`text-sm font-medium mt-1 ${
+                    timingStatus.status === "on-time"
+                      ? "text-green-600"
+                      : timingStatus.status === "early"
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {timingStatus.status === "on-time"
+                    ? "✓ Reached on time"
+                    : timingStatus.status === "early"
+                    ? `✓ Reached ${timingStatus.minutes} minute${timingStatus.minutes !== 1 ? "s" : ""} early`
+                    : `⚠ Reached ${timingStatus.minutes} minute${timingStatus.minutes !== 1 ? "s" : ""} late`}
                 </p>
               )}
             </div>

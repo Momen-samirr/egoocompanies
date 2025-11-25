@@ -105,6 +105,11 @@ enum ScheduledTripFinancialRule {
   FORCE_CLOSED_DEDUCTION
 }
 
+enum TripType {
+  ARRIVAL
+  DEPARTURE
+}
+
 model Company {
   id                        String          @id @default(auto()) @map("_id") @db.ObjectId
   name                      String
@@ -120,6 +125,7 @@ model ScheduledTrip {
   tripDate          DateTime
   scheduledTime     DateTime
   status            ScheduledTripStatus  @default(SCHEDULED)
+  tripType          TripType             @default(DEPARTURE)
   assignedCaptainId String?             @db.ObjectId
   createdById       String              @db.ObjectId
   companyId         String?             @db.ObjectId
@@ -150,6 +156,7 @@ model TripPoint {
   longitude       Float
   order           Int
   isFinalPoint    Boolean        @default(false)
+  expectedTime    DateTime?
   reachedAt       DateTime?
   scheduledTrip   ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
   createdAt       DateTime       @default(now())
