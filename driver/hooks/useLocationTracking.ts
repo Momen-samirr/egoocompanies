@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as GeoLocation from "expo-location";
+import * as TaskManager from "expo-task-manager";
 import { Toast } from "react-native-toast-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -7,10 +8,12 @@ import { getServerUri } from "@/configs/constants";
 import { requestAllLocationPermissions, getLocationPermissionStatus } from "@/utils/locationPermissions";
 import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
 import { updateDriverLocation } from "@/services/locationService";
+import { BACKGROUND_LOCATION_TASK, setWebSocketConnection } from "@/services/backgroundLocationTask";
 
 export interface Location {
   latitude: number;
   longitude: number;
+  heading?: number; // Bearing/heading in degrees (0-360, where 0 is North)
 }
 
 export interface UseLocationTrackingOptions {
@@ -53,6 +56,7 @@ export function useLocationTracking(
   const locationWatchSubscription = useRef<any>(null);
   const isActiveRef = useRef(isActive);
   const firstLocationAfterActiveRef = useRef(false);
+  const isTrackingRef = useRef(false);
 
   // Keep ref in sync with isActive
   useEffect(() => {
@@ -161,7 +165,29 @@ export function useLocationTracking(
       // Reset first location flag
       firstLocationAfterActiveRef.current = isActiveRef.current;
 
-      // Start watching position
+      // Check if task is registered
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+      if (!isTaskRegistered) {
+        console.warn("⚠️ Background location task not registered - location updates may not work in background");
+      }
+
+      // Start background location updates using task manager
+      // This works even when the app is in the background
+      await GeoLocation.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+        accuracy: GeoLocation.Accuracy.High,
+        timeInterval: 5000, // 5 seconds
+        distanceInterval: 10, // 10 meters
+        foregroundService: {
+          notificationTitle: "Location Tracking Active",
+          notificationBody: "Tracking your location for ride requests",
+          notificationColor: "#10B981",
+        },
+        pausesUpdatesAutomatically: false,
+        showsBackgroundLocationIndicator: true,
+      });
+
+      // Also set up a foreground watcher for immediate UI updates
+      // This provides faster updates when the app is in the foreground
       const subscription = await GeoLocation.watchPositionAsync(
         {
           accuracy: GeoLocation.Accuracy.High,
@@ -170,10 +196,14 @@ export function useLocationTracking(
           mayShowUserSettingsDialog: true,
         },
         async (position) => {
-          const { latitude, longitude } = position.coords;
-          const newLocation: Location = { latitude, longitude };
+          const { latitude, longitude, heading } = position.coords;
+          const newLocation: Location = { 
+            latitude, 
+            longitude,
+            heading: heading !== null && heading !== undefined && heading >= 0 ? heading : undefined
+          };
 
-          // Always update current location
+          // Always update current location for UI
           setCurrentLocation(newLocation);
 
           // Call onLocationUpdate callback
@@ -207,9 +237,10 @@ export function useLocationTracking(
       );
 
       locationWatchSubscription.current = subscription;
+      isTrackingRef.current = true;
       setIsTracking(true);
       setError(null);
-      console.log("✅ Location tracking started");
+      console.log("✅ Location tracking started (background + foreground)");
     } catch (err: any) {
       console.error("❌ Error starting location tracking:", err);
       setError(err.message || "Failed to start location tracking");
@@ -218,11 +249,28 @@ export function useLocationTracking(
   }, [onLocationUpdate, sendLocationUpdate, distanceThreshold, lastSentLocation]);
 
   // Stop location tracking
-  const stopTracking = useCallback(() => {
+  const stopTracking = useCallback(async () => {
+    // Stop foreground watcher
     if (locationWatchSubscription.current) {
       locationWatchSubscription.current.remove();
       locationWatchSubscription.current = null;
     }
+
+    // Stop background location updates
+    try {
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+      if (isTaskRegistered) {
+        const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+        if (hasStarted) {
+          await GeoLocation.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+          console.log("🛑 Background location tracking stopped");
+        }
+      }
+    } catch (error: any) {
+      console.error("❌ Error stopping background location tracking:", error);
+    }
+
+    isTrackingRef.current = false;
     setIsTracking(false);
     console.log("🛑 Location tracking stopped");
   }, []);

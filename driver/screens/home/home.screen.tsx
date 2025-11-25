@@ -44,6 +44,8 @@ import { runMapDiagnostics, logMapDiagnostics } from "@/utils/mapDiagnostics";
 import { requestAllLocationPermissions, hasBackgroundLocationPermission, getLocationPermissionStatus } from "@/utils/locationPermissions";
 import { promptDisableBatteryOptimization, showBatteryOptimizationInstructions } from "@/utils/batteryOptimization";
 import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
+import { setWebSocketConnection, BACKGROUND_LOCATION_TASK } from "@/services/backgroundLocationTask";
+import * as TaskManager from "expo-task-manager";
 
 export default function HomeScreen() {
   const notificationListener = useRef<any>();
@@ -982,6 +984,8 @@ export default function HomeScreen() {
           console.log("✅ Connected to WebSocket server successfully");
           setWsConnected(true);
           reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+          // Set WebSocket connection for background task
+          setWebSocketConnection(ws.current);
         };
 
         ws.current.onmessage = (e) => {
@@ -1062,6 +1066,7 @@ export default function HomeScreen() {
       }
       if (ws.current) {
         console.log("🧹 Cleaning up WebSocket connection");
+        setWebSocketConnection(null); // Clear WebSocket from background task
         ws.current.close();
         ws.current = null;
       }
@@ -1155,6 +1160,7 @@ export default function HomeScreen() {
             data: {
               latitude: location.latitude,
               longitude: location.longitude,
+              heading: location.heading !== undefined ? location.heading : null,
               name: driverData.name || "Driver",
               status: driverStatus,
               vehicleType: driverData.vehicle_type || "Car",
@@ -1243,8 +1249,36 @@ export default function HomeScreen() {
       // Track if this is the first location after driver becomes active
       let firstLocationAfterActive = isOn === true;
 
-      // Configure location watch for background compatibility
-      // Use balanced intervals: 5 seconds or 10 meters for background efficiency
+      // Check if background task is registered
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+      if (!isTaskRegistered) {
+        console.warn("⚠️ Background location task not registered - location updates may not work in background");
+      }
+
+      // Start background location updates using task manager
+      // This works even when the app is in the background
+      if (isOn) {
+        try {
+          await GeoLocation.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+            accuracy: GeoLocation.Accuracy.High,
+            timeInterval: 5000, // 5 seconds
+            distanceInterval: 10, // 10 meters
+            foregroundService: {
+              notificationTitle: "Location Tracking Active",
+              notificationBody: "Tracking your location for ride requests",
+              notificationColor: "#10B981",
+            },
+            pausesUpdatesAutomatically: false,
+            showsBackgroundLocationIndicator: true,
+          });
+          console.log("✅ Background location tracking started");
+        } catch (error: any) {
+          console.error("❌ Error starting background location tracking:", error);
+        }
+      }
+
+      // Also set up a foreground watcher for immediate UI updates
+      // This provides faster updates when the app is in the foreground
       const subscription = await GeoLocation.watchPositionAsync(
         {
           accuracy: GeoLocation.Accuracy.High,
@@ -1253,8 +1287,12 @@ export default function HomeScreen() {
           mayShowUserSettingsDialog: true,
         },
         async (position) => {
-          const { latitude, longitude } = position.coords;
-          const newLocation = { latitude, longitude };
+          const { latitude, longitude, heading } = position.coords;
+          const newLocation = { 
+            latitude, 
+            longitude,
+            heading: heading !== null && heading !== undefined && heading >= 0 ? heading : undefined
+          };
           
           // Always update current location
           setCurrentLocation(newLocation);
@@ -1295,9 +1333,28 @@ export default function HomeScreen() {
       locationWatchSubscription.current = subscription;
       
       return () => {
+        // Stop foreground watcher
         if (locationWatchSubscription.current) {
           locationWatchSubscription.current.remove();
           locationWatchSubscription.current = null;
+        }
+        
+        // Stop background location updates if driver is inactive
+        if (!isOn) {
+          (async () => {
+            try {
+              const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+              if (isTaskRegistered) {
+                const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+                if (hasStarted) {
+                  await GeoLocation.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+                  console.log("🛑 Background location tracking stopped");
+                }
+              }
+            } catch (error: any) {
+              console.error("❌ Error stopping background location tracking:", error);
+            }
+          })();
         }
       };
     })();

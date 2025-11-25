@@ -7,6 +7,8 @@ import { LogBox } from "react-native";
 import { useFonts } from "expo-font";
 import React from "react";
 import { DriverProvider } from "@/contexts/DriverContext";
+// Import background location task to register it
+import "@/services/backgroundLocationTask";
 
 export {
   // Catch any errors thrown by the Layout component.

@@ -22,6 +22,7 @@ interface DriverLocation {
   id: string;
   latitude: number;
   longitude: number;
+  bearing?: number | null; // Bearing/heading in degrees (0-360, where 0 is North)
   timestamp: string;
   name: string;
   status: string;
@@ -435,19 +436,28 @@ export default function MapPage() {
     }
   };
 
-  const getDriverIcon = (status: string, vehicleType: string) => {
+  const getDriverIcon = (status: string, vehicleType: string, bearing?: number | null) => {
     if (!isLoaded) {
       return undefined;
     }
     const color = status === "active" ? "#10B981" : "#6B7280";
-    // Use a simple colored circle as marker
+    
+    // Car icon SVG path (points North by default)
+    // This is a car shape pointing upward (North) - top view
+    // Car body: rectangle with rounded front
+    const carPath = "M -12,-20 L -10,-24 L 10,-24 L 12,-20 L 12,8 L 8,12 L -8,12 L -12,8 Z " +
+                    "M -8,-20 L -6,-22 L 6,-22 L 8,-20 L 8,6 L 6,8 L -6,8 L -8,6 Z " +
+                    "M -10,-18 L -8,-18 M 8,-18 L 10,-18";
+    
     return {
-      path: google.maps.SymbolPath.CIRCLE,
-      scale: 8,
+      path: carPath,
+      scale: 1.0,
       fillColor: color,
       fillOpacity: 1,
       strokeColor: "#fff",
       strokeWeight: 2,
+      rotation: bearing !== null && bearing !== undefined ? bearing : 0,
+      anchor: new google.maps.Point(0, 0),
     };
   };
 
@@ -624,7 +634,7 @@ export default function MapPage() {
 
             {/* Driver Markers */}
             {filteredDrivers.map((driver) => {
-              const icon = getDriverIcon(driver.status, driver.vehicleType);
+              const icon = getDriverIcon(driver.status, driver.vehicleType, driver.bearing);
               return (
                 <Marker
                   key={driver.id}

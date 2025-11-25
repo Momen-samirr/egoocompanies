@@ -272,12 +272,13 @@ wss.on("connection", (ws, req) => {
           id: data.driver,
           latitude: data.data.latitude,
           longitude: data.data.longitude,
+          bearing: data.data.heading !== null && data.data.heading !== undefined ? data.data.heading : null,
           name: data.data.name || "Driver",
           status: driverStatus,
           vehicleType: data.data.vehicleType || "Car",
           timestamp: new Date().toISOString(),
         };
-        console.log(`✅ Updated driver location: ID=${data.driver}, Status=${driverStatus}, Name=${drivers[data.driver].name}, Lat=${data.data.latitude}, Lng=${data.data.longitude}`);
+        console.log(`✅ Updated driver location: ID=${data.driver}, Status=${driverStatus}, Name=${drivers[data.driver].name}, Lat=${data.data.latitude}, Lng=${data.data.longitude}, Bearing=${drivers[data.driver].bearing}`);
         console.log(`📊 Total drivers in system: ${Object.keys(drivers).length}`);
 
         // Broadcast to all admin clients
