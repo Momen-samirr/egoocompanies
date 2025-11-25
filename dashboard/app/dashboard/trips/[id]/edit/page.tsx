@@ -135,7 +135,10 @@ export default function EditTripPage() {
         const formatExpectedTime = (expectedTime: string | null | undefined) => {
           if (!expectedTime) return undefined;
           const time = new Date(expectedTime);
-          return time.toTimeString().slice(0, 5); // HH:MM format
+          // Use UTC methods since we store it as UTC to preserve the exact time entered
+          const hours = time.getUTCHours().toString().padStart(2, '0');
+          const minutes = time.getUTCMinutes().toString().padStart(2, '0');
+          return `${hours}:${minutes}`; // HH:MM format
         };
 
         // Pre-populate form

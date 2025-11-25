@@ -1131,8 +1131,13 @@ export const createScheduledTrip = async (req: any, res: Response) => {
             let expectedTimeValue = null;
             if (point.expectedTime) {
               // expectedTime comes as "HH:MM" format, combine with tripDate
-              const expectedDateTime = new Date(`${tripDate}T${point.expectedTime}`);
-              expectedTimeValue = expectedDateTime;
+              // Create date in UTC to avoid timezone conversion issues
+              // We'll store it as UTC but the time value represents the local time entered
+              const [hours, minutes] = point.expectedTime.split(':');
+              // Create UTC date to preserve the exact time entered
+              // This ensures the time stored matches what the user entered
+              const dateTimeString = `${tripDate}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00Z`;
+              expectedTimeValue = new Date(dateTimeString);
             }
 
             return {
@@ -1631,11 +1636,16 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
           let expectedTimeValue = null;
           if (point.expectedTime) {
             // expectedTime comes as "HH:MM" format, combine with tripDate
+            // Create date in UTC to avoid timezone conversion issues
+            // We'll store it as UTC but the time value represents the local time entered
             const tripDateStr = tripDateForPoints instanceof Date 
               ? tripDateForPoints.toISOString().split('T')[0]
               : tripDateForPoints;
-            const expectedDateTime = new Date(`${tripDateStr}T${point.expectedTime}`);
-            expectedTimeValue = expectedDateTime;
+            const [hours, minutes] = point.expectedTime.split(':');
+            // Create UTC date to preserve the exact time entered
+            // This ensures the time stored matches what the user entered
+            const dateTimeString = `${tripDateStr}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00Z`;
+            expectedTimeValue = new Date(dateTimeString);
           }
 
           return {

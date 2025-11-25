@@ -107,10 +107,17 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
               {checkpoint.expectedTime && isArrivalTrip && (
                 <p className="text-sm text-gray-600 mt-1">
                   <span className="font-medium">Expected:</span>{" "}
-                  {new Date(checkpoint.expectedTime).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {(() => {
+                    // Parse the date - it's stored as UTC with the time as entered
+                    const date = new Date(checkpoint.expectedTime);
+                    // Use UTC methods since we stored it as UTC
+                    const hours = date.getUTCHours();
+                    const minutes = date.getUTCMinutes();
+                    const hour12 = hours % 12 || 12;
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    const minutesStr = minutes.toString().padStart(2, '0');
+                    return `${hour12}:${minutesStr} ${ampm}`;
+                  })()}
                 </p>
               )}
               {checkpoint.reachedAt && (
