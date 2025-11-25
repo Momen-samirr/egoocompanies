@@ -69,8 +69,7 @@ export const tripFormSchema = z
     companyId: z.string().min(1, "Company is required"),
     price: z
       .number({
-        required_error: "Price is required",
-        invalid_type_error: "Price must be a number",
+        message: "Price must be a number",
       })
       .positive("Price must be greater than zero"),
     points: z
