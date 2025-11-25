@@ -1,4 +1,4 @@
-import { ScheduledTripFinancialRule, ScheduledTripStatus } from "@prisma/client";
+import { Prisma, ScheduledTripFinancialRule, ScheduledTripStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 
 interface FinanceResult {
@@ -74,7 +74,9 @@ async function applyScheduledTripFinance(
   const financialStatus = deriveFinancialStatus(netAmount);
   const financialAppliedAt = new Date();
 
-  const transactionOps = [
+  const transactionOps: Prisma.PrismaPromise<unknown>[] = [];
+
+  transactionOps.push(
     prisma.driver.update({
       where: { id: trip.assignedCaptainId },
       data: {
@@ -85,7 +87,10 @@ async function applyScheduledTripFinance(
           increment: netDelta,
         },
       },
-    }),
+    })
+  );
+
+  transactionOps.push(
     prisma.scheduledTrip.update({
       where: { id: tripId },
       data: {
@@ -95,8 +100,8 @@ async function applyScheduledTripFinance(
         netAmount,
         financialAppliedAt,
       },
-    }),
-  ];
+    })
+  );
 
   if (existingLedger) {
     transactionOps.push(

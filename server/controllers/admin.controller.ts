@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import prisma from "../utils/prisma";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 
 type LedgerSummary = {
   totalTrips: number;
@@ -13,7 +14,7 @@ type LedgerSummary = {
   ruleBreakdown: Record<string, { trips: number; netAmount: number }>;
 };
 
-const summarizeLedgerEntries = (entries: any[]): LedgerSummary => {
+const summarizeLedgerEntries = (entries: Array<LedgerBase | LedgerWithTrip>): LedgerSummary => {
   return entries.reduce<LedgerSummary>(
     (acc, entry) => {
       const net = entry.netAmount ?? 0;
@@ -63,8 +64,38 @@ const normalizeRange = (start: Date, end: Date) => {
   return { start: normalizedStart, end: normalizedEnd };
 };
 
-const fetchLedgerEntries = async (params: { start: Date; end: Date; withTrips?: boolean }) => {
-  const { start, end, withTrips } = params;
+const ledgerTripInclude = {
+  scheduledTrip: {
+    select: {
+      id: true,
+      name: true,
+      tripDate: true,
+      scheduledTime: true,
+      status: true,
+      price: true,
+      financialRule: true,
+      financialAdjustment: true,
+      netAmount: true,
+      company: {
+        select: { id: true, name: true },
+      },
+      assignedCaptain: {
+        select: {
+          id: true,
+          name: true,
+          phone_number: true,
+          email: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.ScheduledTripLedgerInclude;
+
+type LedgerWithTrip = Prisma.ScheduledTripLedgerGetPayload<{ include: typeof ledgerTripInclude }>;
+type LedgerBase = Prisma.ScheduledTripLedgerGetPayload<{ include: {} }>;
+
+const fetchLedgerEntries = async (params: { start: Date; end: Date }) => {
+  const { start, end } = params;
 
   return prisma.scheduledTripLedger.findMany({
     where: {
@@ -74,34 +105,21 @@ const fetchLedgerEntries = async (params: { start: Date; end: Date; withTrips?: 
       },
     },
     orderBy: { calculatedAt: "asc" },
-    include: withTrips
-      ? {
-          scheduledTrip: {
-            select: {
-              id: true,
-              name: true,
-              tripDate: true,
-              scheduledTime: true,
-              status: true,
-              price: true,
-              financialRule: true,
-              financialAdjustment: true,
-              netAmount: true,
-              company: {
-                select: { id: true, name: true },
-              },
-              assignedCaptain: {
-                select: {
-                  id: true,
-                  name: true,
-                  phone_number: true,
-                  email: true,
-                },
-              },
-            },
-          },
-        }
-      : undefined,
+  });
+};
+
+const fetchLedgerEntriesWithTrips = async (params: { start: Date; end: Date }) => {
+  const { start, end } = params;
+
+  return prisma.scheduledTripLedger.findMany({
+    where: {
+      calculatedAt: {
+        gte: start,
+        lte: end,
+      },
+    },
+    orderBy: { calculatedAt: "asc" },
+    include: ledgerTripInclude,
   });
 };
 
@@ -1254,12 +1272,16 @@ export const getScheduledTripEarningsRange = async (req: any, res: Response) => 
       });
     }
 
-    const withTrips = includeTrips === "true";
-    const entries = await fetchLedgerEntries({
-      start: bounds.start,
-      end: bounds.end,
-      withTrips,
-    });
+    const includeTripsFlag = includeTrips === "true";
+    const entries = includeTripsFlag
+      ? await fetchLedgerEntriesWithTrips({
+          start: bounds.start,
+          end: bounds.end,
+        })
+      : await fetchLedgerEntries({
+          start: bounds.start,
+          end: bounds.end,
+        });
     const summary = summarizeLedgerEntries(entries);
     const summaryWithRange = {
       range: {
@@ -1276,7 +1298,7 @@ export const getScheduledTripEarningsRange = async (req: any, res: Response) => 
         end: bounds.end.toISOString(),
       },
       summary: summaryWithRange,
-      entries: withTrips ? entries : undefined,
+      entries: includeTripsFlag ? entries : undefined,
     });
   } catch (error: any) {
     console.error("Get scheduled trip earnings range error:", error);
@@ -1301,10 +1323,9 @@ export const getScheduledTripInvoice = async (req: any, res: Response) => {
       });
     }
 
-    const entries = await fetchLedgerEntries({
+    const entries = await fetchLedgerEntriesWithTrips({
       start: bounds.start,
       end: bounds.end,
-      withTrips: true,
     });
 
     const summary = summarizeLedgerEntries(entries);
