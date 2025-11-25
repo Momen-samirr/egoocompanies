@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFieldArray, Controller, FieldErrors } from "react-hook-form";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
 import { useTripForm } from "@/hooks/useTripForm";
 import LocationPicker from "@/components/trips/LocationPicker";
+import CaptainSelector from "@/components/trips/CaptainSelector";
 import FormField from "@/components/common/FormField";
 import Card, { CardBody, CardHeader } from "@/components/common/Card";
 import Button from "@/components/common/Button";
@@ -20,17 +21,8 @@ import {
 import { LocationData, TripFormData } from "@/types/trip";
 import { Company } from "@/types";
 
-interface Driver {
-  id: string;
-  name: string;
-  phone_number: string;
-  email: string;
-  status: string;
-}
-
 export default function CreateTripPage() {
   const router = useRouter();
-  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [checkpointLocations, setCheckpointLocations] = useState<
     Map<number, LocationData | null>
@@ -94,33 +86,18 @@ export default function CreateTripPage() {
     name: "points",
   });
 
-  const fetchDrivers = useCallback(async () => {
-    try {
-      const response = await api.get("/admin/drivers?limit=100&status=active");
-      setDrivers(response.data.drivers);
-    } catch (error) {
-      console.error("Error fetching drivers:", error);
-      toast.error("Failed to load drivers");
-    }
-  }, []);
-
-  const fetchCompanies = useCallback(async () => {
-    try {
-      const response = await api.get("/admin/companies");
-      setCompanies(response.data.companies || []);
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-      toast.error("Failed to load companies");
-    }
-  }, []);
-
   useEffect(() => {
-    const loadReferenceData = async () => {
-      await fetchDrivers();
-      await fetchCompanies();
+    const fetchCompanies = async () => {
+      try {
+        const response = await api.get("/admin/companies");
+        setCompanies(response.data.companies || []);
+      } catch (error) {
+        console.error("Error fetching companies:", error);
+        toast.error("Failed to load companies");
+      }
     };
-    loadReferenceData();
-  }, [fetchDrivers, fetchCompanies]);
+    fetchCompanies();
+  }, []);
 
   useEffect(() => {
     if (companies.length > 0 && !form.getValues("companyId")) {
@@ -379,20 +356,23 @@ export default function CreateTripPage() {
             <CardBody>
               <FormField
                 label="Assign Captain"
-                hint="Optional - can be assigned later"
+                hint="Optional - can be assigned later. Search by phone number, name, or email."
                 error={form.formState.errors.assignedCaptainId}
               >
-                <select
-                  {...form.register("assignedCaptainId")}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                >
-                  <option value="">No captain assigned yet</option>
-                  {drivers.map((driver) => (
-                    <option key={driver.id} value={driver.id}>
-                      {driver.name} ({driver.phone_number})
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={form.control}
+                  name="assignedCaptainId"
+                  render={({ field, fieldState }) => (
+                    <CaptainSelector
+                      value={field.value}
+                      onChange={(captainId) => {
+                        field.onChange(captainId || "");
+                      }}
+                      error={fieldState.error}
+                      disabled={isSubmitting}
+                    />
+                  )}
+                />
               </FormField>
             </CardBody>
           </Card>

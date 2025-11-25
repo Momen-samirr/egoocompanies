@@ -34,6 +34,11 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Ignore canceled requests (AbortError) - these are expected when requests are cancelled
+    if (error.name === "AbortError" || error.code === "ERR_CANCELED" || error.message === "canceled") {
+      return Promise.reject(error); // Reject silently without logging
+    }
+
     // Handle network errors
     if (!error.response) {
       console.error("❌ Network error:", error.message);

@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { GoogleMap, useLoadScript, Marker, InfoWindow, Polyline } from "@react-google-maps/api";
 import api from "@/lib/api";
 import { Driver, Ride } from "@/types";
-import { getToken } from "@/lib/auth";
+import { getToken, logout, isCompanyUser } from "@/lib/auth";
+import { ArrowRightOnRectangleIcon } from "@heroicons/react/24/outline";
 
 const mapContainerStyle = {
   width: "100%",
@@ -56,8 +57,16 @@ export default function MapPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string>("");
   const [hasAutoFitted, setHasAutoFitted] = useState(false);
+  const [isCompany, setIsCompany] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+
+  // Check user role only on client side to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+    setIsCompany(isCompanyUser());
+  }, []);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -514,6 +523,19 @@ export default function MapPage() {
       {/* Controls */}
       <div className="bg-white shadow-sm border-b p-4">
         <div className="flex flex-wrap items-center gap-4">
+          {/* Logout button for company users */}
+          {mounted && isCompany && (
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
+                title="Logout"
+              >
+                <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">Status:</span>
             <select
@@ -551,7 +573,7 @@ export default function MapPage() {
             <span className="text-sm text-gray-700">Show Active Rides</span>
           </label>
 
-          <div className="flex items-center gap-2 ml-auto">
+          <div className={`flex items-center gap-2 ${mounted && isCompany ? "" : "ml-auto"}`}>
             <div
               className={`w-3 h-3 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
             />

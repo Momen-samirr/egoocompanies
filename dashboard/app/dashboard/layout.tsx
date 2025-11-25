@@ -14,9 +14,19 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const isMapPage = pathname === "/dashboard/map";
-  const isCompany = isCompanyUser();
+  const [isCompany, setIsCompany] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Check user role only on client side to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+    setIsCompany(isCompanyUser());
+  }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     if (!isAuthenticated()) {
       router.push("/");
       return;
@@ -26,12 +36,10 @@ export default function DashboardLayout({
     if (isCompany && !isMapPage) {
       router.push("/dashboard/map");
     }
-  }, [router, pathname, isCompany, isMapPage]);
+  }, [router, pathname, isCompany, isMapPage, mounted]);
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Hide sidebar for COMPANY users
-  const showSidebar = !isCompany;
+  // Hide sidebar for COMPANY users (only after mount to avoid hydration issues)
+  const showSidebar = mounted ? !isCompany : true;
 
   return (
     <div className="flex h-screen bg-gray-100">

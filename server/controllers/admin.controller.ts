@@ -461,7 +461,7 @@ export const updateUserStatus = async (req: any, res: Response) => {
 // Get All Drivers
 export const getAllDrivers = async (req: any, res: Response) => {
   try {
-    const { page = 1, limit = 10, search, status, vehicleType } = req.query;
+    const { page = 1, limit = 10, search, status, vehicleType, includeAll } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
@@ -473,7 +473,8 @@ export const getAllDrivers = async (req: any, res: Response) => {
         { registration_number: { contains: search } },
       ];
     }
-    if (status) where.status = status;
+    // Only filter by status if includeAll is not true and status is provided
+    if (status && includeAll !== "true") where.status = status;
     if (vehicleType) where.vehicle_type = vehicleType;
 
     // Filter by company if user is COMPANY role
@@ -972,24 +973,57 @@ export const assignDriversToCompany = async (req: any, res: Response) => {
       });
     }
 
-    // Remove existing assignments for this company
-    await prisma.driverCompany.deleteMany({
+    // Get existing assignments for this company
+    const existingAssignments = await prisma.driverCompany.findMany({
       where: { companyId: id },
+      select: { driverId: true },
     });
 
-    // Create new assignments
-    const assignments = driverIds.map((driverId: string) => ({
-      driverId,
-      companyId: id,
-    }));
+    const existingDriverIds = existingAssignments.map((a) => a.driverId);
+    
+    // Determine which drivers to add and which to remove
+    const driversToAdd = driverIds.filter((driverId) => !existingDriverIds.includes(driverId));
+    const driversToRemove = existingDriverIds.filter((driverId) => !driverIds.includes(driverId));
 
-    await prisma.driverCompany.createMany({
-      data: assignments,
+    // Use a transaction to ensure atomicity
+    await prisma.$transaction(async (tx) => {
+      // Remove drivers that are no longer assigned
+      if (driversToRemove.length > 0) {
+        await tx.driverCompany.deleteMany({
+          where: {
+            companyId: id,
+            driverId: { in: driversToRemove },
+          },
+        });
+      }
+
+      // Add new assignments (only for drivers that don't already exist)
+      if (driversToAdd.length > 0) {
+        const newAssignments = driversToAdd.map((driverId: string) => ({
+          driverId,
+          companyId: id,
+        }));
+
+        await tx.driverCompany.createMany({
+          data: newAssignments,
+        });
+      }
     });
+
+    const changes = [];
+    if (driversToAdd.length > 0) {
+      changes.push(`added ${driversToAdd.length} driver(s)`);
+    }
+    if (driversToRemove.length > 0) {
+      changes.push(`removed ${driversToRemove.length} driver(s)`);
+    }
+    if (changes.length === 0) {
+      changes.push("no changes needed");
+    }
 
     res.status(200).json({
       success: true,
-      message: `Successfully assigned ${driverIds.length} driver(s) to company`,
+      message: `Successfully updated driver assignments: ${changes.join(", ")}. Total: ${driverIds.length} driver(s) assigned to company`,
     });
   } catch (error: any) {
     console.error("Assign drivers to company error:", error);

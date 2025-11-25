@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -58,7 +59,14 @@ const navigationGroups: NavGroup[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const isCompany = isCompanyUser();
+  const [isCompany, setIsCompany] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Check user role only on client side to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+    setIsCompany(isCompanyUser());
+  }, []);
 
   const isActive = (href: string) => {
     if (href === "/dashboard") {
@@ -67,8 +75,8 @@ export default function Sidebar() {
     return pathname.startsWith(href);
   };
 
-  // Filter navigation groups based on role
-  const filteredGroups = isCompany
+  // Filter navigation groups based on role (only after mount)
+  const filteredGroups = mounted && isCompany
     ? navigationGroups.filter((group) => {
         // For COMPANY users, only show groups with Live Map
         return group.items.some((item) => item.href === "/dashboard/map");
