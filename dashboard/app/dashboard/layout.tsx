@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, isCompanyUser } from "@/lib/auth";
 
 export default function DashboardLayout({
   children,
@@ -14,37 +14,49 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const isMapPage = pathname === "/dashboard/map";
+  const isCompany = isCompanyUser();
 
   useEffect(() => {
     if (!isAuthenticated()) {
       router.push("/");
+      return;
     }
-  }, [router]);
+
+    // Redirect COMPANY users to map if they try to access other pages
+    if (isCompany && !isMapPage) {
+      router.push("/dashboard/map");
+    }
+  }, [router, pathname, isCompany, isMapPage]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Hide sidebar for COMPANY users
+  const showSidebar = !isCompany;
 
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
+      {showSidebar && sidebarOpen && (
         <div
           className="fixed inset-0 bg-gray-600 bg-opacity-75 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <Sidebar />
-      </div>
+      {/* Sidebar - Hidden for COMPANY users */}
+      {showSidebar && (
+        <div
+          className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <Sidebar />
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
-        {!isMapPage && (
+        {!isMapPage && showSidebar && (
           <Header>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -57,7 +69,7 @@ export default function DashboardLayout({
             </button>
           </Header>
         )}
-        <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 ${!isMapPage ? "p-4 lg:p-6" : ""}`}>
+        <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 ${!isMapPage && showSidebar ? "p-4 lg:p-6" : ""}`}>
           {children}
         </main>
       </div>

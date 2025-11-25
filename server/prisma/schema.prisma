@@ -30,6 +30,7 @@ enum AdminRole {
   SUPER_ADMIN
   ADMIN
   SUPPORT
+  COMPANY
 }
 
 model Admin {
@@ -38,9 +39,11 @@ model Admin {
   password     String
   name         String
   role         AdminRole        @default(ADMIN)
+  companyId    String?          @db.ObjectId
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   createdTrips ScheduledTrip[]  @relation("CreatedBy")
+  company      Company?         @relation("CompanyAccounts", fields: [companyId], references: [id])
 }
 
 model driver {
@@ -69,6 +72,7 @@ model driver {
   assignedTrips       ScheduledTrip[]  @relation("AssignedCaptain")
   emergencyUsages     EmergencyUsage[] @relation("DriverEmergencyUsages")
   scheduledTripLedger ScheduledTripLedger[] @relation("LedgerCaptain")
+  companies           DriverCompany[]
 }
 
 model EmergencyUsage {
@@ -117,6 +121,19 @@ model Company {
   createdAt                 DateTime        @default(now())
   updatedAt                 DateTime        @updatedAt
   scheduledTrips            ScheduledTrip[]
+  drivers                   DriverCompany[]
+  companyAccounts           Admin[]         @relation("CompanyAccounts")
+}
+
+model DriverCompany {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  driverId  String   @db.ObjectId
+  companyId String   @db.ObjectId
+  driver    driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([driverId, companyId])
 }
 
 model ScheduledTrip {

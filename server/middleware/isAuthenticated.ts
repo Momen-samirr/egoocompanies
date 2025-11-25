@@ -115,6 +115,9 @@ export const isAuthenticatedAdmin = (
 
         const adminData = await prisma.admin.findUnique({
           where: { id: decoded.id },
+          include: {
+            company: true,
+          },
         });
 
         if (!adminData) {
@@ -130,4 +133,38 @@ export const isAuthenticatedAdmin = (
     console.log(error);
     res.status(500).json({ message: "Internal server error" });
   }
+};
+
+// Middleware to check if user is a company user (COMPANY role)
+export const isCompanyUser = (
+  req: any,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.admin) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  if (req.admin.role !== "COMPANY") {
+    return res.status(403).json({ message: "Access denied. Company account required." });
+  }
+
+  next();
+};
+
+// Middleware to check if user is an admin user (not COMPANY role)
+export const isAdminUser = (
+  req: any,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.admin) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  if (req.admin.role === "COMPANY") {
+    return res.status(403).json({ message: "Access denied. Admin account required." });
+  }
+
+  next();
 };

@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const { WebSocketServer } = require("ws");
 const geolib = require("geolib");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 
@@ -138,6 +139,74 @@ wss.on('error', (error) => {
   console.error('WebSocket server error:', error);
 });
 
+// Store company driver mappings (companyId -> array of driverIds)
+// This will be updated when drivers are assigned to companies
+let companyDriversMap = {};
+
+// Function to fetch company driver IDs from the API
+const fetchCompanyDrivers = async (companyId) => {
+  if (!companyId) return [];
+  
+  // If we have cached data, use it
+  if (companyDriversMap[companyId]) {
+    return companyDriversMap[companyId];
+  }
+  
+  try {
+    // Make HTTP request to get company drivers
+    // We'll use the server's API endpoint
+    const serverUrl = process.env.SERVER_URL || "http://localhost:8000";
+    const response = await fetch(`${serverUrl}/admin/companies/${companyId}/drivers`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.drivers) {
+        const driverIds = data.drivers.map((driver) => driver.id);
+        companyDriversMap[companyId] = driverIds;
+        return driverIds;
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Error fetching company drivers for ${companyId}:`, error);
+  }
+  
+  return [];
+};
+
+// Function to filter drivers by company
+const filterDriversByCompany = (driversObj, companyDriverIds) => {
+  if (!companyDriverIds || companyDriverIds.length === 0) {
+    return {};
+  }
+  
+  const filtered = {};
+  for (const driverId of companyDriverIds) {
+    if (driversObj[driverId]) {
+      filtered[driverId] = driversObj[driverId];
+    }
+  }
+  return filtered;
+};
+
+// Function to filter rides by company (rides with drivers from company)
+const filterRidesByCompany = (ridesObj, companyDriverIds) => {
+  if (!companyDriverIds || companyDriverIds.length === 0) {
+    return {};
+  }
+  
+  const filtered = {};
+  for (const [rideId, ride] of Object.entries(ridesObj)) {
+    if (ride.driverId && companyDriverIds.includes(ride.driverId)) {
+      filtered[rideId] = ride;
+    }
+  }
+  return filtered;
+};
+
 // Broadcast driver locations to all admin clients
 const broadcastToAdmins = (data) => {
   let adminCount = 0;
@@ -149,7 +218,31 @@ const broadcastToAdmins = (data) => {
       if (client.readyState === 1) {
         // 1 = OPEN
         try {
-          client.send(JSON.stringify(data));
+          let dataToSend = data;
+          
+          // Filter by company if this is a COMPANY user
+          if (client.companyId && client.companyDriverIds) {
+            if (data.type === "driverLocations" || data.type === "driverLocationUpdate") {
+              if (data.type === "driverLocations") {
+                dataToSend = {
+                  ...data,
+                  drivers: filterDriversByCompany(data.drivers || {}, client.companyDriverIds),
+                };
+              } else if (data.type === "driverLocationUpdate") {
+                // Only send if driver belongs to company
+                if (!client.companyDriverIds.includes(data.driver?.id)) {
+                  return; // Skip this update
+                }
+              }
+            } else if (data.type === "activeRides" || data.type === "activeRidesUpdate") {
+              dataToSend = {
+                ...data,
+                rides: filterRidesByCompany(data.rides || {}, client.companyDriverIds),
+              };
+            }
+          }
+          
+          client.send(JSON.stringify(dataToSend));
           sentCount++;
         } catch (error) {
           console.error(`❌ Error sending to admin client:`, error);
@@ -184,13 +277,44 @@ const sendToUser = (userId, data) => {
 wss.on("connection", (ws, req) => {
   // Check if this is an admin connection (from dashboard)
   let isAdmin = false;
+  let companyId = null;
+  let companyDriverIds = null;
+  
   try {
     // Parse URL to get query parameters
     const urlString = req.url || "";
     console.log(`🔍 New WebSocket connection - URL: ${urlString}`);
     const url = new URL(urlString, `http://${req.headers.host || "localhost"}`);
     isAdmin = url.searchParams.get("role") === "admin";
-    console.log(`🔍 Connection type: ${isAdmin ? "Admin (Dashboard)" : "Driver/User"}`);
+    
+    // Try to get token from query params or Authorization header
+    const token = url.searchParams.get("token") || 
+                  (req.headers.authorization && req.headers.authorization.replace("Bearer ", ""));
+    
+    if (token && isAdmin) {
+      try {
+        const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+        companyId = decoded.companyId || null;
+        console.log(`🔍 Decoded token - role: ${decoded.role}, companyId: ${companyId}`);
+        
+        // If COMPANY user, fetch company driver IDs
+        if (decoded.role === "COMPANY" && companyId) {
+          // We'll fetch this from the database via HTTP request
+          // For now, we'll set it up to be fetched asynchronously
+          fetchCompanyDrivers(companyId).then((driverIds) => {
+            ws.companyDriverIds = driverIds;
+            companyDriverIds = driverIds;
+            console.log(`✅ Loaded ${driverIds.length} drivers for company ${companyId}`);
+          }).catch((err) => {
+            console.error(`❌ Error fetching company drivers:`, err);
+          });
+        }
+      } catch (err) {
+        console.log(`⚠️ Could not decode token:`, err.message);
+      }
+    }
+    
+    console.log(`🔍 Connection type: ${isAdmin ? "Admin (Dashboard)" : "Driver/User"}, companyId: ${companyId}`);
   } catch (error) {
     // Fallback: check if URL contains role=admin
     if (req.url && req.url.includes("role=admin")) {
@@ -198,7 +322,10 @@ wss.on("connection", (ws, req) => {
     }
     console.log(`🔍 URL parsing fallback, isAdmin: ${isAdmin}, URL: ${req.url}`);
   }
+  
   ws.isAdmin = isAdmin;
+  ws.companyId = companyId;
+  ws.companyDriverIds = companyDriverIds;
   
   // Log connection details
   console.log(`📊 Current connections: ${wss.clients.size} total`);
@@ -220,21 +347,44 @@ wss.on("connection", (ws, req) => {
     console.log(`📊 Current drivers in system: ${Object.keys(drivers).length}`);
     console.log(`📊 Current active rides: ${Object.keys(activeRides).length}`);
     
-    // Send current driver locations to new admin client
-    const driverLocationsMessage = JSON.stringify({
-      type: "driverLocations",
-      drivers: drivers,
-    });
-    console.log(`📤 Sending initial driver locations (${Object.keys(drivers).length} drivers) to admin client`);
-    ws.send(driverLocationsMessage);
+    // Send initial data after company drivers are loaded (if COMPANY user)
+    const sendInitialData = () => {
+      let driversToSend = drivers;
+      let ridesToSend = activeRides;
+      
+      // Filter by company if COMPANY user
+      if (ws.companyId && ws.companyDriverIds && ws.companyDriverIds.length > 0) {
+        driversToSend = filterDriversByCompany(drivers, ws.companyDriverIds);
+        ridesToSend = filterRidesByCompany(activeRides, ws.companyDriverIds);
+        console.log(`🔍 Filtered to ${Object.keys(driversToSend).length} drivers and ${Object.keys(ridesToSend).length} rides for company ${ws.companyId}`);
+      }
+      
+      // Send current driver locations to new admin client
+      const driverLocationsMessage = JSON.stringify({
+        type: "driverLocations",
+        drivers: driversToSend,
+      });
+      console.log(`📤 Sending initial driver locations (${Object.keys(driversToSend).length} drivers) to admin client`);
+      ws.send(driverLocationsMessage);
+      
+      // Send active rides
+      const activeRidesMessage = JSON.stringify({
+        type: "activeRides",
+        rides: ridesToSend,
+      });
+      console.log(`📤 Sending initial active rides (${Object.keys(ridesToSend).length} rides) to admin client`);
+      ws.send(activeRidesMessage);
+    };
     
-    // Send active rides
-    const activeRidesMessage = JSON.stringify({
-      type: "activeRides",
-      rides: activeRides,
-    });
-    console.log(`📤 Sending initial active rides (${Object.keys(activeRides).length} rides) to admin client`);
-    ws.send(activeRidesMessage);
+    // If COMPANY user, wait for driver IDs to load, otherwise send immediately
+    if (ws.companyId && !ws.companyDriverIds) {
+      // Wait a bit for company drivers to load
+      setTimeout(() => {
+        sendInitialData();
+      }, 500);
+    } else {
+      sendInitialData();
+    }
   } else {
     console.log("🔌 Client connected (driver or user)");
     // Try to get userId from query params

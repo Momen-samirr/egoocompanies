@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { GoogleMap, useLoadScript, Marker, InfoWindow, Polyline } from "@react-google-maps/api";
 import api from "@/lib/api";
 import { Driver, Ride } from "@/types";
+import { getToken } from "@/lib/auth";
 
 const mapContainerStyle = {
   width: "100%",
@@ -71,10 +72,17 @@ export default function MapPage() {
     // Remove trailing slash if present
     wsUrl = wsUrl.replace(/\/$/, "");
     
-    // Construct the full WebSocket URL with query parameter
-    const fullWsUrl = `${wsUrl}?role=admin`;
+    // Get token for authentication
+    const token = getToken();
     
-    console.log("🔌 Connecting to WebSocket:", fullWsUrl);
+    // Construct the full WebSocket URL with query parameters
+    const params = new URLSearchParams({ role: "admin" });
+    if (token) {
+      params.append("token", token);
+    }
+    const fullWsUrl = `${wsUrl}?${params.toString()}`;
+    
+    console.log("🔌 Connecting to WebSocket:", fullWsUrl.replace(token || "", "***"));
     console.log("📍 Environment URL:", process.env.NEXT_PUBLIC_WEBSOCKET_URL);
     
     let ws: WebSocket;

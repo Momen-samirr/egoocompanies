@@ -153,6 +153,9 @@ export const adminLogin = async (req: Request, res: Response) => {
 
     const admin = await prisma.admin.findUnique({
       where: { email },
+      include: {
+        company: true,
+      },
     });
 
     if (!admin) {
@@ -171,7 +174,7 @@ export const adminLogin = async (req: Request, res: Response) => {
     }
 
     const token = jwt.sign(
-      { id: admin.id, role: admin.role },
+      { id: admin.id, role: admin.role, companyId: admin.companyId },
       process.env.ACCESS_TOKEN_SECRET!,
       { expiresIn: "7d" }
     );
@@ -191,6 +194,7 @@ export const adminLogin = async (req: Request, res: Response) => {
         name: admin.name,
         email: admin.email,
         role: admin.role,
+        companyId: admin.companyId,
       },
     });
   } catch (error: any) {
@@ -472,6 +476,16 @@ export const getAllDrivers = async (req: any, res: Response) => {
     if (status) where.status = status;
     if (vehicleType) where.vehicle_type = vehicleType;
 
+    // Filter by company if user is COMPANY role
+    if (req.admin && req.admin.role === "COMPANY" && req.admin.companyId) {
+      const companyDrivers = await prisma.driverCompany.findMany({
+        where: { companyId: req.admin.companyId },
+        select: { driverId: true },
+      });
+      const driverIds = companyDrivers.map((dc) => dc.driverId);
+      where.id = { in: driverIds };
+    }
+
     const [drivers, total] = await Promise.all([
       prisma.driver.findMany({
         where,
@@ -673,6 +687,360 @@ export const deleteCompany = async (req: any, res: Response) => {
   }
 };
 
+// Company Account Management Functions
+
+// Create Company Account
+export const createCompanyAccount = async (req: any, res: Response) => {
+  try {
+    const { name, email, password, companyId } = req.body;
+
+    if (!name || !email || !password || !companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email, password, and companyId are required",
+      });
+    }
+
+    // Check if company exists
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    // Check if email already exists
+    const existingAdmin = await prisma.admin.findUnique({
+      where: { email },
+    });
+
+    if (existingAdmin) {
+      return res.status(400).json({
+        success: false,
+        message: "An account with this email already exists",
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create company account (Admin with COMPANY role)
+    const companyAccount = await prisma.admin.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: "COMPANY",
+        companyId,
+      },
+      include: {
+        company: true,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      companyAccount: {
+        id: companyAccount.id,
+        name: companyAccount.name,
+        email: companyAccount.email,
+        role: companyAccount.role,
+        companyId: companyAccount.companyId,
+        company: companyAccount.company,
+      },
+    });
+  } catch (error: any) {
+    console.error("Create company account error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get All Company Accounts
+export const getCompanyAccounts = async (req: any, res: Response) => {
+  try {
+    const companyAccounts = await prisma.admin.findMany({
+      where: {
+        role: "COMPANY",
+      },
+      include: {
+        company: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      companyAccounts: companyAccounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        role: account.role,
+        companyId: account.companyId,
+        company: account.company,
+        createdAt: account.createdAt,
+        updatedAt: account.updatedAt,
+      })),
+    });
+  } catch (error: any) {
+    console.error("Get company accounts error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Update Company Account
+export const updateCompanyAccount = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, email, password, companyId } = req.body;
+
+    const companyAccount = await prisma.admin.findUnique({
+      where: { id },
+    });
+
+    if (!companyAccount) {
+      return res.status(404).json({
+        success: false,
+        message: "Company account not found",
+      });
+    }
+
+    if (companyAccount.role !== "COMPANY") {
+      return res.status(400).json({
+        success: false,
+        message: "This account is not a company account",
+      });
+    }
+
+    const data: any = {};
+
+    if (name) {
+      data.name = name;
+    }
+
+    if (email && email !== companyAccount.email) {
+      // Check if email is already taken
+      const existingAdmin = await prisma.admin.findUnique({
+        where: { email },
+      });
+
+      if (existingAdmin) {
+        return res.status(400).json({
+          success: false,
+          message: "An account with this email already exists",
+        });
+      }
+
+      data.email = email;
+    }
+
+    if (password) {
+      data.password = await bcrypt.hash(password, 10);
+    }
+
+    if (companyId) {
+      // Verify company exists
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+      });
+
+      if (!company) {
+        return res.status(404).json({
+          success: false,
+          message: "Company not found",
+        });
+      }
+
+      data.companyId = companyId;
+    }
+
+    const updatedAccount = await prisma.admin.update({
+      where: { id },
+      data,
+      include: {
+        company: true,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      companyAccount: {
+        id: updatedAccount.id,
+        name: updatedAccount.name,
+        email: updatedAccount.email,
+        role: updatedAccount.role,
+        companyId: updatedAccount.companyId,
+        company: updatedAccount.company,
+      },
+    });
+  } catch (error: any) {
+    console.error("Update company account error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Delete Company Account
+export const deleteCompanyAccount = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const companyAccount = await prisma.admin.findUnique({
+      where: { id },
+    });
+
+    if (!companyAccount) {
+      return res.status(404).json({
+        success: false,
+        message: "Company account not found",
+      });
+    }
+
+    if (companyAccount.role !== "COMPANY") {
+      return res.status(400).json({
+        success: false,
+        message: "This account is not a company account",
+      });
+    }
+
+    await prisma.admin.delete({
+      where: { id },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Company account deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("Delete company account error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Assign Drivers to Company
+export const assignDriversToCompany = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params; // companyId
+    const { driverIds } = req.body; // Array of driver IDs
+
+    if (!driverIds || !Array.isArray(driverIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "driverIds must be an array",
+      });
+    }
+
+    // Verify company exists
+    const company = await prisma.company.findUnique({
+      where: { id },
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    // Verify all drivers exist
+    const drivers = await prisma.driver.findMany({
+      where: {
+        id: { in: driverIds },
+      },
+    });
+
+    if (drivers.length !== driverIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more drivers not found",
+      });
+    }
+
+    // Remove existing assignments for this company
+    await prisma.driverCompany.deleteMany({
+      where: { companyId: id },
+    });
+
+    // Create new assignments
+    const assignments = driverIds.map((driverId: string) => ({
+      driverId,
+      companyId: id,
+    }));
+
+    await prisma.driverCompany.createMany({
+      data: assignments,
+      skipDuplicates: true,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully assigned ${driverIds.length} driver(s) to company`,
+    });
+  } catch (error: any) {
+    console.error("Assign drivers to company error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get Company Drivers
+export const getCompanyDrivers = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params; // companyId
+
+    // Verify company exists
+    const company = await prisma.company.findUnique({
+      where: { id },
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    // Get all drivers assigned to this company
+    const driverCompanies = await prisma.driverCompany.findMany({
+      where: { companyId: id },
+      include: {
+        driver: true,
+      },
+    });
+
+    const drivers = driverCompanies.map((dc) => dc.driver);
+
+    res.status(200).json({
+      success: true,
+      drivers,
+    });
+  } catch (error: any) {
+    console.error("Get company drivers error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
 // Get Driver By ID
 export const getDriverById = async (req: any, res: Response) => {
   try {
@@ -785,6 +1153,32 @@ export const getAllRides = async (req: any, res: Response) => {
       where.cratedAt = {};
       if (startDate) where.cratedAt.gte = new Date(startDate);
       if (endDate) where.cratedAt.lte = new Date(endDate);
+    }
+
+    // Filter by company if user is COMPANY role
+    if (req.admin && req.admin.role === "COMPANY" && req.admin.companyId) {
+      const companyDrivers = await prisma.driverCompany.findMany({
+        where: { companyId: req.admin.companyId },
+        select: { driverId: true },
+      });
+      const driverIds = companyDrivers.map((dc) => dc.driverId);
+      if (where.driverId) {
+        // If driverId is already specified, check if it's in company drivers
+        if (!driverIds.includes(where.driverId)) {
+          return res.status(200).json({
+            success: true,
+            rides: [],
+            pagination: {
+              page: Number(page),
+              limit: Number(limit),
+              total: 0,
+              pages: 0,
+            },
+          });
+        }
+      } else {
+        where.driverId = { in: driverIds };
+      }
     }
 
     const [rides, total] = await Promise.all([
@@ -975,10 +1369,22 @@ export const sendNotification = async (req: any, res: Response) => {
 // Get Active Rides with Locations
 export const getActiveRidesWithLocations = async (req: any, res: Response) => {
   try {
+    const where: any = {
+      status: { in: ["Accepted", "In Progress"] },
+    };
+
+    // Filter by company if user is COMPANY role
+    if (req.admin && req.admin.role === "COMPANY" && req.admin.companyId) {
+      const companyDrivers = await prisma.driverCompany.findMany({
+        where: { companyId: req.admin.companyId },
+        select: { driverId: true },
+      });
+      const driverIds = companyDrivers.map((dc) => dc.driverId);
+      where.driverId = { in: driverIds };
+    }
+
     const rides = await prisma.rides.findMany({
-      where: {
-        status: { in: ["Accepted", "In Progress"] },
-      },
+      where,
       include: {
         user: {
           select: {
@@ -1201,6 +1607,11 @@ export const getScheduledTrips = async (req: any, res: Response) => {
       where.tripDate = {};
       if (startDate) where.tripDate.gte = new Date(startDate);
       if (endDate) where.tripDate.lte = new Date(endDate);
+    }
+
+    // Filter by company if user is COMPANY role
+    if (req.admin && req.admin.role === "COMPANY" && req.admin.companyId) {
+      where.companyId = req.admin.companyId;
     }
 
     const [trips, total] = await Promise.all([

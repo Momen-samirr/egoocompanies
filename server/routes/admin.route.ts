@@ -28,7 +28,14 @@ import {
   createCompany,
   updateCompany,
   deleteCompany,
+  createCompanyAccount,
+  getCompanyAccounts,
+  updateCompanyAccount,
+  deleteCompanyAccount,
+  assignDriversToCompany,
+  getCompanyDrivers,
 } from "../controllers/admin.controller";
+import { isAuthenticatedAdmin, isAdminUser } from "../middleware/isAuthenticated";
 import { isAuthenticatedAdmin } from "../middleware/isAuthenticated";
 
 const adminRouter = express.Router();
@@ -52,9 +59,19 @@ adminRouter.put("/drivers/:id/verify", isAuthenticatedAdmin, verifyDriverDocumen
 
 // Companies
 adminRouter.get("/companies", isAuthenticatedAdmin, getCompanies);
-adminRouter.post("/companies", isAuthenticatedAdmin, createCompany);
-adminRouter.put("/companies/:id", isAuthenticatedAdmin, updateCompany);
-adminRouter.delete("/companies/:id", isAuthenticatedAdmin, deleteCompany);
+adminRouter.post("/companies", isAuthenticatedAdmin, isAdminUser, createCompany);
+adminRouter.put("/companies/:id", isAuthenticatedAdmin, isAdminUser, updateCompany);
+adminRouter.delete("/companies/:id", isAuthenticatedAdmin, isAdminUser, deleteCompany);
+
+// Company Accounts
+adminRouter.get("/company-accounts", isAuthenticatedAdmin, isAdminUser, getCompanyAccounts);
+adminRouter.post("/company-accounts", isAuthenticatedAdmin, isAdminUser, createCompanyAccount);
+adminRouter.put("/company-accounts/:id", isAuthenticatedAdmin, isAdminUser, updateCompanyAccount);
+adminRouter.delete("/company-accounts/:id", isAuthenticatedAdmin, isAdminUser, deleteCompanyAccount);
+
+// Company Driver Assignments
+adminRouter.post("/companies/:id/assign-drivers", isAuthenticatedAdmin, isAdminUser, assignDriversToCompany);
+adminRouter.get("/companies/:id/drivers", isAuthenticatedAdmin, getCompanyDrivers);
 
 // Rides
 adminRouter.get("/rides", isAuthenticatedAdmin, getAllRides);

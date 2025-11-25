@@ -14,7 +14,7 @@ import {
   Squares2X2Icon,
   BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
-import { logout } from "@/lib/auth";
+import { logout, isCompanyUser } from "@/lib/auth";
 
 interface NavGroup {
   title?: string;
@@ -58,6 +58,7 @@ const navigationGroups: NavGroup[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const isCompany = isCompanyUser();
 
   const isActive = (href: string) => {
     if (href === "/dashboard") {
@@ -65,6 +66,17 @@ export default function Sidebar() {
     }
     return pathname.startsWith(href);
   };
+
+  // Filter navigation groups based on role
+  const filteredGroups = isCompany
+    ? navigationGroups.filter((group) => {
+        // For COMPANY users, only show groups with Live Map
+        return group.items.some((item) => item.href === "/dashboard/map");
+      }).map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.href === "/dashboard/map"),
+      }))
+    : navigationGroups;
 
   return (
     <div className="flex flex-col w-64 bg-slate-900 text-white border-r border-slate-800/50">
@@ -74,14 +86,14 @@ export default function Sidebar() {
           <Squares2X2Icon className="h-6 w-6 text-white" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-white">Mo2 Admin</h1>
-          <p className="text-xs text-slate-400">Dashboard</p>
+          <h1 className="text-lg font-bold text-white">{isCompany ? "Company" : "Mo2 Admin"}</h1>
+          <p className="text-xs text-slate-400">{isCompany ? "Live Map" : "Dashboard"}</p>
         </div>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-8 overflow-y-auto sidebar-scroll">
-        {navigationGroups.map((group, groupIndex) => (
+        {filteredGroups.map((group, groupIndex) => (
           <div key={groupIndex}>
             {group.title && (
               <div className="px-4 py-2 mb-2">
