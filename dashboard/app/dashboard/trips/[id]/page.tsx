@@ -25,6 +25,7 @@ interface ScheduledTrip {
     | "EMERGENCY_TERMINATED"
     | "EMERGENCY_ENDED"
     | "FORCE_CLOSED";
+  tripType?: "ARRIVAL" | "DEPARTURE";
   assignedCaptain: {
     id: string;
     name: string;
@@ -54,6 +55,7 @@ interface ScheduledTrip {
     longitude: number;
     order: number;
     isFinalPoint: boolean;
+    expectedTime?: string | null;
     reachedAt: string | null;
   }>;
   progress: {
