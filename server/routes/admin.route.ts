@@ -36,7 +36,6 @@ import {
   getCompanyDrivers,
 } from "../controllers/admin.controller";
 import { isAuthenticatedAdmin, isAdminUser } from "../middleware/isAuthenticated";
-import { isAuthenticatedAdmin } from "../middleware/isAuthenticated";
 
 const adminRouter = express.Router();
 

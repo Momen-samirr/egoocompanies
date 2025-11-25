@@ -985,7 +985,6 @@ export const assignDriversToCompany = async (req: any, res: Response) => {
 
     await prisma.driverCompany.createMany({
       data: assignments,
-      skipDuplicates: true,
     });
 
     res.status(200).json({
