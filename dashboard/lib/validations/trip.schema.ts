@@ -64,10 +64,7 @@ export const tripFormSchema = z
     scheduledTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
       message: "Invalid time format. Use HH:MM format",
     }),
-    tripType: z.enum(["ARRIVAL", "DEPARTURE"], {
-      required_error: "Trip type is required",
-      invalid_type_error: "Trip type must be either ARRIVAL or DEPARTURE",
-    }),
+    tripType: z.enum(["ARRIVAL", "DEPARTURE"]),
     assignedCaptainId: z.string().optional(),
     companyId: z.string().min(1, "Company is required"),
     price: z
