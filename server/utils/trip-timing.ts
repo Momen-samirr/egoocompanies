@@ -29,12 +29,50 @@ export function calculateTimingDifference(
   }
 
   // Validate that both dates are valid Date objects
-  const expectedDate = expectedTime instanceof Date ? expectedTime : new Date(expectedTime);
+  let expectedDate = expectedTime instanceof Date ? expectedTime : new Date(expectedTime);
   const reachedDate = reachedAt instanceof Date ? reachedAt : new Date(reachedAt);
 
   if (isNaN(expectedDate.getTime()) || isNaN(reachedDate.getTime())) {
     console.error('[Timing] Invalid date objects:', { expectedTime, reachedAt });
     return null;
+  }
+
+  // FIX: Handle timezone mismatch for existing trips stored with old format
+  // Old trips stored expectedTime as UTC (with "Z"), but user entered local time
+  // Strategy: If the difference is unreasonably large and negative (showing early when should be late),
+  // try adjusting expectedTime by the server's timezone offset
+  const initialDifferenceMs = reachedDate.getTime() - expectedDate.getTime();
+  const initialMinutes = Math.round(initialDifferenceMs / (1000 * 60));
+  const initialHours = Math.abs(initialMinutes) / 60;
+  
+  // Detect timezone bug: if showing "early" by > 1 hour, it's likely a timezone issue
+  // This indicates expectedTime was stored in wrong timezone (likely UTC when it should be local)
+  // We check if adjusting by server timezone offset makes the result more reasonable
+  if (initialMinutes < -60) {
+    // getTimezoneOffset() returns offset in minutes (negative for timezones ahead of UTC)
+    // Example: UTC+2 returns -120, UTC-5 returns 300
+    // If expectedTime was stored as UTC but should be local time:
+    //   - User entered: 10:30 PM local (UTC+2) = 8:30 PM UTC
+    //   - Stored as: 10:30 PM UTC (wrong - 2 hours ahead)
+    //   - To fix: subtract 2 hours (7200000 ms) from stored value
+    const serverOffsetMinutes = new Date().getTimezoneOffset(); // Returns -120 for UTC+2
+    // Convert to positive milliseconds for subtraction (we always subtract to go back in time)
+    const correctionMs = Math.abs(serverOffsetMinutes) * 60 * 1000;
+    
+    // Adjust expectedTime: subtract the correction to convert from UTC to local-equivalent UTC
+    // This corrects the timezone mismatch (stored UTC -> correct UTC)
+    const adjustedExpectedDate = new Date(expectedDate.getTime() - correctionMs);
+    const adjustedDifferenceMs = reachedDate.getTime() - adjustedExpectedDate.getTime();
+    const adjustedMinutes = Math.round(adjustedDifferenceMs / (1000 * 60));
+    
+    // If adjusted difference is reasonable (between -60 and +120 minutes), use it
+    if (adjustedMinutes >= -60 && adjustedMinutes <= 120) {
+      console.warn('[Timing] ⚠️ Detected timezone mismatch in expectedTime, applying correction');
+      console.warn('  Original expectedTime (UTC):', expectedDate.toISOString());
+      console.warn('  Adjusted expectedTime (corrected):', adjustedExpectedDate.toISOString());
+      console.warn('  Original diff:', initialMinutes, 'minutes | Adjusted diff:', adjustedMinutes, 'minutes');
+      expectedDate = adjustedExpectedDate;
+    }
   }
 
   // Log timestamps for debugging (in both UTC and ISO format)

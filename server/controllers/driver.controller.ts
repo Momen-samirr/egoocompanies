@@ -1143,6 +1143,19 @@ export const updateTripProgress = async (req: any, res: Response) => {
     // Mark the checkpoint as reached
     const checkpoint = trip.points[checkpointIndex];
     const reachedAt = new Date();
+
+    // Log the reached time for debugging
+    console.log("[Trip Progress] Checkpoint reached:");
+    console.log("  Checkpoint:", checkpoint.name);
+    console.log("  Reached at (UTC):", reachedAt.toISOString());
+    console.log("  Reached at (Local):", reachedAt.toLocaleString());
+    console.log(
+      "  Expected time:",
+      checkpoint.expectedTime
+        ? new Date(checkpoint.expectedTime).toISOString()
+        : "N/A"
+    );
+
     await prisma.tripPoint.update({
       where: { id: checkpoint.id },
       data: {
@@ -1153,7 +1166,11 @@ export const updateTripProgress = async (req: any, res: Response) => {
     // Calculate timing difference for ARRIVAL trips
     let timing = null;
     if (trip.tripType === "ARRIVAL" && checkpoint.expectedTime) {
+      console.log("[Trip Progress] Calculating timing for ARRIVAL trip");
       timing = calculateTimingDifference(checkpoint.expectedTime, reachedAt);
+      if (timing) {
+        console.log("[Trip Progress] Timing result:", timing);
+      }
     }
 
     // Update progress

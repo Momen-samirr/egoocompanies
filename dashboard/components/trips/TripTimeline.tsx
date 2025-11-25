@@ -31,7 +31,7 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
     }
 
     // Parse dates - ensure they're valid Date objects
-    const expectedTime = new Date(checkpoint.expectedTime);
+    let expectedTime = new Date(checkpoint.expectedTime);
     const reachedAt = new Date(checkpoint.reachedAt);
     
     // Validate dates
@@ -41,6 +41,28 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
         reachedAt: checkpoint.reachedAt
       });
       return null;
+    }
+
+    // FIX: Handle timezone mismatch for existing trips stored with old format
+    // Same logic as server-side fix
+    const initialDifferenceMs = reachedAt.getTime() - expectedTime.getTime();
+    const initialMinutes = Math.round(initialDifferenceMs / (1000 * 60));
+    
+    // Detect timezone bug: if showing "early" by > 1 hour, try adjusting
+    if (initialMinutes < -60) {
+      // getTimezoneOffset() returns negative for timezones ahead of UTC
+      // To convert from UTC (stored) to local (correct), subtract the absolute offset
+      const serverOffsetMinutes = new Date().getTimezoneOffset();
+      const correctionMs = Math.abs(serverOffsetMinutes) * 60 * 1000;
+      const adjustedExpectedTime = new Date(expectedTime.getTime() - correctionMs);
+      const adjustedDifferenceMs = reachedAt.getTime() - adjustedExpectedTime.getTime();
+      const adjustedMinutes = Math.round(adjustedDifferenceMs / (1000 * 60));
+      
+      // If adjusted difference is reasonable, use it
+      if (adjustedMinutes >= -60 && adjustedMinutes <= 120) {
+        console.warn('[TripTimeline] ⚠️ Detected timezone mismatch, applying correction');
+        expectedTime = adjustedExpectedTime;
+      }
     }
 
     // Calculate difference in milliseconds
