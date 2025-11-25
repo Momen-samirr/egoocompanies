@@ -7,7 +7,8 @@ export type ScheduledTripStatus =
   | "CANCELLED"
   | "FAILED"
   | "EMERGENCY_TERMINATED"
-  | "EMERGENCY_ENDED";
+  | "EMERGENCY_ENDED"
+  | "FORCE_CLOSED";
 
 export type ScheduledTripFinancialStatus = "NONE" | "PAID" | "PENALIZED";
 
@@ -15,7 +16,8 @@ export type ScheduledTripFinancialRule =
   | "NONE"
   | "COMPLETED_FULL"
   | "FAILED_DOUBLE"
-  | "EMERGENCY_DEDUCTION";
+  | "EMERGENCY_DEDUCTION"
+  | "FORCE_CLOSED_DEDUCTION";
 
 export interface TripPoint {
   id?: string;

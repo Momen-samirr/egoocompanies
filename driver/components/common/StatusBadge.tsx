@@ -6,7 +6,7 @@ import fonts from "@/themes/app.fonts";
 import { spacing } from "@/styles/design-system";
 
 interface StatusBadgeProps {
-  status: "scheduled" | "active" | "completed" | "cancelled" | "failed" | "online" | "offline";
+  status: "scheduled" | "active" | "completed" | "cancelled" | "failed" | "forceClosed" | "online" | "offline";
   label?: string;
   size?: "sm" | "md" | "lg";
 }
@@ -28,6 +28,8 @@ export default function StatusBadge({
         return color.status.cancelled;
       case "failed":
         return color.status.failed;
+      case "forceClosed":
+        return color.status.forceClosed;
       case "online":
         return color.status.online;
       case "offline":

@@ -118,6 +118,8 @@ export const statusColors = {
   cancelled: 'bg-red-100 text-red-800 border-red-200',
   failed: 'bg-red-200 text-red-900 border-red-500',
   'emergency_terminated': 'bg-orange-200 text-orange-900 border-orange-500',
+  'emergency_ended': 'bg-orange-200 text-orange-900 border-orange-500',
+  'force_closed': 'bg-rose-200 text-rose-900 border-rose-500',
   inactive: 'bg-gray-100 text-gray-800 border-gray-200',
 } as const;
 

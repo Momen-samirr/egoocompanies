@@ -88,6 +88,7 @@ enum ScheduledTripStatus {
   FAILED
   EMERGENCY_TERMINATED
   EMERGENCY_ENDED
+  FORCE_CLOSED
 }
 
 enum ScheduledTripFinancialStatus {
@@ -101,6 +102,7 @@ enum ScheduledTripFinancialRule {
   COMPLETED_FULL
   FAILED_DOUBLE
   EMERGENCY_DEDUCTION
+  FORCE_CLOSED_DEDUCTION
 }
 
 model Company {

@@ -4,6 +4,7 @@ import prisma from "../utils/prisma";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
+import { applyForceClosedDeduction } from "../services/trip-finance";
 
 type LedgerSummary = {
   totalTrips: number;
@@ -1648,6 +1649,139 @@ export const deleteScheduledTrip = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     console.error("Delete scheduled trip error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Force Close Trip
+export const forceCloseTrip = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if trip exists
+    const trip = await prisma.scheduledTrip.findUnique({
+      where: { id },
+      include: {
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Scheduled trip not found",
+      });
+    }
+
+    // Validate trip status is ACTIVE
+    if (trip.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot force close a trip with status: ${trip.status}. Only ACTIVE trips can be force closed.`,
+      });
+    }
+
+    // Validate trip has assigned captain
+    if (!trip.assignedCaptainId) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot force close a trip without an assigned captain",
+      });
+    }
+
+    // Update trip status to FORCE_CLOSED
+    const updatedTrip = await prisma.scheduledTrip.update({
+      where: { id },
+      data: {
+        status: "FORCE_CLOSED",
+      },
+      include: {
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+            vehicle_type: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+        activationChecks: {
+          orderBy: { checkedAt: "desc" },
+          take: 10,
+        },
+        company: true,
+      },
+    });
+
+    // Apply financial deduction
+    const financeResult = await applyForceClosedDeduction(id);
+
+    if (!financeResult.success) {
+      console.error("Failed to apply force closed deduction:", financeResult.reason);
+      // Note: Trip status is already updated, but financial deduction failed
+      // This is logged but we still return success since the status change succeeded
+    }
+
+    // Fetch updated trip with financial data
+    const tripWithFinance = await prisma.scheduledTrip.findUnique({
+      where: { id },
+      include: {
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+            vehicle_type: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+        activationChecks: {
+          orderBy: { checkedAt: "desc" },
+          take: 10,
+        },
+        company: true,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      trip: tripWithFinance,
+      message: "Trip force closed successfully",
+    });
+  } catch (error: any) {
+    console.error("Force close trip error:", error);
     res.status(500).json({
       success: false,
       message: error.message || "Internal server error",

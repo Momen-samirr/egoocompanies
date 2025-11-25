@@ -8,7 +8,8 @@
     "dev": "ts-node-dev --respawn --transpile-only server.ts",
     "build": "tsc",
     "start": "node build/server.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "cleanup:trips": "npx ts-node scripts/cleanup-scheduled-trips.ts"
   },
   "keywords": [],
   "author": "shahriar sajeeb",

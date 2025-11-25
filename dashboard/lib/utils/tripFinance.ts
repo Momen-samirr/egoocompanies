@@ -9,6 +9,7 @@ const RULE_MULTIPLIERS: Record<ScheduledTripFinancialRule, number> = {
   COMPLETED_FULL: 1,
   FAILED_DOUBLE: -2,
   EMERGENCY_DEDUCTION: -1,
+  FORCE_CLOSED_DEDUCTION: 0, // Special calculation, multiplier not used
 };
 
 const STATUS_RULE_MAP: Partial<Record<ScheduledTripStatus, ScheduledTripFinancialRule>> = {
@@ -16,6 +17,7 @@ const STATUS_RULE_MAP: Partial<Record<ScheduledTripStatus, ScheduledTripFinancia
   FAILED: "FAILED_DOUBLE",
   EMERGENCY_ENDED: "EMERGENCY_DEDUCTION",
   EMERGENCY_TERMINATED: "EMERGENCY_DEDUCTION",
+  FORCE_CLOSED: "FORCE_CLOSED_DEDUCTION",
 };
 
 const RULE_LABELS: Record<ScheduledTripFinancialRule, string> = {
@@ -23,6 +25,7 @@ const RULE_LABELS: Record<ScheduledTripFinancialRule, string> = {
   COMPLETED_FULL: "Full Payout",
   FAILED_DOUBLE: "Double Price Deduction",
   EMERGENCY_DEDUCTION: "Emergency Deduction",
+  FORCE_CLOSED_DEDUCTION: "Force Closed",
 };
 
 export const formatCurrency = (value: number, currency = "USD") => {
@@ -44,20 +47,30 @@ export const deriveTripFinance = (trip: ScheduledTrip) => {
     }
   }
 
-  const multiplier = RULE_MULTIPLIERS[resolvedRule] ?? 0;
-  const computedNet = baseAmount * multiplier;
+  // Special calculation for FORCE_CLOSED: deduct (tripPrice - 100)
+  let computedNet: number;
+  if (resolvedRule === "FORCE_CLOSED_DEDUCTION" || trip.status === "FORCE_CLOSED") {
+    computedNet = -(baseAmount - 100);
+  } else {
+    const multiplier = RULE_MULTIPLIERS[resolvedRule] ?? 0;
+    computedNet = baseAmount * multiplier;
+  }
 
+  // Ensure we always have valid numbers, never null/undefined/NaN
   const netAmount =
-    typeof trip.netAmount === "number" ? trip.netAmount : computedNet;
+    typeof trip.netAmount === "number" && !isNaN(trip.netAmount)
+      ? trip.netAmount
+      : (isNaN(computedNet) ? 0 : computedNet);
+  
   const appliedAmount =
-    typeof trip.financialAdjustment === "number"
+    typeof trip.financialAdjustment === "number" && !isNaN(trip.financialAdjustment)
       ? trip.financialAdjustment
-      : netAmount;
+      : (isNaN(netAmount) ? 0 : netAmount);
 
   return {
-    baseAmount,
-    appliedAmount,
-    netAmount,
+    baseAmount: isNaN(baseAmount) ? 0 : baseAmount,
+    appliedAmount: isNaN(appliedAmount) ? 0 : appliedAmount,
+    netAmount: isNaN(netAmount) ? 0 : netAmount,
     rule: resolvedRule,
     ruleLabel: RULE_LABELS[resolvedRule],
     hasFinanceApplied: Boolean(trip.financialAppliedAt),

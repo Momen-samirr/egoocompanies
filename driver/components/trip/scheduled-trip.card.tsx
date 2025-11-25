@@ -12,7 +12,7 @@ interface ScheduledTrip {
   name: string;
   tripDate: string;
   scheduledTime: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED" | "FORCE_CLOSED";
   companyId?: string;
   price?: number;
   company?: {
@@ -52,6 +52,8 @@ export default function ScheduledTripCard({ item }: { item: ScheduledTrip }) {
         return "#ef4444"; // red
       case "FAILED":
         return "#dc2626"; // dark red for failed trips
+      case "FORCE_CLOSED":
+        return "#e11d48"; // rose-600 for force closed
       default:
         return "#6b7280"; // gray
     }
@@ -97,7 +99,7 @@ export default function ScheduledTripCard({ item }: { item: ScheduledTrip }) {
             ]}
           >
             <Text style={[styles.statusText, { color: statusColor }]}>
-              {item.status === "FAILED" ? "Failed" : item.status}
+              {item.status === "FAILED" ? "Failed" : item.status === "FORCE_CLOSED" ? "Force Closed" : item.status}
             </Text>
           </View>
         </View>

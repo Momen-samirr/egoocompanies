@@ -39,7 +39,7 @@ import Constants from "expo-constants";
 interface ScheduledTrip {
   id: string;
   name: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FORCE_CLOSED";
   companyId?: string;
   price?: number;
   company?: {
@@ -234,6 +234,15 @@ export default function TripNavigationScreen() {
       if (response.data.success) {
         const activeTrip = response.data.trips.find((t: ScheduledTrip) => t.id === tripId);
         if (activeTrip) {
+          // Check if trip has been force closed
+          if (activeTrip.status === "FORCE_CLOSED") {
+            Toast.show("This trip has been force closed by admin", { type: "danger", duration: 5000 });
+            setTimeout(() => {
+              router.back();
+            }, 2000);
+            return;
+          }
+          
           // Reset proximity notification flag when trip data changes
           const newCurrentPointIndex = activeTrip.progress?.currentPointIndex || 0;
           if (hasShownProximityNotification.current !== newCurrentPointIndex) {
@@ -1044,6 +1053,27 @@ export default function TripNavigationScreen() {
           >
             <Text style={{ color: "#10b981", fontSize: 16, fontWeight: "600" }}>
               ✓ Trip Completed!
+            </Text>
+          </View>
+        )}
+
+        {trip.status === "FORCE_CLOSED" && (
+          <View
+            style={{
+              backgroundColor: "#fce7f3", // rose-100
+              padding: 16,
+              borderRadius: 8,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: "#e11d48",
+              marginBottom: 16,
+            }}
+          >
+            <Text style={{ color: "#e11d48", fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
+              ⚠️ Trip Force Closed
+            </Text>
+            <Text style={{ color: "#e11d48", fontSize: 14, textAlign: "center" }}>
+              This trip was closed by admin. A financial deduction has been applied to your account.
             </Text>
           </View>
         )}

@@ -31,6 +31,14 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
     const createdAt = new Date(trip.createdAt).toLocaleString();
     const finance = deriveTripFinance(trip);
 
+    // Safely format numbers, handling null/undefined/NaN
+    const formatNumber = (value: number | null | undefined): string => {
+      if (value === null || value === undefined || isNaN(value)) {
+        return "0.00";
+      }
+      return value.toFixed(2);
+    };
+
     return [
       trip.name,
       tripDate,
@@ -41,9 +49,9 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
       trip.assignedCaptain?.phone_number || "",
       trip.assignedCaptain?.email || "",
       trip.company?.name || "",
-      trip.price !== undefined ? trip.price.toFixed(2) : "",
-      finance.appliedAmount.toFixed(2),
-      finance.netAmount.toFixed(2),
+      trip.price !== undefined && trip.price !== null ? formatNumber(trip.price) : "",
+      formatNumber(finance.appliedAmount),
+      formatNumber(finance.netAmount),
       trip.points?.length || 0,
       createdAt,
     ];

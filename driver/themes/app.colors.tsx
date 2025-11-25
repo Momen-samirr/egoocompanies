@@ -52,6 +52,7 @@ export type Color = {
     completed: string;
     cancelled: string;
     failed: string;
+    forceClosed: string;
   };
   // Background colors
   background: {
@@ -125,6 +126,7 @@ const color: Color = {
     completed: "#10b981",
     cancelled: "#ef4444",
     failed: "#dc2626",
+    forceClosed: "#e11d48", // rose-600 for force closed
   },
   // Background colors
   background: {

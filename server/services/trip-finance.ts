@@ -20,6 +20,7 @@ const STATUS_FINANCE_RULES: Record<ScheduledTripStatus, FinanceRuleConfig | unde
   FAILED: { rule: "FAILED_DOUBLE", multiplier: -2 },
   EMERGENCY_TERMINATED: { rule: "EMERGENCY_DEDUCTION", multiplier: -1 },
   EMERGENCY_ENDED: { rule: "EMERGENCY_DEDUCTION", multiplier: -1 },
+  FORCE_CLOSED: { rule: "FORCE_CLOSED_DEDUCTION", multiplier: 0 }, // Special calculation, multiplier not used
 };
 
 const deriveFinancialStatus = (netAmount: number) => {
@@ -61,7 +62,14 @@ async function applyScheduledTripFinance(
   }
 
   const baseAmount = trip.price ?? 0;
-  const netAmount = baseAmount * ruleConfig.multiplier;
+  
+  // Special calculation for FORCE_CLOSED: deduct (tripPrice - 100)
+  let netAmount: number;
+  if (effectiveStatus === "FORCE_CLOSED" && ruleConfig.rule === "FORCE_CLOSED_DEDUCTION") {
+    netAmount = -(baseAmount - 100);
+  } else {
+    netAmount = baseAmount * ruleConfig.multiplier;
+  }
   const existingLedger = await prisma.scheduledTripLedger.findFirst({
     where: { scheduledTripId: tripId },
   });
@@ -149,5 +157,9 @@ export async function applyTripFailurePenalty(tripId: string): Promise<FinanceRe
 
 export async function applyEmergencyTerminationPenalty(tripId: string): Promise<FinanceResult> {
   return applyScheduledTripFinance(tripId, "EMERGENCY_ENDED");
+}
+
+export async function applyForceClosedDeduction(tripId: string): Promise<FinanceResult> {
+  return applyScheduledTripFinance(tripId, "FORCE_CLOSED");
 }
 

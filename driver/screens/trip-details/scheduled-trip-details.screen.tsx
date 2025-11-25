@@ -25,7 +25,7 @@ interface ScheduledTrip {
   name: string;
   tripDate: string;
   scheduledTime: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED" | "FORCE_CLOSED";
   companyId?: string;
   price?: number;
   company?: {
@@ -156,6 +156,8 @@ export default function ScheduledTripDetailsScreen() {
         return "#ef4444";
       case "FAILED":
         return "#dc2626"; // dark red for failed trips
+      case "FORCE_CLOSED":
+        return "#e11d48"; // rose-600 for force closed
       default:
         return "#6b7280";
     }
@@ -289,7 +291,7 @@ export default function ScheduledTripDetailsScreen() {
                     fontWeight: "600",
                   }}
                 >
-                  {trip.status === "FAILED" ? "Failed" : trip.status}
+                  {trip.status === "FAILED" ? "Failed" : trip.status === "FORCE_CLOSED" ? "Force Closed" : trip.status}
                 </Text>
               </View>
             </View>
@@ -527,6 +529,40 @@ export default function ScheduledTripDetailsScreen() {
                 Continue Trip
               </Text>
             </TouchableOpacity>
+          )}
+
+          {trip.status === "FORCE_CLOSED" && (
+            <View
+              style={{
+                backgroundColor: "#fce7f3", // rose-100
+                padding: windowHeight(2),
+                borderRadius: 8,
+                alignItems: "center",
+                marginBottom: windowHeight(2),
+                borderWidth: 1,
+                borderColor: color.status.forceClosed,
+              }}
+            >
+              <Text
+                style={{
+                  color: color.status.forceClosed,
+                  fontSize: fontSizes.FONT18,
+                  fontWeight: "600",
+                  marginBottom: windowHeight(1),
+                }}
+              >
+                ⚠️ Trip Force Closed
+              </Text>
+              <Text
+                style={{
+                  color: color.status.forceClosed,
+                  fontSize: fontSizes.FONT14,
+                  textAlign: "center",
+                }}
+              >
+                This trip was closed by admin. A financial deduction has been applied to your account.
+              </Text>
+            </View>
           )}
         </View>
       </ScrollView>

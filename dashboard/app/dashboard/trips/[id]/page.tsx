@@ -8,7 +8,8 @@ import StatusBadge from "@/components/common/StatusBadge";
 import Button from "@/components/common/Button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import TripTimeline from "@/components/trips/TripTimeline";
-import { PencilIcon, TrashIcon, ArrowLeftIcon, UserIcon } from "@heroicons/react/24/outline";
+import { PencilIcon, TrashIcon, ArrowLeftIcon, UserIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { toast } from "react-hot-toast";
 
 interface ScheduledTrip {
   id: string;
@@ -22,7 +23,8 @@ interface ScheduledTrip {
     | "CANCELLED"
     | "FAILED"
     | "EMERGENCY_TERMINATED"
-    | "EMERGENCY_ENDED";
+    | "EMERGENCY_ENDED"
+    | "FORCE_CLOSED";
   assignedCaptain: {
     id: string;
     name: string;
@@ -42,7 +44,7 @@ interface ScheduledTrip {
   };
   companyId: string;
   price: number;
-  financialRule?: "NONE" | "COMPLETED_FULL" | "FAILED_DOUBLE" | "EMERGENCY_DEDUCTION";
+  financialRule?: "NONE" | "COMPLETED_FULL" | "FAILED_DOUBLE" | "EMERGENCY_DEDUCTION" | "FORCE_CLOSED_DEDUCTION";
   financialAdjustment?: number;
   netAmount?: number;
   points: Array<{
@@ -76,6 +78,8 @@ export default function TripDetailsPage() {
   const tripId = params.id as string;
   const [trip, setTrip] = useState<ScheduledTrip | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showForceCloseModal, setShowForceCloseModal] = useState(false);
+  const [forceClosing, setForceClosing] = useState(false);
 
   useEffect(() => {
     fetchTrip();
@@ -104,6 +108,27 @@ export default function TripDetailsPage() {
     } catch (error) {
       console.error("Error deleting trip:", error);
       alert("Failed to delete trip");
+    }
+  };
+
+  const handleForceClose = async () => {
+    try {
+      setForceClosing(true);
+      const response = await api.post(`/admin/trips/${tripId}/force-close`);
+      
+      if (response.data.success) {
+        toast.success("Trip force closed successfully");
+        setShowForceCloseModal(false);
+        // Refresh trip data
+        await fetchTrip();
+      } else {
+        toast.error(response.data.message || "Failed to force close trip");
+      }
+    } catch (error: any) {
+      console.error("Error force closing trip:", error);
+      toast.error(error.response?.data?.message || "Failed to force close trip");
+    } finally {
+      setForceClosing(false);
     }
   };
 
@@ -145,6 +170,15 @@ export default function TripDetailsPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {trip.status === "ACTIVE" && (
+            <Button
+              variant="danger"
+              onClick={() => setShowForceCloseModal(true)}
+              disabled={forceClosing}
+            >
+              Force Closed
+            </Button>
+          )}
           {(trip.status === "SCHEDULED" || trip.status === "FAILED") && (
             <>
               <Button
@@ -332,6 +366,51 @@ export default function TripDetailsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Force Close Confirmation Modal */}
+      {showForceCloseModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Force Close Trip</h3>
+              <button
+                onClick={() => setShowForceCloseModal(false)}
+                className="text-gray-400 hover:text-gray-500"
+                disabled={forceClosing}
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">
+                Are you sure you want to force close this trip? This action will:
+              </p>
+              <ul className="list-disc list-inside text-sm text-gray-600 mb-4 space-y-1">
+                <li>Change the trip status to <strong>Force Closed</strong></li>
+                <li>Apply a financial deduction of <strong>${((trip.price ?? 0) - 100).toFixed(2)}</strong> to the captain</li>
+                <li>This action cannot be undone</li>
+              </ul>
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowForceCloseModal(false)}
+                  disabled={forceClosing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={handleForceClose}
+                  loading={forceClosing}
+                  disabled={forceClosing}
+                >
+                  {forceClosing ? "Force Closing..." : "Force Close Trip"}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

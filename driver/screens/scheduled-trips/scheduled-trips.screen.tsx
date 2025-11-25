@@ -31,7 +31,7 @@ interface ScheduledTrip {
   name: string;
   tripDate: string;
   scheduledTime: string;
-  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED" | "FORCE_CLOSED";
   companyId?: string;
   price?: number;
   company?: {
@@ -253,6 +253,8 @@ export default function ScheduledTripsScreen() {
         return "#ef4444"; // red
       case "FAILED":
         return "#dc2626"; // dark red for failed trips
+      case "FORCE_CLOSED":
+        return "#e11d48"; // rose-600 for force closed
       default:
         return "#6b7280"; // gray
     }
@@ -363,6 +365,7 @@ export default function ScheduledTripsScreen() {
               item.status === "ACTIVE" ? "active" :
               item.status === "COMPLETED" ? "completed" :
               item.status === "CANCELLED" ? "cancelled" :
+              item.status === "FORCE_CLOSED" ? "forceClosed" :
               "failed"
             } 
             size="sm"
@@ -431,6 +434,24 @@ export default function ScheduledTripsScreen() {
           >
             <Text style={{ color: color.semantic.error, fontFamily: fonts.bold, fontSize: fontSizes.FONT14 }}>
               ❌ Trip Failed (Overdue)
+            </Text>
+          </View>
+        ) : item.status === "FORCE_CLOSED" ? (
+          <View
+            style={{
+              backgroundColor: "#fce7f3", // rose-100
+              padding: spacing.md,
+              borderRadius: 8,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: color.status.forceClosed,
+            }}
+          >
+            <Text style={{ color: color.status.forceClosed, fontFamily: fonts.bold, fontSize: fontSizes.FONT14 }}>
+              ⚠️ Trip Force Closed
+            </Text>
+            <Text style={{ color: color.status.forceClosed, fontFamily: fonts.regular, fontSize: fontSizes.FONT12, marginTop: spacing.xs }}>
+              This trip was closed by admin. A deduction has been applied.
             </Text>
           </View>
         ) : item.status === "SCHEDULED" ? (

@@ -20,6 +20,7 @@ const statusIcons: Record<string, React.ComponentType<{ className?: string }>> =
   failed: ExclamationTriangleIcon,
   emergency_terminated: ExclamationTriangleIcon,
   emergency_ended: ExclamationTriangleIcon,
+  force_closed: XCircleIcon,
   inactive: XCircleIcon,
 };
 
@@ -51,6 +52,8 @@ export default function StatusBadge({ status, size = "md", showIcon = true }: St
   const displayStatus =
     uppercaseValue === "EMERGENCY_TERMINATED" || uppercaseValue === "EMERGENCY_ENDED"
       ? "Emergency Ended"
+      : uppercaseValue === "FORCE_CLOSED"
+      ? "Force Closed"
       : toTitleCase(status);
 
   return (
