@@ -390,7 +390,7 @@ export default function TripDetailsPage() {
               </p>
               <ul className="list-disc list-inside text-sm text-gray-600 mb-4 space-y-1">
                 <li>Change the trip status to <strong>Force Closed</strong></li>
-                <li>Apply a financial deduction of <strong>${((trip.price ?? 0) - 100).toFixed(2)}</strong> to the captain</li>
+                <li>Deduct <strong>$100</strong> from the trip price (Captain will receive <strong>${((trip.price ?? 0) - 100).toFixed(2)}</strong> instead of ${(trip.price ?? 0).toFixed(2)})</li>
                 <li>This action cannot be undone</li>
               </ul>
               <div className="flex gap-3 justify-end">

@@ -63,10 +63,10 @@ async function applyScheduledTripFinance(
 
   const baseAmount = trip.price ?? 0;
   
-  // Special calculation for FORCE_CLOSED: deduct (tripPrice - 100)
+  // Special calculation for FORCE_CLOSED: deduct 100 from trip price
   let netAmount: number;
   if (effectiveStatus === "FORCE_CLOSED" && ruleConfig.rule === "FORCE_CLOSED_DEDUCTION") {
-    netAmount = -(baseAmount - 100);
+    netAmount = baseAmount - 100;
   } else {
     netAmount = baseAmount * ruleConfig.multiplier;
   }

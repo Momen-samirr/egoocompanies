@@ -47,10 +47,10 @@ export const deriveTripFinance = (trip: ScheduledTrip) => {
     }
   }
 
-  // Special calculation for FORCE_CLOSED: deduct (tripPrice - 100)
+  // Special calculation for FORCE_CLOSED: deduct 100 from trip price
   let computedNet: number;
   if (resolvedRule === "FORCE_CLOSED_DEDUCTION" || trip.status === "FORCE_CLOSED") {
-    computedNet = -(baseAmount - 100);
+    computedNet = baseAmount - 100;
   } else {
     const multiplier = RULE_MULTIPLIERS[resolvedRule] ?? 0;
     computedNet = baseAmount * multiplier;
