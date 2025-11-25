@@ -1,3 +1,5 @@
+import { Company } from ".";
+
 export type ScheduledTripStatus =
   | "SCHEDULED"
   | "ACTIVE"
@@ -24,6 +26,8 @@ export interface ScheduledTrip {
   status: ScheduledTripStatus;
   assignedCaptainId?: string;
   createdById: string;
+  companyId?: string;
+  price?: number;
   emergencyTerminatedAt?: string;
   emergencyTerminatedBy?: string;
   createdAt: string;
@@ -39,6 +43,7 @@ export interface ScheduledTrip {
     name: string;
     email: string;
   };
+  company?: Company;
   points: TripPoint[];
 }
 
@@ -57,6 +62,8 @@ export interface TripFormData {
   tripDate: string;
   scheduledTime: string;
   assignedCaptainId?: string;
+  companyId: string;
+  price: number;
   points: TripPoint[];
 }
 
@@ -64,6 +71,7 @@ export interface TripFilters {
   status?: ScheduledTripStatus[];
   name?: string;
   captain?: string;
+  companyId?: string;
   checkpoints?: {
     min?: number;
     max?: number;

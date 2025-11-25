@@ -38,6 +38,22 @@ export default function ScheduledTripsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, filters, sortField, sortDirection, searchQuery]);
 
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message ===
+        "string"
+    ) {
+      return (
+        (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
+        fallback
+      );
+    }
+    return fallback;
+  };
+
   const fetchTrips = async () => {
     try {
       setLoading(true);
@@ -56,9 +72,10 @@ export default function ScheduledTripsPage() {
       if (filters.captain) params.append("captain", filters.captain);
       if (filters.dateRange?.start) params.append("dateStart", filters.dateRange.start);
       if (filters.dateRange?.end) params.append("dateEnd", filters.dateRange.end);
+      if (filters.companyId) params.append("companyId", filters.companyId);
       if (searchQuery) params.append("search", searchQuery);
 
-      const response = await api.get(`/admin/trips?${params}`);
+      const response = await api.get(`/admin/trips?${params.toString()}`);
       setTrips(response.data.trips || []);
       setPagination(response.data.pagination || {
         page: 1,
@@ -66,9 +83,9 @@ export default function ScheduledTripsPage() {
         total: 0,
         pages: 1,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error fetching scheduled trips:", error);
-      toast.error(error.response?.data?.message || "Failed to load trips");
+      toast.error(getErrorMessage(error, "Failed to load trips"));
     } finally {
       setLoading(false);
     }
@@ -84,10 +101,11 @@ export default function ScheduledTripsPage() {
       filtered = filtered.filter((trip) => {
         const matchesName = trip.name.toLowerCase().includes(query);
         const matchesCaptain = trip.assignedCaptain?.name?.toLowerCase().includes(query);
+        const matchesCompany = trip.company?.name?.toLowerCase().includes(query);
         const matchesCheckpoints = trip.points?.some((point) =>
           point.name.toLowerCase().includes(query)
         );
-        return matchesName || matchesCaptain || matchesCheckpoints;
+        return matchesName || matchesCaptain || matchesCompany || matchesCheckpoints;
       });
     }
 
@@ -106,8 +124,8 @@ export default function ScheduledTripsPage() {
     // Apply sorting
     if (sortField) {
       filtered.sort((a, b) => {
-        let aValue: any;
-        let bValue: any;
+        let aValue: string | number;
+        let bValue: string | number;
 
         switch (sortField) {
           case "name":
@@ -167,9 +185,9 @@ export default function ScheduledTripsPage() {
       await api.delete(`/admin/trips/${id}`);
       toast.success("Trip deleted successfully");
       fetchTrips();
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error deleting trip:", error);
-      toast.error(error.response?.data?.message || "Failed to delete trip");
+      toast.error(getErrorMessage(error, "Failed to delete trip"));
     }
   };
 

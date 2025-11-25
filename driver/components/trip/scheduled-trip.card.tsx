@@ -13,6 +13,12 @@ interface ScheduledTrip {
   tripDate: string;
   scheduledTime: string;
   status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  companyId?: string;
+  price?: number;
+  company?: {
+    id: string;
+    name: string;
+  };
   points: Array<{
     id: string;
     name: string;
@@ -94,6 +100,40 @@ export default function ScheduledTripCard({ item }: { item: ScheduledTrip }) {
               {item.status === "FAILED" ? "Failed" : item.status}
             </Text>
           </View>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: windowWidth(2), marginTop: windowHeight(1) }}>
+          {item.company?.name && (
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: color.primary,
+                paddingHorizontal: windowWidth(3),
+                paddingVertical: windowHeight(1),
+                borderRadius: 999,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: fonts.medium,
+                  fontSize: fontSizes.FONT12,
+                  color: color.primary,
+                }}
+              >
+                {item.company.name}
+              </Text>
+            </View>
+          )}
+          {typeof item.price === "number" && (
+            <Text
+              style={{
+                fontFamily: fonts.medium,
+                fontSize: fontSizes.FONT12,
+                color: color.secondaryFont,
+              }}
+            >
+              ${item.price.toFixed(2)}
+            </Text>
+          )}
         </View>
         <View style={[styles.alignment, { flexDirection: "row" }]}>
           <Text style={styles.timing}>

@@ -87,6 +87,21 @@ enum ScheduledTripStatus {
   EMERGENCY_TERMINATED
 }
 
+enum ScheduledTripFinancialStatus {
+  NONE
+  PAID
+  PENALIZED
+}
+
+model Company {
+  id                        String          @id @default(auto()) @map("_id") @db.ObjectId
+  name                      String
+  defaultScheduledTripPrice Float
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+  scheduledTrips            ScheduledTrip[]
+}
+
 model ScheduledTrip {
   id                String              @id @default(auto()) @map("_id") @db.ObjectId
   name              String
@@ -95,12 +110,16 @@ model ScheduledTrip {
   status            ScheduledTripStatus  @default(SCHEDULED)
   assignedCaptainId String?             @db.ObjectId
   createdById       String              @db.ObjectId
+  companyId         String?             @db.ObjectId
+  price             Float?              @default(0)
+  financialStatus   ScheduledTripFinancialStatus @default(NONE)
   emergencyTerminatedAt DateTime?
   emergencyTerminatedBy String?         @db.ObjectId
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   assignedCaptain   driver?             @relation("AssignedCaptain", fields: [assignedCaptainId], references: [id])
   createdBy         Admin               @relation("CreatedBy", fields: [createdById], references: [id])
+  company           Company?            @relation(fields: [companyId], references: [id])
   points            TripPoint[]
   progress          TripProgress?
   activationChecks  TripActivationCheck[]

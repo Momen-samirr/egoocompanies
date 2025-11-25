@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Select from "react-select";
+import { useState, useEffect, useCallback } from "react";
+import Select, { MultiValue } from "react-select";
 import { TripFilters as TripFiltersType, ScheduledTripStatus } from "@/types/trip";
 import { FunnelIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import Button from "@/components/common/Button";
+import api from "@/lib/api";
+
+interface CompanyOption {
+  id: string;
+  name: string;
+}
 
 interface TripFiltersProps {
   filters: TripFiltersType;
@@ -12,7 +18,12 @@ interface TripFiltersProps {
   onClear: () => void;
 }
 
-const statusOptions = [
+type StatusOption = {
+  value: ScheduledTripStatus;
+  label: string;
+};
+
+const statusOptions: StatusOption[] = [
   { value: "SCHEDULED", label: "Scheduled" },
   { value: "ACTIVE", label: "Active" },
   { value: "COMPLETED", label: "Completed" },
@@ -28,30 +39,51 @@ export default function TripFilters({
 }: TripFiltersProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [localFilters, setLocalFilters] = useState<TripFiltersType>(filters);
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
 
   useEffect(() => {
     setLocalFilters(filters);
   }, [filters]);
 
+  const fetchCompanies = useCallback(async () => {
+    try {
+      const response = await api.get("/admin/companies");
+      setCompanies(response.data.companies || []);
+    } catch (error) {
+      console.error("Failed to load companies:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
+
   const hasActiveFilters =
     (localFilters.status && localFilters.status.length > 0) ||
     localFilters.name ||
     localFilters.captain ||
+    localFilters.companyId ||
     localFilters.checkpoints?.min !== undefined ||
     localFilters.checkpoints?.max !== undefined ||
     localFilters.dateRange?.start ||
     localFilters.dateRange?.end;
 
-  const handleFilterChange = (key: keyof TripFiltersType, value: any) => {
-    const newFilters = { ...localFilters, [key]: value };
+  const handleFilterChange = <K extends keyof TripFiltersType>(
+    key: K,
+    value: TripFiltersType[K] | undefined
+  ) => {
+    const newFilters = { ...localFilters };
+    if (value === undefined) {
+      delete newFilters[key];
+    } else {
+      newFilters[key] = value;
+    }
     setLocalFilters(newFilters);
     onChange(newFilters);
   };
 
-  const handleStatusChange = (selectedOptions: any) => {
-    const statuses = selectedOptions
-      ? selectedOptions.map((opt: any) => opt.value as ScheduledTripStatus)
-      : [];
+  const handleStatusChange = (selectedOptions: MultiValue<StatusOption>) => {
+    const statuses = selectedOptions.map((opt) => opt.value);
     handleFilterChange("status", statuses.length > 0 ? statuses : undefined);
   };
 
@@ -64,6 +96,7 @@ export default function TripFilters({
     localFilters.status?.length || 0,
     localFilters.name ? 1 : 0,
     localFilters.captain ? 1 : 0,
+    localFilters.companyId ? 1 : 0,
     localFilters.checkpoints?.min !== undefined ||
     localFilters.checkpoints?.max !== undefined
       ? 1
@@ -109,11 +142,11 @@ export default function TripFilters({
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
               Status
             </label>
-            <Select
+            <Select<StatusOption, true>
               isMulti
               options={statusOptions}
               value={statusOptions.filter((opt) =>
-                localFilters.status?.includes(opt.value as ScheduledTripStatus)
+                localFilters.status?.includes(opt.value)
               )}
               onChange={handleStatusChange}
               placeholder="Select statuses..."
@@ -156,6 +189,29 @@ export default function TripFilters({
               placeholder="Search by captain..."
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Company
+            </label>
+            <select
+              value={localFilters.companyId || ""}
+              onChange={(event) =>
+                handleFilterChange(
+                  "companyId",
+                  event.target.value || undefined
+                )
+              }
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
+            >
+              <option value="">All companies</option>
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

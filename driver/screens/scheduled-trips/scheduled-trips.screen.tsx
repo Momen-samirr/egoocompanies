@@ -32,6 +32,12 @@ interface ScheduledTrip {
   tripDate: string;
   scheduledTime: string;
   status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  companyId?: string;
+  price?: number;
+  company?: {
+    id: string;
+    name: string;
+  };
   points: Array<{
     id: string;
     name: string;
@@ -288,6 +294,8 @@ export default function ScheduledTripsScreen() {
     // Trip can only be started if: captain is online AND activation conditions are met
     const canStart = isOnline && item.activationStatus?.canActivate && item.status === "SCHEDULED";
     const activationMessage = getActivationMessage(item);
+    const formattedPrice =
+      typeof item.price === "number" ? `$${item.price.toFixed(2)}` : null;
 
     return (
       <View
@@ -307,6 +315,41 @@ export default function ScheduledTripsScreen() {
             <Text style={{ fontSize: fontSizes.FONT20, fontFamily: fonts.bold, color: colors.text, marginBottom: spacing.xs }}>
               {item.name}
             </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" }}>
+                {item.company?.name && (
+                  <View
+                    style={{
+                      backgroundColor: color.primary + "15",
+                      borderColor: color.primary,
+                      borderWidth: 1,
+                      paddingHorizontal: spacing.sm,
+                      paddingVertical: spacing.xs / 1.5,
+                      borderRadius: 999,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: color.primary,
+                        fontSize: fontSizes.FONT12,
+                        fontFamily: fonts.medium,
+                      }}
+                    >
+                      {item.company.name}
+                    </Text>
+                  </View>
+                )}
+                {formattedPrice && (
+                  <Text
+                    style={{
+                      color: colors.text,
+                      fontSize: fontSizes.FONT12,
+                      fontFamily: fonts.medium,
+                    }}
+                  >
+                    {formattedPrice}
+                  </Text>
+                )}
+              </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
               <Calender colors={color.text.secondary} width={14} height={14} />
               <Text style={{ color: color.text.secondary, fontSize: fontSizes.FONT14, fontFamily: fonts.regular }}>

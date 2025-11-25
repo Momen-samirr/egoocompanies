@@ -59,6 +59,13 @@ export const tripFormSchema = z
       message: "Invalid time format. Use HH:MM format",
     }),
     assignedCaptainId: z.string().optional(),
+    companyId: z.string().min(1, "Company is required"),
+    price: z
+      .number({
+        required_error: "Price is required",
+        invalid_type_error: "Price must be a number",
+      })
+      .positive("Price must be greater than zero"),
     points: z
       .array(tripPointSchema)
       .min(1, "At least one checkpoint is required")

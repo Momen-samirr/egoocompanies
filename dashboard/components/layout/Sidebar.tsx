@@ -12,6 +12,7 @@ import {
   MapPinIcon,
   CalendarIcon,
   Squares2X2Icon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 import { logout } from "@/lib/auth";
 
@@ -42,6 +43,10 @@ const navigationGroups: NavGroup[] = [
       { name: "Rides", href: "/dashboard/rides", icon: MapIcon },
       { name: "Scheduled Trips", href: "/dashboard/trips", icon: CalendarIcon },
     ],
+  },
+  {
+    title: "Companies",
+    items: [{ name: "Companies", href: "/dashboard/companies", icon: BuildingOffice2Icon }],
   },
   {
     title: "Analytics",

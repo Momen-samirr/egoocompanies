@@ -5,6 +5,7 @@ import prisma from "../utils/prisma";
 import jwt from "jsonwebtoken";
 import { sendToken } from "../utils/send-token";
 import { sendEmail } from "../utils/send-email";
+import { applyTripCompletionPayout } from "../services/trip-finance";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken, {
@@ -14,19 +15,21 @@ const client = twilio(accountSid, authToken, {
 // Normalize phone number to E.164 format
 const normalizePhoneNumber = (phoneNumber: string): string => {
   if (!phoneNumber) return "";
-  
+
   // Remove all whitespace and special characters except + and digits
   let normalized = phoneNumber.trim().replace(/[\s\-\(\)\.]/g, "");
-  
+
   // Ensure it starts with +
   if (!normalized.startsWith("+")) {
     normalized = `+${normalized}`;
   }
-  
+
   return normalized;
 };
 
 // sending otp to driver phone number
+// TODO: Re-enable phone OTP verification when Twilio issues are resolved
+// Currently bypassed - phone verification is disabled temporarily
 export const sendingOtpToPhone = async (
   req: Request,
   res: Response,
@@ -34,39 +37,35 @@ export const sendingOtpToPhone = async (
 ) => {
   try {
     let { phone_number } = req.body;
-    
+
     if (!phone_number) {
       return res.status(400).json({
         success: false,
         message: "Phone number is required.",
       });
     }
-    
+
     // Normalize phone number to ensure consistent format
     phone_number = normalizePhoneNumber(phone_number);
-    console.log("Sending OTP to normalized phone number:", phone_number);
-    
-    try {
-      const verification = await client.verify.v2
-        ?.services(process.env.TWILIO_SERVICE_SID!)
-        .verifications.create({
-          channel: "sms",
-          to: phone_number,
-        });
-      
-      console.log("Verification created:", verification.sid);
-      
-      res.status(201).json({
-        success: true,
-        message: "OTP sent successfully",
-      });
-    } catch (error: any) {
-      console.error("Twilio error sending OTP:", error);
-      res.status(400).json({
-        success: false,
-        message: error.message || "Failed to send OTP. Please check your phone number.",
-      });
-    }
+    console.log(
+      "⚠️ PHONE OTP BYPASSED - Phone verification is temporarily disabled"
+    );
+    console.log("Normalized phone number:", phone_number);
+
+    // TODO: Re-enable Twilio phone OTP verification here
+    // Original code:
+    // const verification = await client.verify.v2
+    //   ?.services(process.env.TWILIO_SERVICE_SID!)
+    //   .verifications.create({
+    //     channel: "sms",
+    //     to: phone_number,
+    //   });
+
+    // Return success immediately without calling Twilio
+    res.status(201).json({
+      success: true,
+      message: "OTP sent successfully",
+    });
   } catch (error: any) {
     console.error("Error in sendingOtpToPhone:", error);
     res.status(500).json({
@@ -77,6 +76,8 @@ export const sendingOtpToPhone = async (
 };
 
 // verifying otp for login
+// TODO: Re-enable phone OTP verification when Twilio issues are resolved
+// Currently bypassed - phone verification is disabled temporarily, driver is found directly by phone number
 export const verifyPhoneOtpForLogin = async (
   req: Request,
   res: Response,
@@ -85,98 +86,67 @@ export const verifyPhoneOtpForLogin = async (
   try {
     let { phone_number, otp } = req.body;
 
-    if (!phone_number || !otp) {
+    if (!phone_number) {
       return res.status(400).json({
         success: false,
-        message: "Phone number and OTP are required.",
+        message: "Phone number is required.",
       });
     }
 
-    // Normalize phone number to match the format used when sending OTP
+    // Normalize phone number for database lookup
     const originalPhoneNumber = phone_number;
     phone_number = normalizePhoneNumber(phone_number);
-    otp = otp.toString().trim().replace(/\s+/g, "");
-    
-    console.log("Verifying OTP for phone number:");
+
+    console.log(
+      "⚠️ PHONE OTP BYPASSED - Phone verification is temporarily disabled"
+    );
+    console.log("Verifying login for phone number:");
     console.log("  Original:", originalPhoneNumber);
     console.log("  Normalized:", phone_number);
-    console.log("  OTP:", otp);
+    console.log("  OTP provided (ignored):", otp);
 
-    try {
-      const verificationCheck = await client.verify.v2
-        .services(process.env.TWILIO_SERVICE_SID!)
-        .verificationChecks.create({
-          to: phone_number,
-          code: otp,
-        });
+    // TODO: Re-enable Twilio phone OTP verification here
+    // Original code:
+    // const verificationCheck = await client.verify.v2
+    //   .services(process.env.TWILIO_SERVICE_SID!)
+    //   .verificationChecks.create({
+    //     to: phone_number,
+    //     code: otp,
+    //   });
+    // if (verificationCheck.status !== "approved") {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "OTP is incorrect or expired.",
+    //   });
+    // }
 
-      console.log("Verification check status:", verificationCheck.status);
+    // Bypass phone OTP verification and find driver directly by phone number
+    const driver = await prisma.driver.findUnique({
+      where: {
+        phone_number,
+      },
+    });
 
-      // Check if verification was successful
-      if (verificationCheck.status !== "approved") {
-        return res.status(400).json({
-          success: false,
-          message: "OTP is incorrect or expired.",
-        });
-      }
-
-      // Use normalized phone number for database lookup
-      const driver = await prisma.driver.findUnique({
+    // If not found with normalized, try with original format
+    if (!driver) {
+      const driverWithOriginal = await prisma.driver.findUnique({
         where: {
-          phone_number,
+          phone_number: originalPhoneNumber,
         },
       });
-      
-      // If not found with normalized, try with original format
-      if (!driver) {
-        const driverWithOriginal = await prisma.driver.findUnique({
-          where: {
-            phone_number: originalPhoneNumber,
-          },
-        });
-        
-        if (driverWithOriginal) {
-          sendToken(driverWithOriginal, res);
-          return;
-        }
-        
-        return res.status(404).json({
-          success: false,
-          message: "Driver not found. Please register first.",
-        });
+
+      if (driverWithOriginal) {
+        sendToken(driverWithOriginal, res);
+        return;
       }
-      
-      sendToken(driver, res);
-    } catch (error: any) {
-      console.error("Twilio verification error:", error);
-      console.error("Error details:", {
-        status: error.status,
-        code: error.code,
-        message: error.message,
-        phone_number_used: phone_number,
-      });
-      
-      // Handle Twilio-specific errors
-      if (error.status === 404 || error.code === 20404) {
-        return res.status(400).json({
-          success: false,
-          message: "OTP verification not found. The OTP may have expired or the phone number doesn't match. Please request a new OTP.",
-        });
-      }
-      
-      // Check for common Twilio error codes
-      if (error.code === 20429) {
-        return res.status(400).json({
-          success: false,
-          message: "Too many verification attempts. Please request a new OTP.",
-        });
-      }
-      
-      res.status(400).json({
+
+      return res.status(404).json({
         success: false,
-        message: error.message || "OTP verification failed. Please try again.",
+        message: "Driver not found. Please register first.",
       });
     }
+
+    sendToken(driver, res);
   } catch (error: any) {
     console.error("Unexpected error:", error);
     res.status(500).json({
@@ -187,6 +157,8 @@ export const verifyPhoneOtpForLogin = async (
 };
 
 // verifying phone otp for registration
+// TODO: Re-enable phone OTP verification when Twilio issues are resolved
+// Currently bypassed - phone verification is disabled temporarily, proceeds directly to email OTP
 export const verifyPhoneOtpForRegistration = async (
   req: Request,
   res: Response,
@@ -195,74 +167,44 @@ export const verifyPhoneOtpForRegistration = async (
   try {
     let { phone_number, otp } = req.body;
 
-    if (!phone_number || !otp) {
+    if (!phone_number) {
       return res.status(400).json({
         success: false,
-        message: "Phone number and OTP are required.",
+        message: "Phone number is required.",
       });
     }
 
-    // Normalize phone number to match the format used when sending OTP
+    // Normalize phone number to ensure consistent format
     const originalPhoneNumber = phone_number;
     phone_number = normalizePhoneNumber(phone_number);
-    otp = otp.toString().trim().replace(/\s+/g, "");
-    
+
+    console.log(
+      "⚠️ PHONE OTP BYPASSED - Phone verification is temporarily disabled"
+    );
     console.log("Verifying registration OTP for phone number:");
     console.log("  Original:", originalPhoneNumber);
     console.log("  Normalized:", phone_number);
-    console.log("  OTP:", otp);
+    console.log("  OTP provided (ignored):", otp);
 
-    try {
-      const verificationCheck = await client.verify.v2
-        .services(process.env.TWILIO_SERVICE_SID!)
-        .verificationChecks.create({
-          to: phone_number,
-          code: otp,
-        });
+    // TODO: Re-enable Twilio phone OTP verification here
+    // Original code:
+    // const verificationCheck = await client.verify.v2
+    //   .services(process.env.TWILIO_SERVICE_SID!)
+    //   .verificationChecks.create({
+    //     to: phone_number,
+    //     code: otp,
+    //   });
+    // if (verificationCheck.status !== "approved") {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "OTP is incorrect or expired.",
+    //   });
+    // }
 
-      console.log("Verification check status:", verificationCheck.status);
-
-      // Check if verification was successful
-      if (verificationCheck.status !== "approved") {
-        return res.status(400).json({
-          success: false,
-          message: "OTP is incorrect or expired.",
-        });
-      }
-
-      // Update the phone number in request body to normalized version
-      req.body.phone_number = phone_number;
-      await sendingOtpToEmail(req, res);
-    } catch (error: any) {
-      console.error("Twilio verification error:", error);
-      console.error("Error details:", {
-        status: error.status,
-        code: error.code,
-        message: error.message,
-        phone_number_used: phone_number,
-      });
-      
-      // Handle Twilio-specific errors
-      if (error.status === 404 || error.code === 20404) {
-        return res.status(400).json({
-          success: false,
-          message: "OTP verification not found. The OTP may have expired or the phone number doesn't match. Please request a new OTP.",
-        });
-      }
-      
-      // Check for common Twilio error codes
-      if (error.code === 20429) {
-        return res.status(400).json({
-          success: false,
-          message: "Too many verification attempts. Please request a new OTP.",
-        });
-      }
-      
-      res.status(400).json({
-        success: false,
-        message: error.message || "OTP verification failed. Please try again.",
-      });
-    }
+    // Bypass phone OTP verification and proceed directly to email OTP
+    // Update the phone number in request body to normalized version
+    req.body.phone_number = phone_number;
+    await sendingOtpToEmail(req, res);
   } catch (error: any) {
     console.error("Unexpected error:", error);
     res.status(500).json({
@@ -494,7 +436,7 @@ export const updateNotificationToken = async (req: any, res: Response) => {
 export const getDriversById = async (req: Request, res: Response) => {
   try {
     const { ids } = req.query as any;
-    console.log(ids,'ids')
+    console.log(ids, "ids");
     if (!ids) {
       return res.status(400).json({ message: "No driver IDs provided" });
     }
@@ -546,8 +488,9 @@ export const newRide = async (req: any, res: Response) => {
     // Notify socket server to send real-time update to user
     try {
       const axios = require("axios");
-      const SOCKET_SERVER_URL = process.env.SOCKET_SERVER_URL || "http://localhost:3001";
-      
+      const SOCKET_SERVER_URL =
+        process.env.SOCKET_SERVER_URL || "http://localhost:3001";
+
       // Prepare ride data for the user (matching the format expected by user app)
       const rideData = {
         driver: {
@@ -562,13 +505,15 @@ export const newRide = async (req: any, res: Response) => {
         rideData: newRide,
       };
 
-      await axios.post(`${SOCKET_SERVER_URL}/api/notify-ride-accepted`, {
-        userId,
-        rideData,
-      }).catch((error: any) => {
-        // Don't fail the request if socket server is unavailable
-        console.log("⚠️ Could not notify socket server:", error.message);
-      });
+      await axios
+        .post(`${SOCKET_SERVER_URL}/api/notify-ride-accepted`, {
+          userId,
+          rideData,
+        })
+        .catch((error: any) => {
+          // Don't fail the request if socket server is unavailable
+          console.log("⚠️ Could not notify socket server:", error.message);
+        });
     } catch (socketError) {
       // Don't fail the request if socket notification fails
       console.log("⚠️ Socket notification error (non-critical):", socketError);
@@ -646,19 +591,28 @@ export const updatingRideStatus = async (req: any, res: Response) => {
       // Notify socket server to send real-time update to user about ride completion
       try {
         const axios = require("axios");
-        const SOCKET_SERVER_URL = process.env.SOCKET_SERVER_URL || "http://localhost:3001";
+        const SOCKET_SERVER_URL =
+          process.env.SOCKET_SERVER_URL || "http://localhost:3001";
 
-        await axios.post(`${SOCKET_SERVER_URL}/api/notify-ride-completed`, {
-          userId: updatedRide.userId,
-          rideId: rideId,
-          rideData: updatedRide,
-        }).catch((error: any) => {
-          // Don't fail the request if socket server is unavailable
-          console.log("⚠️ Could not notify socket server about ride completion:", error.message);
-        });
+        await axios
+          .post(`${SOCKET_SERVER_URL}/api/notify-ride-completed`, {
+            userId: updatedRide.userId,
+            rideId: rideId,
+            rideData: updatedRide,
+          })
+          .catch((error: any) => {
+            // Don't fail the request if socket server is unavailable
+            console.log(
+              "⚠️ Could not notify socket server about ride completion:",
+              error.message
+            );
+          });
       } catch (socketError) {
         // Don't fail the request if socket notification fails
-        console.log("⚠️ Socket notification error (non-critical):", socketError);
+        console.log(
+          "⚠️ Socket notification error (non-critical):",
+          socketError
+        );
       }
     }
 
@@ -695,7 +649,7 @@ export const getAllRides = async (req: any, res: Response) => {
 export const getDriverStats = async (req: any, res: Response) => {
   try {
     const driverId = req.driver?.id;
-    
+
     if (!driverId) {
       return res.status(401).json({
         success: false,
@@ -803,11 +757,16 @@ export const getDriverStats = async (req: any, res: Response) => {
         completedTripsToday: completedTripsToday + completedScheduledTripsToday,
         failedTrips,
         upcomingScheduledTrips,
-        activeTrip: activeTrip || activeRide ? {
-          type: activeTrip ? "scheduled" : "regular",
-          id: activeTrip?.id || activeRide?.id,
-          name: activeTrip?.name || `${activeRide?.currentLocationName} → ${activeRide?.destinationLocationName}`,
-        } : null,
+        activeTrip:
+          activeTrip || activeRide
+            ? {
+                type: activeTrip ? "scheduled" : "regular",
+                id: activeTrip?.id || activeRide?.id,
+                name:
+                  activeTrip?.name ||
+                  `${activeRide?.currentLocationName} → ${activeRide?.destinationLocationName}`,
+              }
+            : null,
         totalEarnings: driver?.totalEarning || 0,
         totalCompletedTrips: totalCompletedTrips + totalCompletedScheduledTrips,
       },
@@ -845,9 +804,13 @@ export const getScheduledTrips = async (req: any, res: Response) => {
     }
 
     // Get current location from query params if provided
-    const currentLocation = latitude && longitude
-      ? { lat: parseFloat(latitude as string), lng: parseFloat(longitude as string) }
-      : null;
+    const currentLocation =
+      latitude && longitude
+        ? {
+            lat: parseFloat(latitude as string),
+            lng: parseFloat(longitude as string),
+          }
+        : null;
 
     const trips = await prisma.scheduledTrip.findMany({
       where,
@@ -857,6 +820,7 @@ export const getScheduledTrips = async (req: any, res: Response) => {
           orderBy: { order: "asc" },
         },
         progress: true,
+        company: true,
       },
     });
 
@@ -883,7 +847,7 @@ export const getScheduledTrips = async (req: any, res: Response) => {
           } else {
             // Use current location from request, or fall back to stored location in progress
             let locationToUse = currentLocation;
-            
+
             if (!locationToUse) {
               const progress = trip.progress;
               if (progress && progress.lastLatitude && progress.lastLongitude) {
@@ -895,8 +859,13 @@ export const getScheduledTrips = async (req: any, res: Response) => {
             }
 
             if (locationToUse) {
-              const { checkTripActivationConditions } = await import("../utils/trip-activation");
-              const result = await checkTripActivationConditions(trip.id, locationToUse);
+              const { checkTripActivationConditions } = await import(
+                "../utils/trip-activation"
+              );
+              const result = await checkTripActivationConditions(
+                trip.id,
+                locationToUse
+              );
               activationStatus = {
                 canActivate: result.canActivate,
                 reason: result.reason,
@@ -908,7 +877,8 @@ export const getScheduledTrips = async (req: any, res: Response) => {
             } else {
               activationStatus = {
                 canActivate: false,
-                reason: "Location not available. Please enable location services and try again.",
+                reason:
+                  "Location not available. Please enable location services and try again.",
               };
             }
           }
@@ -1008,7 +978,9 @@ export const startScheduledTrip = async (req: any, res: Response) => {
     }
 
     // Check activation conditions again (security)
-    const { checkTripActivationConditions } = await import("../utils/trip-activation");
+    const { checkTripActivationConditions } = await import(
+      "../utils/trip-activation"
+    );
     const activationCheck = await checkTripActivationConditions(tripId, {
       lat: latitude,
       lng: longitude,
@@ -1178,6 +1150,7 @@ export const updateTripProgress = async (req: any, res: Response) => {
           status: "COMPLETED",
         },
       });
+      await applyTripCompletionPayout(tripId);
     }
 
     const updatedProgress = await prisma.tripProgress.update({
@@ -1199,7 +1172,9 @@ export const updateTripProgress = async (req: any, res: Response) => {
     res.status(200).json({
       success: true,
       trip: updatedTrip,
-      message: isFinalPoint ? "Trip completed successfully" : "Checkpoint reached",
+      message: isFinalPoint
+        ? "Trip completed successfully"
+        : "Checkpoint reached",
     });
   } catch (error: any) {
     console.error("Update trip progress error:", error);
@@ -1289,31 +1264,37 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
         // We check BEFORE calling checkTripActivationConditions to avoid creating unnecessary check records
         const oneDayAgo = new Date();
         oneDayAgo.setHours(oneDayAgo.getHours() - 24);
-        
-        const existingActivationCheck = await prisma.tripActivationCheck.findFirst({
-          where: {
-            scheduledTripId: trip.id,
-            activated: true,
-            createdAt: {
-              gte: oneDayAgo,
+
+        const existingActivationCheck =
+          await prisma.tripActivationCheck.findFirst({
+            where: {
+              scheduledTripId: trip.id,
+              activated: true,
+              createdAt: {
+                gte: oneDayAgo,
+              },
             },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
+            orderBy: {
+              createdAt: "desc",
+            },
+          });
 
         // Skip checking if notification was already sent recently
         // (We still log activation results for trips that already have notifications)
         const shouldSkipNotification = !!existingActivationCheck;
         if (shouldSkipNotification) {
-          const timeSinceLastCheck = Date.now() - existingActivationCheck.createdAt.getTime();
+          const timeSinceLastCheck =
+            Date.now() - existingActivationCheck.createdAt.getTime();
           const minutesAgo = Math.floor(timeSinceLastCheck / (1000 * 60));
-          console.log(`⏭️ Trip "${trip.name}" (${trip.id}) - notification already sent ${minutesAgo} minute(s) ago, skipping duplicate`);
+          console.log(
+            `⏭️ Trip "${trip.name}" (${trip.id}) - notification already sent ${minutesAgo} minute(s) ago, skipping duplicate`
+          );
         }
 
         // Check activation conditions (always check for logging and API response)
-        const { checkTripActivationConditions } = await import("../utils/trip-activation");
+        const { checkTripActivationConditions } = await import(
+          "../utils/trip-activation"
+        );
         const result = await checkTripActivationConditions(trip.id, {
           lat: latitude,
           lng: longitude,
@@ -1322,16 +1303,27 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
         // Only send notification if conditions are met AND notification wasn't sent recently
         if (result.canActivate && !shouldSkipNotification) {
           // Send notification (only once per trip)
-          const { sendTripActivationNotification } = await import("../utils/send-notification");
-          const notificationResult = await sendTripActivationNotification(captainId, trip.id);
-          
+          const { sendTripActivationNotification } = await import(
+            "../utils/send-notification"
+          );
+          const notificationResult = await sendTripActivationNotification(
+            captainId,
+            trip.id
+          );
+
           if (notificationResult.success) {
-            console.log(`📱 Trip activation notification sent to captain ${captainId} for trip ${trip.id}`);
+            console.log(
+              `📱 Trip activation notification sent to captain ${captainId} for trip ${trip.id}`
+            );
           } else {
-            console.error(`❌ Failed to send trip activation notification: ${notificationResult.message}`);
+            console.error(
+              `❌ Failed to send trip activation notification: ${notificationResult.message}`
+            );
           }
         } else if (result.canActivate && shouldSkipNotification) {
-          console.log(`⏭️ Skipping duplicate notification for trip ${trip.id} - already sent recently`);
+          console.log(
+            `⏭️ Skipping duplicate notification for trip ${trip.id} - already sent recently`
+          );
         }
 
         activationResults.push({

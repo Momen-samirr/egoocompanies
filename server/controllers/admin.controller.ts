@@ -375,6 +375,169 @@ export const getAllDrivers = async (req: any, res: Response) => {
   }
 };
 
+// Companies
+export const getCompanies = async (req: any, res: Response) => {
+  try {
+    const companies = await prisma.company.findMany({
+      orderBy: { name: "asc" },
+    });
+
+    res.status(200).json({
+      success: true,
+      companies,
+    });
+  } catch (error: any) {
+    console.error("Get companies error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+export const createCompany = async (req: any, res: Response) => {
+  try {
+    const { name, defaultScheduledTripPrice } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Company name is required",
+      });
+    }
+
+    const price = parseFloat(defaultScheduledTripPrice);
+    if (isNaN(price) || price <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Default scheduled trip price must be a positive number",
+      });
+    }
+
+    const existing = await prisma.company.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "A company with this name already exists",
+      });
+    }
+
+    const company = await prisma.company.create({
+      data: {
+        name,
+        defaultScheduledTripPrice: price,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      company,
+    });
+  } catch (error: any) {
+    console.error("Create company error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+export const updateCompany = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, defaultScheduledTripPrice } = req.body;
+
+    const company = await prisma.company.findUnique({
+      where: { id },
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    const data: any = {};
+    if (name) {
+      data.name = name;
+    }
+
+    if (defaultScheduledTripPrice !== undefined) {
+      const price = parseFloat(defaultScheduledTripPrice);
+      if (isNaN(price) || price <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Default scheduled trip price must be a positive number",
+        });
+      }
+      data.defaultScheduledTripPrice = price;
+    }
+
+    const updatedCompany = await prisma.company.update({
+      where: { id },
+      data,
+    });
+
+    res.status(200).json({
+      success: true,
+      company: updatedCompany,
+    });
+  } catch (error: any) {
+    console.error("Update company error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+export const deleteCompany = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const company = await prisma.company.findUnique({
+      where: { id },
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    const linkedTrips = await prisma.scheduledTrip.count({
+      where: { companyId: id },
+    });
+
+    if (linkedTrips > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete company with scheduled trips",
+      });
+    }
+
+    await prisma.company.delete({
+      where: { id },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Company deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("Delete company error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
 // Get Driver By ID
 export const getDriverById = async (req: any, res: Response) => {
   try {
@@ -725,17 +888,31 @@ export const getActiveRidesWithLocations = async (req: any, res: Response) => {
 // Create Scheduled Trip
 export const createScheduledTrip = async (req: any, res: Response) => {
   try {
-    const { name, tripDate, scheduledTime, assignedCaptainId, points } = req.body;
+    const {
+      name,
+      tripDate,
+      scheduledTime,
+      assignedCaptainId,
+      points,
+      companyId,
+      price,
+    } = req.body;
 
-    // Validate required fields (assignedCaptainId is optional)
-    if (!name || !tripDate || !scheduledTime || !points || !Array.isArray(points) || points.length === 0) {
+    if (
+      !name ||
+      !tripDate ||
+      !scheduledTime ||
+      !companyId ||
+      !points ||
+      !Array.isArray(points) ||
+      points.length === 0
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Name, tripDate, scheduledTime, and points are required",
+        message: "Name, tripDate, scheduledTime, companyId, and points are required",
       });
     }
 
-    // Validate that at least one point is marked as final
     const hasFinalPoint = points.some((p: any) => p.isFinalPoint === true);
     if (!hasFinalPoint) {
       return res.status(400).json({
@@ -744,7 +921,6 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
-    // Validate captain exists only if assignedCaptainId is provided
     if (assignedCaptainId) {
       const captain = await prisma.driver.findUnique({
         where: { id: assignedCaptainId },
@@ -758,17 +934,38 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       }
     }
 
-    // Combine tripDate and scheduledTime into a single DateTime
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    const resolvedPrice =
+      price !== undefined && price !== null ? parseFloat(price) : company.defaultScheduledTripPrice;
+
+    if (isNaN(resolvedPrice) || resolvedPrice <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Trip price must be a positive number",
+      });
+    }
+
     const scheduledDateTime = new Date(`${tripDate}T${scheduledTime}`);
 
-    // Create scheduled trip with points (assignedCaptainId is optional)
     const trip = await prisma.scheduledTrip.create({
       data: {
         name,
         tripDate: new Date(tripDate),
         scheduledTime: scheduledDateTime,
-        ...(assignedCaptainId && { assignedCaptainId }), // Only include if provided
+        ...(assignedCaptainId && { assignedCaptainId }),
         createdById: req.admin.id,
+        companyId,
+        price: resolvedPrice,
         points: {
           create: points.map((point: any, index: number) => ({
             name: point.name,
@@ -795,6 +992,7 @@ export const createScheduledTrip = async (req: any, res: Response) => {
             email: true,
           },
         },
+        company: true,
         points: {
           orderBy: { order: "asc" },
         },
@@ -817,12 +1015,13 @@ export const createScheduledTrip = async (req: any, res: Response) => {
 // Get All Scheduled Trips
 export const getScheduledTrips = async (req: any, res: Response) => {
   try {
-    const { page = 1, limit = 10, status, startDate, endDate, captainId } = req.query;
+    const { page = 1, limit = 10, status, startDate, endDate, captainId, companyId } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
     if (status) where.status = status;
     if (captainId) where.assignedCaptainId = captainId;
+    if (companyId) where.companyId = companyId;
     if (startDate || endDate) {
       where.tripDate = {};
       if (startDate) where.tripDate.gte = new Date(startDate);
@@ -855,6 +1054,7 @@ export const getScheduledTrips = async (req: any, res: Response) => {
             orderBy: { order: "asc" },
           },
           progress: true,
+        company: true,
         },
       }),
       prisma.scheduledTrip.count({ where }),
@@ -911,6 +1111,7 @@ export const getScheduledTripById = async (req: any, res: Response) => {
           orderBy: { checkedAt: "desc" },
           take: 10, // Last 10 activation checks
         },
+        company: true,
       },
     });
 
@@ -938,7 +1139,7 @@ export const getScheduledTripById = async (req: any, res: Response) => {
 export const updateScheduledTrip = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, tripDate, scheduledTime, assignedCaptainId, points } = req.body;
+    const { name, tripDate, scheduledTime, assignedCaptainId, points, companyId, price } = req.body;
 
     // Check if trip exists and is not already active
     const existingTrip = await prisma.scheduledTrip.findUnique({
@@ -980,6 +1181,39 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
       updateData.assignedCaptainId = assignedCaptainId;
     }
 
+    let resolvedPrice: number | undefined;
+
+    if (companyId) {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+      });
+
+      if (!company) {
+        return res.status(404).json({
+          success: false,
+          message: "Company not found",
+        });
+      }
+
+      updateData.companyId = companyId;
+      resolvedPrice = company.defaultScheduledTripPrice;
+    }
+
+    if (price !== undefined && price !== null) {
+      const parsedPrice = parseFloat(price);
+      if (isNaN(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Trip price must be a positive number",
+        });
+      }
+      resolvedPrice = parsedPrice;
+    }
+
+    if (resolvedPrice !== undefined) {
+      updateData.price = resolvedPrice;
+    }
+
     // Update trip
     const trip = await prisma.scheduledTrip.update({
       where: { id },
@@ -996,6 +1230,7 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
         points: {
           orderBy: { order: "asc" },
         },
+        company: true,
       },
     });
 
@@ -1053,6 +1288,7 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
           points: {
             orderBy: { order: "asc" },
           },
+          company: true,
         },
       });
 

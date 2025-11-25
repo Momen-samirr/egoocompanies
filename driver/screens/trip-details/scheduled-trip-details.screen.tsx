@@ -26,6 +26,12 @@ interface ScheduledTrip {
   tripDate: string;
   scheduledTime: string;
   status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
+  companyId?: string;
+  price?: number;
+  company?: {
+    id: string;
+    name: string;
+  };
   assignedCaptain: {
     id: string;
     name: string;
@@ -286,6 +292,47 @@ export default function ScheduledTripDetailsScreen() {
                   {trip.status === "FAILED" ? "Failed" : trip.status}
                 </Text>
               </View>
+            </View>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: windowWidth(2),
+                marginBottom: windowHeight(1),
+              }}
+            >
+              {trip.company?.name && (
+                <View
+                  style={{
+                    borderWidth: 1,
+                    borderColor: color.primary,
+                    paddingHorizontal: windowWidth(3),
+                    paddingVertical: windowHeight(1),
+                    borderRadius: 999,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: color.primary,
+                      fontSize: fontSizes.FONT12,
+                      fontFamily: fonts.medium,
+                    }}
+                  >
+                    {trip.company.name}
+                  </Text>
+                </View>
+              )}
+              {typeof trip.price === "number" && (
+                <Text
+                  style={{
+                    color: color.secondaryFont,
+                    fontSize: fontSizes.FONT14,
+                    fontFamily: fonts.medium,
+                  }}
+                >
+                  ${trip.price.toFixed(2)}
+                </Text>
+              )}
             </View>
 
             <View style={{ marginBottom: windowHeight(2) }}>

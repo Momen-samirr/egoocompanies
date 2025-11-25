@@ -75,3 +75,11 @@ export interface Pagination {
   pages: number;
 }
 
+export interface Company {
+  id: string;
+  name: string;
+  defaultScheduledTripPrice: number;
+  createdAt: string;
+  updatedAt: string;
+}
+

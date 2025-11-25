@@ -28,6 +28,13 @@ interface ScheduledTrip {
     name: string;
     email: string;
   };
+  company: {
+    id: string;
+    name: string;
+    defaultScheduledTripPrice: number;
+  };
+  companyId: string;
+  price: number;
   points: Array<{
     id: string;
     name: string;
@@ -195,6 +202,18 @@ export default function TripDetailsPage() {
                   ) : (
                     <span className="text-gray-500 italic">No captain assigned yet</span>
                   )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Company</dt>
+                <dd className="mt-1 text-sm font-semibold text-gray-900">
+                  {trip.company?.name || "Not specified"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Trip Price</dt>
+                <dd className="mt-1 text-sm font-semibold text-gray-900">
+                  ${trip.price.toFixed(2)}
                 </dd>
               </div>
               {trip.progress && (

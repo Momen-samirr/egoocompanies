@@ -40,6 +40,12 @@ interface ScheduledTrip {
   id: string;
   name: string;
   status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+  companyId?: string;
+  price?: number;
+  company?: {
+    id?: string;
+    name: string;
+  };
   points: Array<{
     id: string;
     name: string;
@@ -926,6 +932,40 @@ export default function TripNavigationScreen() {
           <Text style={{ fontSize: fontSizes.FONT24, fontWeight: "bold", color: colors.text, marginBottom: spacing.xs }}>
             {trip.name}
           </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.xs }}>
+            {trip.company?.name && (
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderColor: color.primary,
+                  paddingHorizontal: spacing.sm,
+                  paddingVertical: spacing.xs / 2,
+                  borderRadius: 999,
+                }}
+              >
+                <Text
+                  style={{
+                    color: color.primary,
+                    fontSize: fontSizes.FONT12,
+                    fontFamily: fonts.medium,
+                  }}
+                >
+                  {trip.company.name}
+                </Text>
+              </View>
+            )}
+            {typeof trip.price === "number" && (
+              <Text
+                style={{
+                  color: color.secondaryFont,
+                  fontSize: fontSizes.FONT12,
+                  fontFamily: fonts.medium,
+                }}
+              >
+                ${trip.price.toFixed(2)}
+              </Text>
+            )}
+          </View>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Text style={{ color: colors.text, fontSize: fontSizes.FONT14, fontFamily: fonts.regular }}>
               Progress: {currentPointIndex + 1} of {trip.points.length} checkpoints

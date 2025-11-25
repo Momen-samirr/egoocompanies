@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useFieldArray, Controller } from "react-hook-form";
+import { useFieldArray, Controller, FieldErrors } from "react-hook-form";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
 import { useTripForm } from "@/hooks/useTripForm";
@@ -18,7 +18,8 @@ import {
   ChevronDownIcon,
   MapPinIcon,
 } from "@heroicons/react/24/outline";
-import { LocationData, ScheduledTrip } from "@/types/trip";
+import { LocationData, ScheduledTrip, TripFormData } from "@/types/trip";
+import { Company } from "@/types";
 
 interface Driver {
   id: string;
@@ -34,6 +35,7 @@ export default function EditTripPage() {
   const tripId = params.id as string;
   const [loading, setLoading] = useState(true);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [trip, setTrip] = useState<ScheduledTrip | null>(null);
   const [checkpointLocations, setCheckpointLocations] = useState<
     Map<number, LocationData | null>
@@ -45,6 +47,8 @@ export default function EditTripPage() {
       tripDate: "",
       scheduledTime: "",
       assignedCaptainId: "",
+      companyId: "",
+      price: 0,
       points: [],
     },
     onSubmit: async (data) => {
@@ -65,6 +69,8 @@ export default function EditTripPage() {
         tripDate: data.tripDate,
         scheduledTime: scheduledTimeWithTimezone,
         assignedCaptainId: data.assignedCaptainId || undefined,
+        companyId: data.companyId,
+        price: data.price,
         points: data.points,
       });
 
@@ -73,27 +79,45 @@ export default function EditTripPage() {
         router.push(`/dashboard/trips/${tripId}`);
       }
     },
-    onError: (errors) => {
-      const firstError = Object.values(errors)[0] as any;
-      if (firstError?.message) {
-        toast.error(firstError.message);
+    onError: (errors: FieldErrors<TripFormData>) => {
+      const firstError = Object.values(errors)[0];
+      const firstMessage =
+        typeof firstError === "object" && firstError && "message" in firstError
+          ? (firstError as { message?: string }).message
+          : undefined;
+
+      if (firstMessage) {
+        toast.error(firstMessage);
       } else {
         toast.error("Please fix the errors in the form");
       }
     },
   });
 
+  const companyIdRegister = form.register("companyId");
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message ===
+        "string"
+    ) {
+      return (
+        (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
+        fallback
+      );
+    }
+    return fallback;
+  };
+
   const { fields, append, remove, move } = useFieldArray({
     control: form.control,
     name: "points",
   });
 
-  useEffect(() => {
-    fetchTrip();
-    fetchDrivers();
-  }, [tripId]);
-
-  const fetchTrip = async () => {
+  const fetchTrip = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get(`/admin/trips/${tripId}`);
@@ -112,7 +136,9 @@ export default function EditTripPage() {
           tripDate: dateStr,
           scheduledTime: timeStr,
           assignedCaptainId: tripData.assignedCaptainId || "",
-          points: tripData.points.map((point: any) => ({
+          companyId: tripData.companyId,
+          price: tripData.price,
+          points: tripData.points.map((point) => ({
             id: point.id,
             name: point.name,
             latitude: point.latitude,
@@ -124,7 +150,7 @@ export default function EditTripPage() {
 
         // Pre-populate location pickers
         const locations = new Map<number, LocationData | null>();
-        tripData.points.forEach((point: any, index: number) => {
+        tripData.points.forEach((point: ScheduledTrip["points"][number], index: number) => {
           locations.set(index, {
             latitude: point.latitude,
             longitude: point.longitude,
@@ -133,16 +159,16 @@ export default function EditTripPage() {
         });
         setCheckpointLocations(locations);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error fetching trip:", error);
-      toast.error(error.response?.data?.message || "Failed to load trip");
+      toast.error(getErrorMessage(error, "Failed to load trip"));
       router.push("/dashboard/trips");
     } finally {
       setLoading(false);
     }
-  };
+  }, [form, router, tripId]);
 
-  const fetchDrivers = async () => {
+  const fetchDrivers = useCallback(async () => {
     try {
       const response = await api.get("/admin/drivers?limit=100&status=active");
       setDrivers(response.data.drivers);
@@ -150,7 +176,23 @@ export default function EditTripPage() {
       console.error("Error fetching drivers:", error);
       toast.error("Failed to load drivers");
     }
-  };
+  }, []);
+
+  const fetchCompanies = useCallback(async () => {
+    try {
+      const response = await api.get("/admin/companies");
+      setCompanies(response.data.companies || []);
+    } catch (error) {
+      console.error("Error fetching companies:", error);
+      toast.error("Failed to load companies");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTrip();
+    fetchDrivers();
+    fetchCompanies();
+  }, [fetchTrip, fetchDrivers, fetchCompanies]);
 
   const addCheckpoint = () => {
     append({
@@ -210,6 +252,16 @@ export default function EditTripPage() {
       const newMap = new Map(checkpointLocations);
       newMap.set(index, location);
       setCheckpointLocations(newMap);
+    }
+  };
+
+  const handleCompanyChange = (companyId: string) => {
+    const selectedCompany = companies.find((company) => company.id === companyId);
+    if (selectedCompany) {
+      form.setValue("price", selectedCompany.defaultScheduledTripPrice, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
     }
   };
 
@@ -297,6 +349,54 @@ export default function EditTripPage() {
                     <input
                       type="time"
                       {...form.register("scheduledTime")}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                    />
+                  </FormField>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    label="Company"
+                    required
+                    error={form.formState.errors.companyId}
+                  >
+                    <select
+                      {...companyIdRegister}
+                      onChange={(event) => {
+                        companyIdRegister.onChange(event);
+                        handleCompanyChange(event.target.value);
+                      }}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                      disabled={companies.length === 0}
+                    >
+                      <option value="">
+                        {companies.length === 0
+                          ? "No companies available"
+                          : "Select a company"}
+                      </option>
+                      {companies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))}
+                    </select>
+                    {companies.length === 0 && (
+                      <p className="text-sm text-amber-600 mt-2">
+                        Please add a company before editing trips.
+                      </p>
+                    )}
+                  </FormField>
+
+                  <FormField
+                    label="Trip Price"
+                    required
+                    error={form.formState.errors.price}
+                  >
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      {...form.register("price", { valueAsNumber: true })}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                     />
                   </FormField>

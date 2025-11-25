@@ -20,6 +20,10 @@ import {
   updateScheduledTrip,
   deleteScheduledTrip,
   getEmergencyLogs,
+  getCompanies,
+  createCompany,
+  updateCompany,
+  deleteCompany,
 } from "../controllers/admin.controller";
 import { isAuthenticatedAdmin } from "../middleware/isAuthenticated";
 
@@ -41,6 +45,12 @@ adminRouter.get("/drivers", isAuthenticatedAdmin, getAllDrivers);
 adminRouter.get("/drivers/:id", isAuthenticatedAdmin, getDriverById);
 adminRouter.put("/drivers/:id/status", isAuthenticatedAdmin, updateDriverStatus);
 adminRouter.put("/drivers/:id/verify", isAuthenticatedAdmin, verifyDriverDocuments);
+
+// Companies
+adminRouter.get("/companies", isAuthenticatedAdmin, getCompanies);
+adminRouter.post("/companies", isAuthenticatedAdmin, createCompany);
+adminRouter.put("/companies/:id", isAuthenticatedAdmin, updateCompany);
+adminRouter.delete("/companies/:id", isAuthenticatedAdmin, deleteCompany);
 
 // Rides
 adminRouter.get("/rides", isAuthenticatedAdmin, getAllRides);

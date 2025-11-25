@@ -1,4 +1,5 @@
 import prisma from "../utils/prisma";
+import { applyTripFailurePenalty } from "./trip-finance";
 
 /**
  * Background worker that checks for overdue scheduled trips
@@ -95,6 +96,8 @@ export class TripOverdueWorker {
                 status: "FAILED",
               },
             });
+
+            await applyTripFailurePenalty(trip.id);
 
             console.log(`❌ Trip "${trip.name}" marked as FAILED (overdue and not started)`);
             console.log(`   Scheduled time: ${scheduledTime.toISOString()}`);

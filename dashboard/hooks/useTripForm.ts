@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useCallback } from "react";
-import { useForm, UseFormReturn } from "react-hook-form";
+import { useForm, UseFormReturn, FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { tripFormSchema, TripFormData } from "@/lib/validations/trip.schema";
-import { TripPoint } from "@/types/trip";
 
 interface UseTripFormOptions {
   defaultValues?: Partial<TripFormData>;
   onSubmit: (data: TripFormData) => Promise<void>;
   onDraftSave?: (data: Partial<TripFormData>) => void;
-  onError?: (errors: any) => void;
+  onError?: (errors: FieldErrors<TripFormData>) => void;
 }
 
 export interface UseTripFormReturn {
@@ -36,6 +35,8 @@ export function useTripForm({
       tripDate: "",
       scheduledTime: "",
       assignedCaptainId: "",
+      companyId: "",
+      price: 0,
       points: [
         {
           name: "",
@@ -62,7 +63,7 @@ export function useTripForm({
         }
       }
     }
-  }, []);
+  }, [defaultValues, form]);
 
   // Auto-save draft on change
   useEffect(() => {

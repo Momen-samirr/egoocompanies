@@ -14,6 +14,8 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
     "Captain",
     "Captain Phone",
     "Captain Email",
+    "Company",
+    "Price",
     "Checkpoints",
     "Created At",
   ];
@@ -32,6 +34,8 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
       trip.assignedCaptain?.name || "Not assigned",
       trip.assignedCaptain?.phone_number || "",
       trip.assignedCaptain?.email || "",
+      trip.company?.name || "",
+      trip.price !== undefined ? trip.price.toFixed(2) : "",
       trip.points?.length || 0,
       createdAt,
     ];

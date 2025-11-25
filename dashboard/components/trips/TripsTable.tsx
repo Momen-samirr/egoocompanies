@@ -12,6 +12,23 @@ import {
   ChevronDownIcon,
   BarsArrowUpIcon,
 } from "@heroicons/react/24/outline";
+
+interface SortIndicatorProps {
+  field: string;
+  activeField?: string | null;
+  direction: "asc" | "desc";
+}
+
+const SortIndicator = ({ field, activeField, direction }: SortIndicatorProps) => {
+  if (activeField !== field) {
+    return <BarsArrowUpIcon className="h-4 w-4 text-gray-400" />;
+  }
+  return direction === "asc" ? (
+    <ChevronUpIcon className="h-4 w-4 text-indigo-600" />
+  ) : (
+    <ChevronDownIcon className="h-4 w-4 text-indigo-600" />
+  );
+};
 import { formatDistanceToNow } from "date-fns";
 
 interface TripsTableProps {
@@ -32,17 +49,6 @@ export default function TripsTable({
   onSort,
 }: TripsTableProps) {
   const router = useRouter();
-
-  const SortIcon = ({ field }: { field: string }) => {
-    if (sortField !== field) {
-      return <BarsArrowUpIcon className="h-4 w-4 text-gray-400" />;
-    }
-    return sortDirection === "asc" ? (
-      <ChevronUpIcon className="h-4 w-4 text-indigo-600" />
-    ) : (
-      <ChevronDownIcon className="h-4 w-4 text-indigo-600" />
-    );
-  };
 
   const handleSort = (field: string) => {
     onSort?.(field);
@@ -81,8 +87,15 @@ export default function TripsTable({
             >
               <div className="flex items-center gap-2">
                 <span>Trip Name</span>
-                <SortIcon field="name" />
+                <SortIndicator
+                  field="name"
+                  activeField={sortField}
+                  direction={sortDirection}
+                />
               </div>
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+              Company
             </th>
             <th
               className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
@@ -90,8 +103,15 @@ export default function TripsTable({
             >
               <div className="flex items-center gap-2">
                 <span>Date & Time</span>
-                <SortIcon field="date" />
+                <SortIndicator
+                  field="date"
+                  activeField={sortField}
+                  direction={sortDirection}
+                />
               </div>
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+              Price
             </th>
             <th
               className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
@@ -99,7 +119,11 @@ export default function TripsTable({
             >
               <div className="flex items-center gap-2">
                 <span>Captain</span>
-                <SortIcon field="captain" />
+                <SortIndicator
+                  field="captain"
+                  activeField={sortField}
+                  direction={sortDirection}
+                />
               </div>
             </th>
             <th
@@ -108,7 +132,11 @@ export default function TripsTable({
             >
               <div className="flex items-center gap-2">
                 <span>Checkpoints</span>
-                <SortIcon field="checkpoints" />
+                <SortIndicator
+                  field="checkpoints"
+                  activeField={sortField}
+                  direction={sortDirection}
+                />
               </div>
             </th>
             <th
@@ -117,7 +145,11 @@ export default function TripsTable({
             >
               <div className="flex items-center gap-2">
                 <span>Status</span>
-                <SortIcon field="status" />
+                <SortIndicator
+                  field="status"
+                  activeField={sortField}
+                  direction={sortDirection}
+                />
               </div>
             </th>
             <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
@@ -141,6 +173,13 @@ export default function TripsTable({
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
+                <div className="text-sm text-gray-900">
+                  {trip.company?.name || (
+                    <span className="text-gray-400 italic">No company</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm font-medium text-gray-900">
                   {new Date(trip.tripDate).toLocaleDateString("en-US", {
                     month: "short",
@@ -159,6 +198,11 @@ export default function TripsTable({
                   {formatDistanceToNow(new Date(trip.scheduledTime), {
                     addSuffix: true,
                   })}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="text-sm font-semibold text-gray-900">
+                  ${trip.price?.toFixed(2) ?? "0.00"}
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
