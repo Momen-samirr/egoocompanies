@@ -81,6 +81,12 @@ export interface ScheduledTrip {
   };
   company?: Company;
   points: TripPoint[];
+  progress?: {
+    currentPointIndex: number;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    lastLocationUpdate?: string | null;
+  } | null;
   statusHistory?: TripStatusHistory[];
 }
 
