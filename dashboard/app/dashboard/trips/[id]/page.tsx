@@ -72,6 +72,18 @@ interface ScheduledTrip {
     activated: boolean;
     distanceToFirstPoint: number | null;
   }>;
+  statusHistory?: Array<{
+    id: string;
+    previousStatus: string;
+    newStatus: string;
+    note?: string;
+    changedAt: string;
+    changedByAdmin?: {
+      id: string;
+      name: string;
+      email: string;
+    };
+  }>;
 }
 
 export default function TripDetailsPage() {
@@ -173,13 +185,22 @@ export default function TripDetailsPage() {
         </div>
         <div className="flex gap-2">
           {trip.status === "ACTIVE" && (
-            <Button
-              variant="danger"
-              onClick={() => setShowForceCloseModal(true)}
-              disabled={forceClosing}
-            >
-              Force Closed
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                icon={PencilIcon}
+                onClick={() => router.push(`/dashboard/trips/${tripId}/edit`)}
+              >
+                Edit Trip
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => setShowForceCloseModal(true)}
+                disabled={forceClosing}
+              >
+                Force Closed
+              </Button>
+            </>
           )}
           {(trip.status === "SCHEDULED" || trip.status === "FAILED") && (
             <>
@@ -323,6 +344,63 @@ export default function TripDetailsPage() {
           </CardBody>
         </Card>
       </div>
+
+      {/* Status History */}
+      {trip.statusHistory && trip.statusHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <h2 className="text-xl font-semibold text-gray-900">Status Change History</h2>
+          </CardHeader>
+          <CardBody>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Changed At
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Previous Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      New Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Changed By
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Note
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {trip.statusHistory.map((history) => (
+                    <tr key={history.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(history.changedAt).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <StatusBadge status={history.previousStatus as any} size="sm" />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <StatusBadge status={history.newStatus as any} size="sm" />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {history.changedByAdmin?.name || "Unknown"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {history.note || (
+                          <span className="text-gray-400 italic">No note</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Activation Checks History */}
       {trip.activationChecks && trip.activationChecks.length > 0 && (

@@ -339,6 +339,7 @@ export default function ScheduledTripsPage() {
                   trips={filteredAndSortedTrips}
                   loading={loading}
                   onDelete={handleDelete}
+                  onRefresh={fetchTrips}
                   sortField={sortField}
                   sortDirection={sortDirection}
                   onSort={handleSort}

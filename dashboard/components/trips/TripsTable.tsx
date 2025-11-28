@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ScheduledTrip } from "@/types/trip";
 import Button from "@/components/common/Button";
 import StatusBadge from "@/components/common/StatusBadge";
+import StatusChangeModal from "./StatusChangeModal";
 import {
   EyeIcon,
   PencilIcon,
@@ -11,6 +13,7 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   BarsArrowUpIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 
 interface SortIndicatorProps {
@@ -36,6 +39,7 @@ interface TripsTableProps {
   trips: ScheduledTrip[];
   loading?: boolean;
   onDelete?: (id: string) => void;
+  onRefresh?: () => void;
   sortField?: string | null;
   sortDirection?: "asc" | "desc";
   onSort?: (field: string) => void;
@@ -45,11 +49,14 @@ export default function TripsTable({
   trips,
   loading = false,
   onDelete,
+  onRefresh,
   sortField,
   sortDirection = "asc",
   onSort,
 }: TripsTableProps) {
   const router = useRouter();
+  const [selectedTrip, setSelectedTrip] = useState<ScheduledTrip | null>(null);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
 
   const handleSort = (field: string) => {
     onSort?.(field);
@@ -59,6 +66,15 @@ export default function TripsTable({
     if (confirm("Are you sure you want to delete this trip?")) {
       onDelete?.(id);
     }
+  };
+
+  const handleStatusChange = (trip: ScheduledTrip) => {
+    setSelectedTrip(trip);
+    setIsStatusModalOpen(true);
+  };
+
+  const handleStatusChangeSuccess = () => {
+    onRefresh?.();
   };
 
   if (loading) {
@@ -250,6 +266,14 @@ export default function TripsTable({
                   >
                     View
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={ArrowPathIcon}
+                    onClick={() => handleStatusChange(trip)}
+                  >
+                    Change Status
+                  </Button>
                   {(trip.status === "SCHEDULED" ||
                     trip.status === "FAILED") && (
                     <>
@@ -280,6 +304,22 @@ export default function TripsTable({
           })}
         </tbody>
       </table>
+
+      {selectedTrip && (
+        <StatusChangeModal
+          trip={{
+            id: selectedTrip.id,
+            name: selectedTrip.name,
+            status: selectedTrip.status,
+          }}
+          isOpen={isStatusModalOpen}
+          onClose={() => {
+            setIsStatusModalOpen(false);
+            setSelectedTrip(null);
+          }}
+          onSuccess={handleStatusChangeSuccess}
+        />
+      )}
     </div>
   );
 }

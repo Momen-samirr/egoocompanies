@@ -34,16 +34,17 @@ enum AdminRole {
 }
 
 model Admin {
-  id           String           @id @default(auto()) @map("_id") @db.ObjectId
-  email        String           @unique
-  password     String
-  name         String
-  role         AdminRole        @default(ADMIN)
-  companyId    String?          @db.ObjectId
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  createdTrips ScheduledTrip[]  @relation("CreatedBy")
-  company      Company?         @relation("CompanyAccounts", fields: [companyId], references: [id])
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  email             String              @unique
+  password          String
+  name              String
+  role              AdminRole           @default(ADMIN)
+  companyId         String?             @db.ObjectId
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime           @updatedAt
+  createdTrips      ScheduledTrip[]     @relation("CreatedBy")
+  company           Company?            @relation("CompanyAccounts", fields: [companyId], references: [id])
+  statusChangeHistory TripStatusHistory[] @relation("StatusChangeHistory")
 }
 
 model driver {
@@ -163,6 +164,7 @@ model ScheduledTrip {
   progress          TripProgress?
   activationChecks  TripActivationCheck[]
   ledgerEntries     ScheduledTripLedger[]
+  statusHistory     TripStatusHistory[] @relation("TripStatusHistory")
 }
 
 model TripPoint {
@@ -224,6 +226,21 @@ model ScheduledTripLedger {
   updatedAt           DateTime                   @updatedAt
   scheduledTrip       ScheduledTrip              @relation(fields: [scheduledTripId], references: [id])
   captain             driver                     @relation("LedgerCaptain", fields: [captainId], references: [id])
+}
+
+model TripStatusHistory {
+  id              String              @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId String              @db.ObjectId
+  previousStatus  ScheduledTripStatus
+  newStatus       ScheduledTripStatus
+  note            String?
+  changedBy       String              @db.ObjectId
+  changedAt       DateTime            @default(now())
+  scheduledTrip   ScheduledTrip       @relation("TripStatusHistory", fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  changedByAdmin  Admin               @relation("StatusChangeHistory", fields: [changedBy], references: [id])
+
+  @@index([scheduledTripId])
+  @@index([changedAt])
 }
 
 model rides {

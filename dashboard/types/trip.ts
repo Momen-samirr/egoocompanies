@@ -21,6 +21,21 @@ export type ScheduledTripFinancialRule =
 
 export type TripType = "ARRIVAL" | "DEPARTURE";
 
+export interface TripStatusHistory {
+  id: string;
+  scheduledTripId: string;
+  previousStatus: ScheduledTripStatus;
+  newStatus: ScheduledTripStatus;
+  note?: string;
+  changedBy: string;
+  changedAt: string;
+  changedByAdmin?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
 export interface TripPoint {
   id?: string;
   name: string;
@@ -65,6 +80,7 @@ export interface ScheduledTrip {
   };
   company?: Company;
   points: TripPoint[];
+  statusHistory?: TripStatusHistory[];
 }
 
 export interface TripFinanceBreakdown {

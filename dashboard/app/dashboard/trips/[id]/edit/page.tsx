@@ -302,6 +302,13 @@ export default function EditTripPage() {
           {isDirty && (
             <p className="text-sm text-gray-500 mt-1">You have unsaved changes</p>
           )}
+          {trip.status === "ACTIVE" && (
+            <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                <strong>Note:</strong> This trip is currently active. You can modify points, but changes may affect the trip in progress.
+              </p>
+            </div>
+          )}
         </div>
         <Button
           variant="secondary"

@@ -22,6 +22,8 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
     "Net Amount",
     "Checkpoints",
     "Created At",
+    "Status History",
+    "Latest Note",
   ];
 
   // Convert trips to CSV rows
@@ -39,6 +41,37 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
       return value.toFixed(2);
     };
 
+    // Format status history
+    const formatStatusHistory = (): string => {
+      if (!trip.statusHistory || trip.statusHistory.length === 0) {
+        return "No status changes";
+      }
+      // Sort by changedAt descending (most recent first) for display
+      const sortedHistory = [...trip.statusHistory].sort(
+        (a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime()
+      );
+      return sortedHistory
+        .map((history) => {
+          const date = new Date(history.changedAt).toLocaleString();
+          const change = `Status changed from ${history.previousStatus} to ${history.newStatus} on ${date}`;
+          const note = history.note ? ` - ${history.note}` : "";
+          return change + note;
+        })
+        .join(" | ");
+    };
+
+    // Get latest note
+    const getLatestNote = (): string => {
+      if (!trip.statusHistory || trip.statusHistory.length === 0) {
+        return "";
+      }
+      // Sort by changedAt descending to get most recent
+      const sortedHistory = [...trip.statusHistory].sort(
+        (a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime()
+      );
+      return sortedHistory[0]?.note || "";
+    };
+
     return [
       trip.name,
       tripDate,
@@ -54,6 +87,8 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
       formatNumber(finance.netAmount),
       trip.points?.length || 0,
       createdAt,
+      formatStatusHistory(),
+      getLatestNote(),
     ];
   });
 

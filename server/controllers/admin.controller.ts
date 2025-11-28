@@ -1673,7 +1673,19 @@ export const getScheduledTrips = async (req: any, res: Response) => {
             orderBy: { order: "asc" },
           },
           progress: true,
-        company: true,
+          company: true,
+          statusHistory: {
+            orderBy: { changedAt: "desc" },
+            include: {
+              changedByAdmin: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
       }),
       prisma.scheduledTrip.count({ where }),
@@ -1892,6 +1904,18 @@ export const getScheduledTripById = async (req: any, res: Response) => {
           take: 10, // Last 10 activation checks
         },
         company: true,
+        statusHistory: {
+          orderBy: { changedAt: "desc" },
+          include: {
+            changedByAdmin: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1933,8 +1957,9 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
+    // Only prevent updates for emergency terminated/ended trips
+    // ACTIVE trips can now be edited
     if (
-      existingTrip.status === "ACTIVE" ||
       existingTrip.status === "EMERGENCY_TERMINATED" ||
       existingTrip.status === "EMERGENCY_ENDED"
     ) {
@@ -2313,6 +2338,177 @@ export const forceCloseTrip = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     console.error("Force close trip error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Update Trip Status
+export const updateTripStatus = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { newStatus, note } = req.body;
+
+    if (!newStatus) {
+      return res.status(400).json({
+        success: false,
+        message: "newStatus is required",
+      });
+    }
+
+    // Validate status value
+    const validStatuses = [
+      "SCHEDULED",
+      "ACTIVE",
+      "COMPLETED",
+      "CANCELLED",
+      "FAILED",
+      "EMERGENCY_TERMINATED",
+      "EMERGENCY_ENDED",
+      "FORCE_CLOSED",
+    ];
+
+    if (!validStatuses.includes(newStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status: ${newStatus}`,
+      });
+    }
+
+    // Get the trip
+    const trip = await prisma.scheduledTrip.findUnique({
+      where: { id },
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Scheduled trip not found",
+      });
+    }
+
+    // Don't allow status change if already in the same status
+    if (trip.status === newStatus) {
+      return res.status(400).json({
+        success: false,
+        message: `Trip is already in status: ${newStatus}`,
+      });
+    }
+
+    const previousStatus = trip.status;
+    const changedBy = req.admin.id;
+
+    // Update trip status
+    const updatedTrip = await prisma.scheduledTrip.update({
+      where: { id },
+      data: {
+        status: newStatus,
+      },
+      include: {
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+            vehicle_type: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+        activationChecks: {
+          orderBy: { checkedAt: "desc" },
+          take: 10,
+        },
+        company: true,
+        statusHistory: {
+          orderBy: { changedAt: "desc" },
+          include: {
+            changedByAdmin: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Create status history entry
+    await prisma.tripStatusHistory.create({
+      data: {
+        scheduledTripId: id,
+        previousStatus,
+        newStatus,
+        note: note || null,
+        changedBy,
+      },
+    });
+
+    // Fetch updated trip with new history entry
+    const tripWithHistory = await prisma.scheduledTrip.findUnique({
+      where: { id },
+      include: {
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+            vehicle_type: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        points: {
+          orderBy: { order: "asc" },
+        },
+        progress: true,
+        activationChecks: {
+          orderBy: { checkedAt: "desc" },
+          take: 10,
+        },
+        company: true,
+        statusHistory: {
+          orderBy: { changedAt: "desc" },
+          include: {
+            changedByAdmin: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      trip: tripWithHistory,
+      message: `Trip status changed from ${previousStatus} to ${newStatus}`,
+    });
+  } catch (error: any) {
+    console.error("Update trip status error:", error);
     res.status(500).json({
       success: false,
       message: error.message || "Internal server error",

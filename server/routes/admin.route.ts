@@ -20,6 +20,7 @@ import {
   updateScheduledTrip,
   deleteScheduledTrip,
   forceCloseTrip,
+  updateTripStatus,
   getScheduledTripEarningsSummary,
   getScheduledTripEarningsRange,
   getScheduledTripInvoice,
@@ -93,6 +94,7 @@ adminRouter.post("/trips/earnings/invoice", isAuthenticatedAdmin, getScheduledTr
 adminRouter.get("/trips", isAuthenticatedAdmin, getScheduledTrips);
 adminRouter.get("/trips/:id", isAuthenticatedAdmin, getScheduledTripById);
 adminRouter.put("/trips/:id", isAuthenticatedAdmin, updateScheduledTrip);
+adminRouter.put("/trips/:id/status", isAuthenticatedAdmin, updateTripStatus);
 adminRouter.delete("/trips/:id", isAuthenticatedAdmin, deleteScheduledTrip);
 adminRouter.post("/trips/:id/force-close", isAuthenticatedAdmin, forceCloseTrip);
 
