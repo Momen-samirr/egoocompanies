@@ -3,7 +3,7 @@
 import Card, { CardBody } from "@/components/common/Card";
 import { useTrips, TripView } from "@/hooks/useTrips";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import { Link } from "next/navigation";
+import Link from "next/link";
 
 interface TripsStatsCardsProps {
   view: TripView;

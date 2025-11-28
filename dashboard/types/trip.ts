@@ -27,6 +27,7 @@ export interface TripStatusHistory {
   previousStatus: ScheduledTripStatus;
   newStatus: ScheduledTripStatus;
   note?: string;
+  deduction?: number;
   changedBy: string;
   changedAt: string;
   changedByAdmin?: {

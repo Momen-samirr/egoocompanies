@@ -2,18 +2,10 @@
 
 import { CheckCircleIcon, ClockIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon as CheckCircleOutlineIcon } from "@heroicons/react/24/outline";
-
-interface Checkpoint {
-  id: string;
-  name: string;
-  order: number;
-  isFinalPoint: boolean;
-  expectedTime?: string | null;
-  reachedAt: string | null;
-}
+import { TripPoint } from "@/types/trip";
 
 interface TripTimelineProps {
-  checkpoints: Checkpoint[];
+  checkpoints: TripPoint[];
   currentPointIndex?: number;
   status: string;
   tripType?: "ARRIVAL" | "DEPARTURE";
@@ -25,7 +17,7 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
   const isArrivalTrip = tripType === "ARRIVAL";
 
   // Calculate timing difference for reached checkpoints
-  const calculateTimingStatus = (checkpoint: Checkpoint) => {
+  const calculateTimingStatus = (checkpoint: TripPoint) => {
     if (!isArrivalTrip || !checkpoint.expectedTime || !checkpoint.reachedAt) {
       return null;
     }
@@ -96,7 +88,7 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
   return (
     <div className="space-y-4">
       {checkpoints.map((checkpoint, index) => {
-        const isReached = checkpoint.reachedAt !== null;
+        const isReached = checkpoint.reachedAt !== null && checkpoint.reachedAt !== undefined;
         const isCurrent = isActive && index === currentPointIndex;
         const isPast = index < currentPointIndex || isReached || isCompleted;
         const timingStatus = calculateTimingStatus(checkpoint);
@@ -124,7 +116,7 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
         }
 
         return (
-          <div key={checkpoint.id} className="flex items-start space-x-4">
+          <div key={checkpoint.id || `checkpoint-${index}`} className="flex items-start space-x-4">
             <div className="flex flex-col items-center">
               <div className={`flex items-center justify-center h-12 w-12 rounded-full border-2 ${borderColor} ${bgColor} transition-all duration-200`}>
                 {icon}

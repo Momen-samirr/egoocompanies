@@ -2457,6 +2457,35 @@ export const forceCloseTrip = async (req: any, res: Response) => {
 };
 
 // Update Trip Status
+/**
+ * Calculate the deduction amount for a trip status change
+ * @param status - The new status
+ * @param price - The trip price
+ * @returns The deduction amount (0 if no deduction applies)
+ */
+function calculateDeductionForStatus(status: string, price: number | null): number {
+  const baseAmount = price ?? 0;
+
+  switch (status) {
+    case "COMPLETED":
+      // No deduction for completed trips (positive payout)
+      return 0;
+    case "FAILED":
+      // Double price deduction
+      return baseAmount * 2;
+    case "EMERGENCY_TERMINATED":
+    case "EMERGENCY_ENDED":
+      // Single price deduction
+      return baseAmount;
+    case "FORCE_CLOSED":
+      // Fixed 100 deduction
+      return 100;
+    default:
+      // SCHEDULED, ACTIVE, CANCELLED - no deduction
+      return 0;
+  }
+}
+
 export const updateTripStatus = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
@@ -2511,6 +2540,9 @@ export const updateTripStatus = async (req: any, res: Response) => {
     const previousStatus = trip.status;
     const changedBy = req.admin.id;
 
+    // Calculate deduction amount for this status change
+    const deduction = calculateDeductionForStatus(newStatus, trip.price);
+
     // Update trip status
     const updatedTrip = await prisma.scheduledTrip.update({
       where: { id },
@@ -2558,13 +2590,14 @@ export const updateTripStatus = async (req: any, res: Response) => {
       },
     });
 
-    // Create status history entry
+    // Create status history entry with deduction
     await prisma.tripStatusHistory.create({
       data: {
         scheduledTripId: id,
         previousStatus,
         newStatus,
         note: note || null,
+        deduction: deduction > 0 ? deduction : null,
         changedBy,
       },
     });

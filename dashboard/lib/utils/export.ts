@@ -53,7 +53,14 @@ export function exportTripsToCSV(trips: ScheduledTrip[], filename = "trips.csv")
       return sortedHistory
         .map((history) => {
           const date = new Date(history.changedAt).toLocaleString();
-          const change = `Status changed from ${history.previousStatus} to ${history.newStatus} on ${date}`;
+          let change = `Status changed from ${history.previousStatus} to ${history.newStatus} on ${date}`;
+          
+          // Add deduction if present
+          if (history.deduction !== undefined && history.deduction !== null && history.deduction > 0) {
+            change += ` - Deduction: $${formatNumber(history.deduction)}`;
+          }
+          
+          // Add note if present
           const note = history.note ? ` - ${history.note}` : "";
           return change + note;
         })

@@ -234,6 +234,7 @@ model TripStatusHistory {
   previousStatus  ScheduledTripStatus
   newStatus       ScheduledTripStatus
   note            String?
+  deduction       Float?
   changedBy       String              @db.ObjectId
   changedAt       DateTime            @default(now())
   scheduledTrip   ScheduledTrip       @relation("TripStatusHistory", fields: [scheduledTripId], references: [id], onDelete: Cascade)

@@ -369,6 +369,9 @@ export default function TripDetailsPage() {
                       Changed By
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Deduction
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Note
                     </th>
                   </tr>
@@ -387,6 +390,15 @@ export default function TripDetailsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {history.changedByAdmin?.name || "Unknown"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {history.deduction !== undefined && history.deduction !== null && history.deduction > 0 ? (
+                          <span className="font-medium text-red-600">
+                            ${history.deduction.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {history.note || (
