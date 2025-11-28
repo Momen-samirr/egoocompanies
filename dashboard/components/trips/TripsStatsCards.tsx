@@ -54,6 +54,7 @@ interface OverviewStatsProps {
   completedCount: number;
   cancelledCount: number;
   emergencyCount: number;
+  forceClosedCount: number;
   isLoading?: boolean;
 }
 
@@ -63,6 +64,7 @@ export function OverviewStats({
   completedCount,
   cancelledCount,
   emergencyCount,
+  forceClosedCount,
   isLoading = false,
 }: OverviewStatsProps) {
   const stats = [
@@ -96,12 +98,18 @@ export function OverviewStats({
       href: "/dashboard/trips/emergency",
       color: "bg-red-50 text-red-700 border-red-200",
     },
+    {
+      label: "Force Closed",
+      value: forceClosedCount,
+      href: "/dashboard/trips/force-closed",
+      color: "bg-rose-50 text-rose-700 border-rose-200",
+    },
   ];
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {[1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <Card key={i}>
             <CardBody>
               <div className="animate-pulse space-y-3">
@@ -116,7 +124,7 @@ export function OverviewStats({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
       {stats.map((stat) => (
         <Link key={stat.label} href={stat.href}>
           <Card className="hover:shadow-md transition-shadow cursor-pointer">

@@ -47,6 +47,10 @@ export default function ScheduledTripsOverviewPage() {
     view: "emergency",
     pagination: { page: 1, pageSize: 1 },
   });
+  const { pagination: forceClosedPagination, isLoading: forceClosedLoading } = useTrips({
+    view: "force-closed",
+    pagination: { page: 1, pageSize: 1 },
+  });
 
   useEffect(() => {
     fetchFinanceSummary();
@@ -99,7 +103,8 @@ export default function ScheduledTripsOverviewPage() {
     activeLoading ||
     completedLoading ||
     cancelledLoading ||
-    emergencyLoading;
+    emergencyLoading ||
+    forceClosedLoading;
 
   return (
     <div className="space-y-6">
@@ -120,6 +125,7 @@ export default function ScheduledTripsOverviewPage() {
         completedCount={completedPagination?.total || 0}
         cancelledCount={cancelledPagination?.total || 0}
         emergencyCount={emergencyPagination?.total || 0}
+        forceClosedCount={forceClosedPagination?.total || 0}
         isLoading={isLoading}
       />
 
