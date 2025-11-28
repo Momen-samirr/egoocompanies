@@ -77,6 +77,7 @@ interface ScheduledTrip {
     previousStatus: string;
     newStatus: string;
     note?: string;
+    deduction?: number;
     changedAt: string;
     changedByAdmin?: {
       id: string;
