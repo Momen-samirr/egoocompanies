@@ -44,8 +44,8 @@ export interface TripPoint {
   longitude: number;
   order: number;
   isFinalPoint: boolean;
-  expectedTime?: string;
-  reachedAt?: string;
+  expectedTime?: string | null;
+  reachedAt?: string | null;
 }
 
 export interface ScheduledTrip {
