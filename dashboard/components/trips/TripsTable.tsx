@@ -1,20 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ScheduledTrip } from "@/types/trip";
-import Button from "@/components/common/Button";
-import StatusBadge from "@/components/common/StatusBadge";
-import StatusChangeModal from "./StatusChangeModal";
 import {
-  EyeIcon,
-  PencilIcon,
-  TrashIcon,
   ChevronUpIcon,
   ChevronDownIcon,
   BarsArrowUpIcon,
-  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
+import TripsTableRow from "./TripsTableRow";
 
 interface SortIndicatorProps {
   field: string;
@@ -22,7 +14,11 @@ interface SortIndicatorProps {
   direction: "asc" | "desc";
 }
 
-const SortIndicator = ({ field, activeField, direction }: SortIndicatorProps) => {
+const SortIndicator = ({
+  field,
+  activeField,
+  direction,
+}: SortIndicatorProps) => {
   if (activeField !== field) {
     return <BarsArrowUpIcon className="h-4 w-4 text-gray-400" />;
   }
@@ -32,14 +28,11 @@ const SortIndicator = ({ field, activeField, direction }: SortIndicatorProps) =>
     <ChevronDownIcon className="h-4 w-4 text-indigo-600" />
   );
 };
-import { formatDistanceToNow } from "date-fns";
-import { deriveTripFinance, formatCurrency } from "@/lib/utils/tripFinance";
 
 interface TripsTableProps {
   trips: ScheduledTrip[];
   loading?: boolean;
   onDelete?: (id: string) => void;
-  onRefresh?: () => void;
   sortField?: string | null;
   sortDirection?: "asc" | "desc";
   onSort?: (field: string) => void;
@@ -49,32 +42,12 @@ export default function TripsTable({
   trips,
   loading = false,
   onDelete,
-  onRefresh,
   sortField,
   sortDirection = "asc",
   onSort,
 }: TripsTableProps) {
-  const router = useRouter();
-  const [selectedTrip, setSelectedTrip] = useState<ScheduledTrip | null>(null);
-  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
-
   const handleSort = (field: string) => {
     onSort?.(field);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this trip?")) {
-      onDelete?.(id);
-    }
-  };
-
-  const handleStatusChange = (trip: ScheduledTrip) => {
-    setSelectedTrip(trip);
-    setIsStatusModalOpen(true);
-  };
-
-  const handleStatusChangeSuccess = () => {
-    onRefresh?.();
   };
 
   if (loading) {
@@ -178,149 +151,16 @@ export default function TripsTable({
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200/60">
-          {trips.map((trip, index) => {
-            const finance = deriveTripFinance(trip);
-            const netIsPositive = finance.netAmount >= 0;
-            return (
-              <tr
+          {trips.map((trip, index) => (
+            <TripsTableRow
               key={trip.id}
-              className={`transition-all duration-150 ${
-                index % 2 === 0
-                  ? "bg-white hover:bg-indigo-50/40"
-                  : "bg-gray-50/30 hover:bg-indigo-50/40"
-              }`}
-            >
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-semibold text-gray-900">
-                  {trip.name}
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">
-                  {trip.company?.name || (
-                    <span className="text-gray-400 italic">No company</span>
-                  )}
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-medium text-gray-900">
-                  {new Date(trip.tripDate).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </div>
-                <div className="text-xs text-gray-500 mt-0.5">
-                  {new Date(trip.scheduledTime).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                  })}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {formatDistanceToNow(new Date(trip.scheduledTime), {
-                    addSuffix: true,
-                  })}
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-semibold text-gray-900">
-                  ${trip.price?.toFixed(2) ?? "0.00"}
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div
-                  className={`text-sm font-semibold ${
-                    netIsPositive ? "text-emerald-600" : "text-rose-600"
-                  }`}
-                >
-                  {formatCurrency(finance.netAmount)}
-                </div>
-                <div className="text-xs text-gray-500">{finance.ruleLabel}</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-medium text-gray-900">
-                  {trip.assignedCaptain?.name || (
-                    <span className="text-gray-400 italic font-normal">
-                      Not assigned
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  {trip.points?.length || 0} checkpoint
-                  {trip.points?.length !== 1 ? "s" : ""}
-                </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <StatusBadge status={trip.status} size="sm" />
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={EyeIcon}
-                    onClick={() => router.push(`/dashboard/trips/${trip.id}`)}
-                  >
-                    View
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={ArrowPathIcon}
-                    onClick={() => handleStatusChange(trip)}
-                  >
-                    Change Status
-                  </Button>
-                  {(trip.status === "SCHEDULED" ||
-                    trip.status === "FAILED") && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={PencilIcon}
-                        onClick={() =>
-                          router.push(`/dashboard/trips/${trip.id}/edit`)
-                        }
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        icon={TrashIcon}
-                        onClick={() => handleDelete(trip.id)}
-                      >
-                        Delete
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </td>
-              </tr>
-            );
-          })}
+              trip={trip}
+              index={index}
+              onDelete={onDelete}
+            />
+          ))}
         </tbody>
       </table>
-
-      {selectedTrip && (
-        <StatusChangeModal
-          trip={{
-            id: selectedTrip.id,
-            name: selectedTrip.name,
-            status: selectedTrip.status,
-          }}
-          isOpen={isStatusModalOpen}
-          onClose={() => {
-            setIsStatusModalOpen(false);
-            setSelectedTrip(null);
-          }}
-          onSuccess={handleStatusChangeSuccess}
-        />
-      )}
     </div>
   );
 }
-

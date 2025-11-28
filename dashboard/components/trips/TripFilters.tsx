@@ -105,26 +105,84 @@ export default function TripFilters({
     localFilters.dateRange?.start || localFilters.dateRange?.end ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
+  // Quick filter presets
+  const applyQuickFilter = (preset: "today" | "thisWeek" | "thisMonth") => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    let startDate: string;
+    let endDate: string = new Date().toISOString().split("T")[0];
+
+    switch (preset) {
+      case "today":
+        startDate = today.toISOString().split("T")[0];
+        break;
+      case "thisWeek":
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay());
+        startDate = weekStart.toISOString().split("T")[0];
+        break;
+      case "thisMonth":
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+          .toISOString()
+          .split("T")[0];
+        break;
+      default:
+        return;
+    }
+
+    handleFilterChange("dateRange", { start: startDate, end: endDate });
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all duration-200 ${
-            showFilters || hasActiveFilters
-              ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-              : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
-          }`}
-        >
-          <FunnelIcon className="h-4 w-4" />
-          <span className="text-sm font-medium">Filters</span>
-          {activeFilterCount > 0 && (
-            <span className="ml-1 px-2 py-0.5 bg-indigo-600 text-white text-xs rounded-full">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all duration-200 ${
+              showFilters || hasActiveFilters
+                ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            <FunnelIcon className="h-4 w-4" />
+            <span className="text-sm font-medium">Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-indigo-600 text-white text-xs rounded-full">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          
+          {/* Quick Filter Presets */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Quick:</span>
+            <button
+              type="button"
+              onClick={() => applyQuickFilter("today")}
+              className="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => applyQuickFilter("thisWeek")}
+              className="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              This Week
+            </button>
+            <button
+              type="button"
+              onClick={() => applyQuickFilter("thisMonth")}
+              className="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              This Month
+            </button>
+          </div>
+        </div>
+        
         {hasActiveFilters && (
           <Button
             variant="ghost"

@@ -1629,17 +1629,48 @@ export const createScheduledTrip = async (req: any, res: Response) => {
 // Get All Scheduled Trips
 export const getScheduledTrips = async (req: any, res: Response) => {
   try {
-    const { page = 1, limit = 10, status, startDate, endDate, captainId, companyId } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      status, // Can be single value or array
+      dateStart,
+      dateEnd,
+      captain, // Text search for captain name
+      captainId, // Exact captain ID
+      companyId,
+      name, // Text search for trip name
+      search, // General search across name, captain, company, checkpoints
+      sortField = "createdAt",
+      sortDirection = "desc",
+    } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
-    if (status) where.status = status;
-    if (captainId) where.assignedCaptainId = captainId;
-    if (companyId) where.companyId = companyId;
-    if (startDate || endDate) {
+
+    // Handle status filter (can be array or single value)
+    if (status) {
+      if (Array.isArray(status)) {
+        where.status = { in: status };
+      } else {
+        where.status = status;
+      }
+    }
+
+    // Handle captain filter
+    if (captainId) {
+      where.assignedCaptainId = captainId;
+    }
+
+    // Handle company filter
+    if (companyId) {
+      where.companyId = companyId;
+    }
+
+    // Handle date range
+    if (dateStart || dateEnd) {
       where.tripDate = {};
-      if (startDate) where.tripDate.gte = new Date(startDate);
-      if (endDate) where.tripDate.lte = new Date(endDate);
+      if (dateStart) where.tripDate.gte = new Date(dateStart);
+      if (dateEnd) where.tripDate.lte = new Date(dateEnd);
     }
 
     // Filter by company if user is COMPANY role
@@ -1647,12 +1678,91 @@ export const getScheduledTrips = async (req: any, res: Response) => {
       where.companyId = req.admin.companyId;
     }
 
+    // Handle name filter (case-insensitive search)
+    if (name) {
+      where.name = {
+        contains: name,
+        mode: "insensitive",
+      };
+    }
+
+    // Handle captain name filter (case-insensitive search)
+    if (captain) {
+      where.assignedCaptain = {
+        name: {
+          contains: captain,
+          mode: "insensitive",
+        },
+      };
+    }
+
+    // Handle general search (searches across multiple fields)
+    if (search) {
+      const searchLower = search.toLowerCase();
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        {
+          assignedCaptain: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          company: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          points: {
+            some: {
+              name: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    // Build orderBy clause
+    const orderBy: any = {};
+    const validSortFields = [
+      "name",
+      "tripDate",
+      "scheduledTime",
+      "createdAt",
+      "status",
+    ];
+    const sortFieldValue = validSortFields.includes(sortField) ? sortField : "createdAt";
+    const sortDir = sortDirection === "asc" ? "asc" : "desc";
+
+    // Handle special sorting cases
+    if (sortFieldValue === "captain") {
+      // Sort by captain name requires a different approach
+      orderBy.assignedCaptain = {
+        name: sortDir,
+      };
+    } else if (sortFieldValue === "checkpoints") {
+      // Sort by number of checkpoints
+      orderBy.points = {
+        _count: sortDir,
+      };
+    } else {
+      orderBy[sortFieldValue] = sortDir;
+    }
+
     const [trips, total] = await Promise.all([
       prisma.scheduledTrip.findMany({
         where,
         skip,
         take: Number(limit),
-        orderBy: { createdAt: "desc" },
+        orderBy,
         include: {
           assignedCaptain: {
             select: {
@@ -1676,6 +1786,7 @@ export const getScheduledTrips = async (req: any, res: Response) => {
           company: true,
           statusHistory: {
             orderBy: { changedAt: "desc" },
+            take: 5, // Limit status history to last 5 entries for performance
             include: {
               changedByAdmin: {
                 select: {
