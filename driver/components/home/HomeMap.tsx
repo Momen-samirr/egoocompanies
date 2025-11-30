@@ -6,6 +6,7 @@ import color from "@/themes/app.colors";
 import { windowHeight } from "@/themes/app.constant";
 import { spacing } from "@/styles/design-system";
 
+// Test Here
 interface HomeMapProps {
   region: {
     latitude: number;
@@ -39,7 +40,12 @@ export default React.memo(function HomeMap({
   // Memoize region to prevent unnecessary re-renders
   const memoizedRegion = useMemo(() => {
     return region;
-  }, [region.latitude, region.longitude, region.latitudeDelta, region.longitudeDelta]);
+  }, [
+    region.latitude,
+    region.longitude,
+    region.latitudeDelta,
+    region.longitudeDelta,
+  ]);
 
   // Memoize markers
   const mapMarkers = useMemo(() => {
@@ -89,10 +95,18 @@ export default React.memo(function HomeMap({
         onDidFailLoadingMap={handleError}
       >
         {mapMarkers.destination && (
-          <Marker coordinate={mapMarkers.destination} title="Destination" pinColor={color.status.active} />
+          <Marker
+            coordinate={mapMarkers.destination}
+            title="Destination"
+            pinColor={color.status.active}
+          />
         )}
         {mapMarkers.pickup && (
-          <Marker coordinate={mapMarkers.pickup} title="Pickup" pinColor={color.status.completed} />
+          <Marker
+            coordinate={mapMarkers.pickup}
+            title="Pickup"
+            pinColor={color.status.completed}
+          />
         )}
         {mapMarkers.pickup && mapMarkers.destination && (
           <MapViewDirections
@@ -163,4 +177,3 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
-
