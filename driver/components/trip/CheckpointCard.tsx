@@ -18,6 +18,7 @@ interface CheckpointCardProps {
     order: number;
     isFinalPoint: boolean;
     reachedAt: string | null;
+    employees?: Array<{ name: string; employeeId?: string }>;
   };
   isCurrent: boolean;
   isReached: boolean;
@@ -92,7 +93,12 @@ export default function CheckpointCard({
               {checkpoint.name}
             </Text>
             {checkpoint.isFinalPoint && (
-              <View style={[styles.finalBadge, { backgroundColor: color.status.completed }]}>
+              <View
+                style={[
+                  styles.finalBadge,
+                  { backgroundColor: color.status.completed },
+                ]}
+              >
                 <Text style={styles.finalText}>FINAL</Text>
               </View>
             )}
@@ -101,18 +107,63 @@ export default function CheckpointCard({
           <View style={styles.locationInfo}>
             <Location color={color.text.tertiary} width={12} height={12} />
             <Text style={[styles.coordinates, { color: color.text.tertiary }]}>
-              {checkpoint.latitude.toFixed(6)}, {checkpoint.longitude.toFixed(6)}
+              {checkpoint.latitude.toFixed(6)},{" "}
+              {checkpoint.longitude.toFixed(6)}
             </Text>
           </View>
 
-          {isCurrent && !isReached && (distance !== undefined || duration !== undefined) && (
-            <View style={styles.etaContainer}>
-              <ETADisplay distance={distance} duration={duration} size="sm" />
+          {checkpoint.employees && checkpoint.employees.length > 0 && (
+            <View style={styles.employeesContainer}>
+              <Text
+                style={[styles.employeesLabel, { color: color.text.secondary }]}
+              >
+                Employees ({checkpoint.employees.length}):
+              </Text>
+              <View style={styles.employeesList}>
+                {checkpoint.employees.map((emp, empIndex) => (
+                  <View
+                    key={empIndex}
+                    style={[
+                      styles.employeeChip,
+                      {
+                        backgroundColor: isCurrent
+                          ? `${color.primary}15`
+                          : `${color.border}20`,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.employeeName, { color: colors.text }]}>
+                      {emp.name}
+                      {emp.employeeId && (
+                        <Text
+                          style={[
+                            styles.employeeId,
+                            { color: color.text.tertiary },
+                          ]}
+                        >
+                          {" "}
+                          ({emp.employeeId})
+                        </Text>
+                      )}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
           )}
 
+          {isCurrent &&
+            !isReached &&
+            (distance !== undefined || duration !== undefined) && (
+              <View style={styles.etaContainer}>
+                <ETADisplay distance={distance} duration={duration} size="sm" />
+              </View>
+            )}
+
           {isReached && checkpoint.reachedAt && (
-            <Text style={[styles.reachedText, { color: color.status.completed }]}>
+            <Text
+              style={[styles.reachedText, { color: color.status.completed }]}
+            >
               ✓ Reached at {new Date(checkpoint.reachedAt).toLocaleTimeString()}
             </Text>
           )}
@@ -136,7 +187,12 @@ export default function CheckpointCard({
             </TouchableOpacity>
           )}
           {isReached && (
-            <View style={[styles.checkmark, { backgroundColor: color.status.completed }]}>
+            <View
+              style={[
+                styles.checkmark,
+                { backgroundColor: color.status.completed },
+              ]}
+            >
               <Text style={styles.checkmarkText}>✓</Text>
             </View>
           )}
@@ -249,5 +305,33 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.FONT12,
     fontWeight: "bold",
   },
+  employeesContainer: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  employeesLabel: {
+    fontSize: fontSizes.FONT12,
+    fontFamily: fonts.medium,
+    marginBottom: spacing.xs / 2,
+  },
+  employeesList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs / 2,
+  },
+  employeeChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs / 2,
+    borderRadius: 6,
+    marginRight: spacing.xs / 2,
+    marginBottom: spacing.xs / 2,
+  },
+  employeeName: {
+    fontSize: fontSizes.FONT12,
+    fontFamily: fonts.medium,
+  },
+  employeeId: {
+    fontSize: fontSizes.FONT11,
+    fontFamily: fonts.regular,
+  },
 });
-

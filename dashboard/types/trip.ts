@@ -46,6 +46,7 @@ export interface TripPoint {
   isFinalPoint: boolean;
   expectedTime?: string | null;
   reachedAt?: string | null;
+  employees?: Array<{ name: string; employeeId?: string }>;
 }
 
 export interface ScheduledTrip {
@@ -194,4 +195,3 @@ export interface PaginationParams {
   filters?: TripFilters;
   search?: string;
 }
-

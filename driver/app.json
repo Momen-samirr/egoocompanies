@@ -17,10 +17,7 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
-        "UIBackgroundModes": [
-          "location",
-          "locationAlways"
-        ]
+        "UIBackgroundModes": ["location", "locationAlways"]
       },
       "bundleIdentifier": "com.becodemy.ridewavedriver"
     },
@@ -54,9 +51,7 @@
       [
         "expo-font",
         {
-          "fonts": [
-            "./assets/fonts/TT-Octosquares-Medium.ttf"
-          ]
+          "fonts": ["./assets/fonts/TT-Octosquares-Medium.ttf"]
         }
       ],
       [

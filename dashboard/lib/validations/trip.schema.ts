@@ -17,6 +17,18 @@ export const locationSchema = z.object({
   placeId: z.string().optional(),
 });
 
+// Employee validation schema
+const employeeSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Employee name is required")
+    .max(100, "Employee name must be less than 100 characters"),
+  employeeId: z
+    .string()
+    .max(50, "Employee ID must be less than 50 characters")
+    .optional(),
+});
+
 // Trip point validation schema
 export const tripPointSchema = z.object({
   id: z.string().optional(),
@@ -39,6 +51,10 @@ export const tripPointSchema = z.object({
     .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
       message: "Invalid time format. Use HH:MM format",
     })
+    .optional(),
+  employees: z
+    .array(employeeSchema)
+    .max(100, "Maximum 100 employees per checkpoint")
     .optional(),
 });
 
@@ -104,11 +120,11 @@ export const tripFormSchema = z
       // Compare dates only (ignore time) to avoid time-of-day issues
       const tripDate = new Date(data.tripDate);
       tripDate.setHours(0, 0, 0, 0);
-      
+
       const oneYearFromNow = new Date();
       oneYearFromNow.setHours(0, 0, 0, 0);
       oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
-      
+
       // Allow dates up to and including 1 year from today
       return tripDate <= oneYearFromNow;
     },
@@ -139,4 +155,3 @@ export const tripFormSchema = z
 export type TripFormData = z.infer<typeof tripFormSchema>;
 export type TripPointData = z.infer<typeof tripPointSchema>;
 export type LocationData = z.infer<typeof locationSchema>;
-

@@ -12,7 +12,7 @@
     "cleanup:trips": "npx ts-node scripts/cleanup-scheduled-trips.ts"
   },
   "keywords": [],
-  "author": "shahriar sajeeb",
+  "author": "Momen Samir",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^6.19.0",

@@ -1,7 +1,14 @@
 "use client";
 
-import { CheckCircleIcon, ClockIcon, XCircleIcon } from "@heroicons/react/24/solid";
-import { CheckCircleIcon as CheckCircleOutlineIcon } from "@heroicons/react/24/outline";
+import {
+  CheckCircleIcon,
+  ClockIcon,
+  XCircleIcon,
+} from "@heroicons/react/24/solid";
+import {
+  CheckCircleIcon as CheckCircleOutlineIcon,
+  UserIcon,
+} from "@heroicons/react/24/outline";
 import { TripPoint } from "@/types/trip";
 
 interface TripTimelineProps {
@@ -11,7 +18,12 @@ interface TripTimelineProps {
   tripType?: "ARRIVAL" | "DEPARTURE";
 }
 
-export default function TripTimeline({ checkpoints, currentPointIndex = -1, status, tripType }: TripTimelineProps) {
+export default function TripTimeline({
+  checkpoints,
+  currentPointIndex = -1,
+  status,
+  tripType,
+}: TripTimelineProps) {
   const isActive = status === "ACTIVE";
   const isCompleted = status === "COMPLETED";
   const isArrivalTrip = tripType === "ARRIVAL";
@@ -25,12 +37,12 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
     // Parse dates - ensure they're valid Date objects
     let expectedTime = new Date(checkpoint.expectedTime);
     const reachedAt = new Date(checkpoint.reachedAt);
-    
+
     // Validate dates
     if (isNaN(expectedTime.getTime()) || isNaN(reachedAt.getTime())) {
-      console.error('[TripTimeline] Invalid date objects:', {
+      console.error("[TripTimeline] Invalid date objects:", {
         expectedTime: checkpoint.expectedTime,
-        reachedAt: checkpoint.reachedAt
+        reachedAt: checkpoint.reachedAt,
       });
       return null;
     }
@@ -39,20 +51,25 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
     // Same logic as server-side fix
     const initialDifferenceMs = reachedAt.getTime() - expectedTime.getTime();
     const initialMinutes = Math.round(initialDifferenceMs / (1000 * 60));
-    
+
     // Detect timezone bug: if showing "early" by > 1 hour, try adjusting
     if (initialMinutes < -60) {
       // getTimezoneOffset() returns negative for timezones ahead of UTC
       // To convert from UTC (stored) to local (correct), subtract the absolute offset
       const serverOffsetMinutes = new Date().getTimezoneOffset();
       const correctionMs = Math.abs(serverOffsetMinutes) * 60 * 1000;
-      const adjustedExpectedTime = new Date(expectedTime.getTime() - correctionMs);
-      const adjustedDifferenceMs = reachedAt.getTime() - adjustedExpectedTime.getTime();
+      const adjustedExpectedTime = new Date(
+        expectedTime.getTime() - correctionMs
+      );
+      const adjustedDifferenceMs =
+        reachedAt.getTime() - adjustedExpectedTime.getTime();
       const adjustedMinutes = Math.round(adjustedDifferenceMs / (1000 * 60));
-      
+
       // If adjusted difference is reasonable, use it
       if (adjustedMinutes >= -60 && adjustedMinutes <= 120) {
-        console.warn('[TripTimeline] ⚠️ Detected timezone mismatch, applying correction');
+        console.warn(
+          "[TripTimeline] ⚠️ Detected timezone mismatch, applying correction"
+        );
         expectedTime = adjustedExpectedTime;
       }
     }
@@ -61,24 +78,27 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
     // getTime() returns milliseconds since epoch (UTC), so this comparison is timezone-independent
     const differenceMs = reachedAt.getTime() - expectedTime.getTime();
     const minutes = Math.round(differenceMs / (1000 * 60));
-    
+
     // Validate difference is reasonable (warn if > 24 hours, likely timezone bug)
     const hoursDifference = Math.abs(minutes) / 60;
     if (hoursDifference > 24) {
-      console.warn('[TripTimeline] ⚠️ Unusually large time difference detected:', {
-        minutes,
-        hours: hoursDifference.toFixed(2),
-        expectedTime: expectedTime.toISOString(),
-        reachedAt: reachedAt.toISOString(),
-        message: 'This may indicate a timezone conversion issue'
-      });
+      console.warn(
+        "[TripTimeline] ⚠️ Unusually large time difference detected:",
+        {
+          minutes,
+          hours: hoursDifference.toFixed(2),
+          expectedTime: expectedTime.toISOString(),
+          reachedAt: reachedAt.toISOString(),
+          message: "This may indicate a timezone conversion issue",
+        }
+      );
     }
-    
+
     // Consider "on-time" if within 1 minute
     if (Math.abs(minutes) <= 1) {
       return { status: "on-time", minutes: 0 };
     }
-    
+
     return {
       status: minutes < 0 ? "early" : "late",
       minutes: Math.abs(minutes),
@@ -88,7 +108,8 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
   return (
     <div className="space-y-4">
       {checkpoints.map((checkpoint, index) => {
-        const isReached = checkpoint.reachedAt !== null && checkpoint.reachedAt !== undefined;
+        const isReached =
+          checkpoint.reachedAt !== null && checkpoint.reachedAt !== undefined;
         const isCurrent = isActive && index === currentPointIndex;
         const isPast = index < currentPointIndex || isReached || isCompleted;
         const timingStatus = calculateTimingStatus(checkpoint);
@@ -116,16 +137,29 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
         }
 
         return (
-          <div key={checkpoint.id || `checkpoint-${index}`} className="flex items-start space-x-4">
+          <div
+            key={checkpoint.id || `checkpoint-${index}`}
+            className="flex items-start space-x-4"
+          >
             <div className="flex flex-col items-center">
-              <div className={`flex items-center justify-center h-12 w-12 rounded-full border-2 ${borderColor} ${bgColor} transition-all duration-200`}>
+              <div
+                className={`flex items-center justify-center h-12 w-12 rounded-full border-2 ${borderColor} ${bgColor} transition-all duration-200`}
+              >
                 {icon}
               </div>
               {index < checkpoints.length - 1 && (
-                <div className={`w-0.5 h-12 ${isPast ? "bg-green-500" : "bg-gray-300"} transition-colors duration-200`} />
+                <div
+                  className={`w-0.5 h-12 ${
+                    isPast ? "bg-green-500" : "bg-gray-300"
+                  } transition-colors duration-200`}
+                />
               )}
             </div>
-            <div className={`flex-1 pb-8 ${index < checkpoints.length - 1 ? "border-b border-gray-200" : ""}`}>
+            <div
+              className={`flex-1 pb-8 ${
+                index < checkpoints.length - 1 ? "border-b border-gray-200" : ""
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className={`font-semibold ${textColor}`}>
@@ -143,6 +177,32 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
                   </span>
                 )}
               </div>
+              {checkpoint.employees && checkpoint.employees.length > 0 && (
+                <div className="mt-2 flex items-start gap-2">
+                  <UserIcon className="h-4 w-4 text-gray-500 mt-0.5" />
+                  <div className="flex-1">
+                    <span className="text-xs font-medium text-gray-600">
+                      {checkpoint.employees.length} employee
+                      {checkpoint.employees.length !== 1 ? "s" : ""}:
+                    </span>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {checkpoint.employees.map((emp, empIndex) => (
+                        <span
+                          key={empIndex}
+                          className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700 rounded"
+                        >
+                          {emp.name}
+                          {emp.employeeId && (
+                            <span className="ml-1 text-indigo-500">
+                              ({emp.employeeId})
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               {checkpoint.expectedTime && isArrivalTrip && (
                 <p className="text-sm text-gray-600 mt-1">
                   <span className="font-medium">Expected:</span>{" "}
@@ -153,8 +213,8 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
                     const hours = date.getUTCHours();
                     const minutes = date.getUTCMinutes();
                     const hour12 = hours % 12 || 12;
-                    const ampm = hours >= 12 ? 'PM' : 'AM';
-                    const minutesStr = minutes.toString().padStart(2, '0');
+                    const ampm = hours >= 12 ? "PM" : "AM";
+                    const minutesStr = minutes.toString().padStart(2, "0");
                     return `${hour12}:${minutesStr} ${ampm}`;
                   })()}
                 </p>
@@ -177,8 +237,12 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
                   {timingStatus.status === "on-time"
                     ? "✓ Reached on time"
                     : timingStatus.status === "early"
-                    ? `✓ Reached ${timingStatus.minutes} minute${timingStatus.minutes !== 1 ? "s" : ""} early`
-                    : `⚠ Reached ${timingStatus.minutes} minute${timingStatus.minutes !== 1 ? "s" : ""} late`}
+                    ? `✓ Reached ${timingStatus.minutes} minute${
+                        timingStatus.minutes !== 1 ? "s" : ""
+                      } early`
+                    : `⚠ Reached ${timingStatus.minutes} minute${
+                        timingStatus.minutes !== 1 ? "s" : ""
+                      } late`}
                 </p>
               )}
             </div>
@@ -188,4 +252,3 @@ export default function TripTimeline({ checkpoints, currentPointIndex = -1, stat
     </div>
   );
 }
-

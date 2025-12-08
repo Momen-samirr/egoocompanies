@@ -97,16 +97,29 @@ export const getServerUri = (): string => {
   const envUri = process.env.EXPO_PUBLIC_SERVER_URI;
   
   if (!envUri) {
-    console.warn('EXPO_PUBLIC_SERVER_URI not found, using default');
+    console.warn('⚠️ [getServerUri] EXPO_PUBLIC_SERVER_URI not found, using default');
     // Default fallback based on platform
+    let defaultUri: string;
     if (Platform.OS === "android") {
-      return "http://10.0.2.2:3000"; // Android emulator
+      defaultUri = "http://10.0.2.2:3000"; // Android emulator
     } else {
-      return "http://localhost:3000"; // iOS simulator
+      defaultUri = "http://localhost:3000"; // iOS simulator
     }
+    console.warn('⚠️ [getServerUri] Using default server URI:', defaultUri);
+    console.warn('⚠️ [getServerUri] To override, set EXPO_PUBLIC_SERVER_URI environment variable');
+    return defaultUri;
   }
   
   const cleanedUri = ensureUrlScheme(envUri, "http");
+  
+  // Validate URI format
+  if (!cleanedUri.match(/^https?:\/\/.+/)) {
+    console.error('❌ [getServerUri] Invalid server URI format:', cleanedUri);
+    console.error('❌ [getServerUri] URI must start with http:// or https://');
+  } else {
+    console.log('✅ [getServerUri] Using server URI:', cleanedUri.replace(/https?:\/\//, '***://'));
+  }
+  
   return cleanedUri;
 };
 
@@ -114,20 +127,28 @@ export const getServerUri = (): string => {
 // For Android emulator: use 10.0.2.2 (maps to host machine's localhost)
 // For iOS simulator: use localhost or 127.0.0.1
 // For physical devices: use your computer's local IP (e.g., 192.168.1.2)
-// You can override this by setting WEBSOCKET_URL in your environment
+// You can override this by setting EXPO_PUBLIC_WEBSOCKET_URL in your environment
 export const getWebSocketUrl = (): string => {
   // Check if there's an environment variable override
   const envUrl = process.env.EXPO_PUBLIC_WEBSOCKET_URL;
   
-  console.log('🔌 WebSocket URL check:', {
+  console.log('🔌 [getWebSocketUrl] WebSocket URL check:', {
     hasEnvVar: !!envUrl,
-    envUrlValue: envUrl,
+    envUrlValue: envUrl ? envUrl.replace(/ws:\/\/|wss:\/\//, '***://') : 'not set',
     platform: Platform.OS,
   });
   
   if (envUrl) {
     const cleanedUrl = ensureUrlScheme(envUrl, "ws");
-    console.log('🔌 Using environment WebSocket URL:', cleanedUrl);
+    
+    // Validate URL format
+    if (!cleanedUrl.match(/^wss?:\/\/.+/)) {
+      console.error('❌ [getWebSocketUrl] Invalid WebSocket URL format:', cleanedUrl);
+      console.error('❌ [getWebSocketUrl] URL must start with ws:// or wss://');
+    } else {
+      console.log('✅ [getWebSocketUrl] Using environment WebSocket URL:', cleanedUrl.replace(/ws:\/\/|wss:\/\//, '***://'));
+    }
+    
     return cleanedUrl;
   }
 
@@ -143,6 +164,7 @@ export const getWebSocketUrl = (): string => {
     defaultUrl = "ws://localhost:8080";
   }
   
-  console.log('🔌 Using default WebSocket URL:', defaultUrl);
+  console.log('⚠️ [getWebSocketUrl] Using default WebSocket URL:', defaultUrl);
+  console.log('⚠️ [getWebSocketUrl] To override, set EXPO_PUBLIC_WEBSOCKET_URL environment variable');
   return defaultUrl;
 };

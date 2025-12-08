@@ -17,6 +17,8 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   MapPinIcon,
+  UserIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { LocationData, ScheduledTrip, TripFormData } from "@/types/trip";
 import { Company } from "@/types";
@@ -102,12 +104,12 @@ export default function EditTripPage() {
       typeof error === "object" &&
       error !== null &&
       "response" in error &&
-      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message ===
-        "string"
+      typeof (error as { response?: { data?: { message?: string } } }).response
+        ?.data?.message === "string"
     ) {
       return (
-        (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
-        fallback
+        (error as { response?: { data?: { message?: string } } }).response?.data
+          ?.message || fallback
       );
     }
     return fallback;
@@ -132,12 +134,14 @@ export default function EditTripPage() {
         const timeStr = scheduledDate.toTimeString().slice(0, 5);
 
         // Format expectedTime for points if available
-        const formatExpectedTime = (expectedTime: string | null | undefined) => {
+        const formatExpectedTime = (
+          expectedTime: string | null | undefined
+        ) => {
           if (!expectedTime) return undefined;
           const time = new Date(expectedTime);
           // Use UTC methods since we store it as UTC to preserve the exact time entered
-          const hours = time.getUTCHours().toString().padStart(2, '0');
-          const minutes = time.getUTCMinutes().toString().padStart(2, '0');
+          const hours = time.getUTCHours().toString().padStart(2, "0");
+          const minutes = time.getUTCMinutes().toString().padStart(2, "0");
           return `${hours}:${minutes}`; // HH:MM format
         };
 
@@ -150,26 +154,31 @@ export default function EditTripPage() {
           assignedCaptainId: tripData.assignedCaptainId || "",
           companyId: tripData.companyId,
           price: tripData.price,
-          points: tripData.points.map((point: ScheduledTrip["points"][number]) => ({
-            id: point.id,
-            name: point.name,
-            latitude: point.latitude,
-            longitude: point.longitude,
-            order: point.order,
-            isFinalPoint: point.isFinalPoint,
-            expectedTime: formatExpectedTime(point.expectedTime),
-          })),
+          points: tripData.points.map(
+            (point: ScheduledTrip["points"][number]) => ({
+              id: point.id,
+              name: point.name,
+              latitude: point.latitude,
+              longitude: point.longitude,
+              order: point.order,
+              isFinalPoint: point.isFinalPoint,
+              expectedTime: formatExpectedTime(point.expectedTime),
+              employees: point.employees || [],
+            })
+          ),
         });
 
         // Pre-populate location pickers
         const locations = new Map<number, LocationData | null>();
-        tripData.points.forEach((point: ScheduledTrip["points"][number], index: number) => {
-          locations.set(index, {
-            latitude: point.latitude,
-            longitude: point.longitude,
-            address: point.name,
-          });
-        });
+        tripData.points.forEach(
+          (point: ScheduledTrip["points"][number], index: number) => {
+            locations.set(index, {
+              latitude: point.latitude,
+              longitude: point.longitude,
+              address: point.name,
+            });
+          }
+        );
         setCheckpointLocations(locations);
       }
     } catch (error) {
@@ -214,6 +223,7 @@ export default function EditTripPage() {
       longitude: 0,
       order: fields.length,
       isFinalPoint: false,
+      employees: [],
     });
   };
 
@@ -269,7 +279,9 @@ export default function EditTripPage() {
   };
 
   const handleCompanyChange = (companyId: string) => {
-    const selectedCompany = companies.find((company) => company.id === companyId);
+    const selectedCompany = companies.find(
+      (company) => company.id === companyId
+    );
     if (selectedCompany) {
       form.setValue("price", selectedCompany.defaultScheduledTripPrice, {
         shouldDirty: true,
@@ -298,14 +310,19 @@ export default function EditTripPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Edit Scheduled Trip</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Edit Scheduled Trip
+          </h1>
           {isDirty && (
-            <p className="text-sm text-gray-500 mt-1">You have unsaved changes</p>
+            <p className="text-sm text-gray-500 mt-1">
+              You have unsaved changes
+            </p>
           )}
           {trip.status === "ACTIVE" && (
             <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-sm text-amber-800">
-                <strong>Note:</strong> This trip is currently active. You can modify points, but changes may affect the trip in progress.
+                <strong>Note:</strong> This trip is currently active. You can
+                modify points, but changes may affect the trip in progress.
               </p>
             </div>
           )}
@@ -319,9 +336,11 @@ export default function EditTripPage() {
         </Button>
       </div>
 
-      <form onSubmit={(e) => {
-        handleSubmit(e);
-      }}>
+      <form
+        onSubmit={(e) => {
+          handleSubmit(e);
+        }}
+      >
         <div className="space-y-6">
           {/* Section 1: Basic Information */}
           <Card>
@@ -596,7 +615,9 @@ export default function EditTripPage() {
                           <Controller
                             control={form.control}
                             name={`points.${index}.isFinalPoint`}
-                            render={({ field: { value, onChange, onBlur, name, ref } }) => (
+                            render={({
+                              field: { value, onChange, onBlur, name, ref },
+                            }) => (
                               <div className="flex items-center h-full pt-8">
                                 <input
                                   type="checkbox"
@@ -679,6 +700,137 @@ export default function EditTripPage() {
                             : undefined
                         }
                       />
+
+                      {/* Employees Section */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <UserIcon className="h-5 w-5 text-indigo-600" />
+                            <h4 className="text-sm font-semibold text-gray-900">
+                              Employees at this checkpoint
+                            </h4>
+                            {form.watch(`points.${index}.employees`)?.length >
+                              0 && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
+                                {form.watch(`points.${index}.employees`)
+                                  ?.length || 0}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            icon={PlusIcon}
+                            onClick={() => {
+                              const currentEmployees =
+                                form.getValues(`points.${index}.employees`) ||
+                                [];
+                              form.setValue(`points.${index}.employees`, [
+                                ...currentEmployees,
+                                { name: "", employeeId: "" },
+                              ]);
+                            }}
+                          >
+                            Add Employee
+                          </Button>
+                        </div>
+
+                        {form.watch(`points.${index}.employees`)?.length >
+                          0 && (
+                          <div className="space-y-2">
+                            {form
+                              .watch(`points.${index}.employees`)
+                              ?.map((employee: any, empIndex: number) => (
+                                <div
+                                  key={empIndex}
+                                  className="flex gap-2 items-start p-3 bg-white border border-gray-200 rounded-lg"
+                                >
+                                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        Employee Name *
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={employee.name || ""}
+                                        onChange={(e) => {
+                                          const employees =
+                                            form.getValues(
+                                              `points.${index}.employees`
+                                            ) || [];
+                                          employees[empIndex] = {
+                                            ...employees[empIndex],
+                                            name: e.target.value,
+                                          };
+                                          form.setValue(
+                                            `points.${index}.employees`,
+                                            employees
+                                          );
+                                        }}
+                                        placeholder="e.g., John Doe"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        Employee ID (Optional)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={employee.employeeId || ""}
+                                        onChange={(e) => {
+                                          const employees =
+                                            form.getValues(
+                                              `points.${index}.employees`
+                                            ) || [];
+                                          employees[empIndex] = {
+                                            ...employees[empIndex],
+                                            employeeId: e.target.value,
+                                          };
+                                          form.setValue(
+                                            `points.${index}.employees`,
+                                            employees
+                                          );
+                                        }}
+                                        placeholder="e.g., EMP001"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                      />
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const employees =
+                                        form.getValues(
+                                          `points.${index}.employees`
+                                        ) || [];
+                                      employees.splice(empIndex, 1);
+                                      form.setValue(
+                                        `points.${index}.employees`,
+                                        employees
+                                      );
+                                    }}
+                                    className="mt-6 p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                                    title="Remove employee"
+                                  >
+                                    <XMarkIcon className="h-5 w-5" />
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+
+                        {(!form.watch(`points.${index}.employees`) ||
+                          form.watch(`points.${index}.employees`)?.length ===
+                            0) && (
+                          <p className="text-sm text-gray-500 italic">
+                            No employees added. Click "Add Employee" to add
+                            employees who should be picked up at this
+                            checkpoint.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

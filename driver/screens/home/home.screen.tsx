@@ -987,11 +987,23 @@ export default function HomeScreen() {
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
-          console.log("✅ Connected to WebSocket server successfully");
+          console.log("✅ [WebSocket] Connected to WebSocket server successfully");
+          console.log("✅ [WebSocket] URL:", wsUrl);
+          console.log("✅ [WebSocket] Driver status (isOn):", isOnRef.current);
           setWsConnected(true);
           reconnectAttempts = 0; // Reset reconnect attempts on successful connection
           // Set WebSocket connection for background task
           setWebSocketConnection(ws.current);
+          
+          // If driver is already active and we have a location, send it immediately
+          if (isOnRef.current && currentLocation) {
+            console.log("✅ [WebSocket] Driver is active and has location - sending immediately");
+            sendLocationUpdateWithRetry(currentLocation).then((success) => {
+              if (success) {
+                console.log("✅ [WebSocket] Initial location sent after connection");
+              }
+            });
+          }
         };
 
         ws.current.onmessage = (e) => {
@@ -1090,22 +1102,25 @@ export default function HomeScreen() {
     prevIsOnRef.current = isOn;
     
     if (driverJustBecameActive) {
-      console.log("🔄 Driver just became active!");
+      console.log("🔄 [Location Send Effect] Driver just became active!");
     }
     
-    if (wsConnected && isOn === true && currentLocation && ws.current && ws.current.readyState === WebSocket.OPEN) {
+    if (wsConnected && isOn === true && currentLocation) {
       // Send immediately if driver just became active or this is initial connection
       if (driverJustBecameActive || !lastLocation) {
-        console.log("✅ All conditions met - sending location immediately");
-        sendLocationUpdate(currentLocation).catch(error => {
-          console.error("❌ Error sending initial location:", error);
+        console.log("✅ [Location Send Effect] All conditions met - sending location with retry");
+        sendLocationUpdateWithRetry(currentLocation).then((success) => {
+          if (success) {
+            console.log("✅ [Location Send Effect] Location update sent successfully");
+          } else {
+            console.log("⚠️ [Location Send Effect] Location update will be retried automatically");
+          }
         });
       }
     } else {
-      if (!wsConnected) console.log("⚠️ WebSocket not connected");
-      if (isOn !== true) console.log(`⚠️ Driver not active (isOn=${isOn})`);
-      if (!currentLocation) console.log("⚠️ No current location yet");
-      if (!ws.current || ws.current.readyState !== WebSocket.OPEN) console.log("⚠️ WebSocket not ready");
+      if (!wsConnected) console.log("⚠️ [Location Send Effect] WebSocket not connected");
+      if (isOn !== true) console.log(`⚠️ [Location Send Effect] Driver not active (isOn=${isOn})`);
+      if (!currentLocation) console.log("⚠️ [Location Send Effect] No current location yet");
     }
   }, [wsConnected, isOn, currentLocation]);
 
@@ -1131,25 +1146,57 @@ export default function HomeScreen() {
     return distance;
   }, []);
 
-  const sendLocationUpdate = async (location: any) => {
-    // Only send location updates if driver is active (use ref to get latest value)
+  // Retry mechanism for sending location updates
+  const sendLocationUpdateWithRetry = async (location: any, retryCount = 0, maxRetries = 3) => {
     const currentIsOn = isOnRef.current;
     if (!currentIsOn) {
-      console.log(`⚠️ Driver is inactive (isOn=${currentIsOn}) - skipping location update`);
-      return;
+      console.log(`⚠️ [sendLocationUpdateWithRetry] Driver is inactive - skipping location update`);
+      return false;
     }
 
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      console.log("⚠️ WebSocket not connected - cannot send location update");
-      return;
+      if (retryCount < maxRetries) {
+        console.log(`⚠️ [sendLocationUpdateWithRetry] WebSocket not ready, retrying in 1 second... (${retryCount + 1}/${maxRetries})`);
+        setTimeout(() => {
+          sendLocationUpdateWithRetry(location, retryCount + 1, maxRetries);
+        }, 1000);
+        return false;
+      } else {
+        console.log("⚠️ [sendLocationUpdateWithRetry] WebSocket not connected after max retries - cannot send location update");
+        return false;
+      }
     }
+
+    return await sendLocationUpdate(location);
+  };
+
+  const sendLocationUpdate = async (location: any) => {
+    console.log("📍 [sendLocationUpdate] Starting location update process");
+    console.log("📍 [sendLocationUpdate] Location:", { lat: location.latitude, lng: location.longitude, heading: location.heading });
+    
+    // Only send location updates if driver is active (use ref to get latest value)
+    const currentIsOn = isOnRef.current;
+    console.log("📍 [sendLocationUpdate] Driver status check - isOn:", currentIsOn);
+    if (!currentIsOn) {
+      console.log(`⚠️ [sendLocationUpdate] Driver is inactive (isOn=${currentIsOn}) - skipping location update`);
+      return false;
+    }
+
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+      console.log("⚠️ [sendLocationUpdate] WebSocket not connected - cannot send location update");
+      console.log("⚠️ [sendLocationUpdate] WebSocket state:", ws.current ? ws.current.readyState : "null");
+      return false;
+    }
+    console.log("✅ [sendLocationUpdate] WebSocket is connected and ready");
 
     const accessToken = await AsyncStorage.getItem("accessToken");
     if (!accessToken) {
-      console.error("❌ No access token - cannot fetch driver data");
+      console.error("❌ [sendLocationUpdate] No access token - cannot fetch driver data");
       return;
     }
+    console.log("✅ [sendLocationUpdate] Access token found");
 
+    console.log("📡 [sendLocationUpdate] Fetching driver data from:", `${getServerUri()}/driver/me`);
     await axios
       .get(`${getServerUri()}/driver/me`, {
         headers: {
@@ -1160,6 +1207,12 @@ export default function HomeScreen() {
         if (res.data && res.data.driver) {
           const driverData = res.data.driver;
           const driverStatus = driverData.status || "active";
+          console.log("✅ [sendLocationUpdate] Driver data fetched:", {
+            id: driverData.id,
+            name: driverData.name,
+            status: driverStatus,
+            vehicleType: driverData.vehicle_type,
+          });
           
           const message = JSON.stringify({
             type: "locationUpdate",
@@ -1174,7 +1227,16 @@ export default function HomeScreen() {
             role: "driver",
             driver: driverData.id,
           });
+          
+          console.log("📤 [sendLocationUpdate] Sending location update via WebSocket:", {
+            type: "locationUpdate",
+            driverId: driverData.id,
+            location: { lat: location.latitude, lng: location.longitude },
+            status: driverStatus,
+          });
+          
           ws.current.send(message);
+          console.log("✅ [sendLocationUpdate] Location update sent successfully via WebSocket");
           
           // Also update location for scheduled trips (only if driver is online)
           // The backend will check if driver is online, so we can safely call this
@@ -1196,25 +1258,31 @@ export default function HomeScreen() {
                 (check: any) => check.canActivate
               );
               if (availableTrips.length > 0) {
-                console.log(`✅ ${availableTrips.length} trip(s) are now available to start`);
+                console.log(`✅ [sendLocationUpdate] ${availableTrips.length} trip(s) are now available to start`);
                 // Notification will be sent by the backend
               }
             }
-          }).catch((error) => {
+          }).catch((error: any) => {
             // Non-critical error - might be because driver is offline
             if (error.response?.status === 400 && error.response?.data?.message?.includes("online")) {
-              console.log("⚠️ Location update skipped - driver is offline");
+              console.log("⚠️ [sendLocationUpdate] Location update skipped - driver is offline");
             } else {
-              console.log("⚠️ Failed to update location for scheduled trips:", error.message);
+              console.log("⚠️ [sendLocationUpdate] Failed to update location for scheduled trips:", error.message);
             }
           });
+          
+          return true;
         } else {
-          console.error("❌ No driver data in response");
+          console.error("❌ [sendLocationUpdate] No driver data in response");
+          return false;
         }
       })
       .catch((error) => {
-        console.error("❌ Error fetching driver data:", error);
+        console.error("❌ [sendLocationUpdate] Error fetching driver data:", error);
+        return false;
       });
+    
+    return false;
   };
 
   useEffect(() => {
@@ -1402,9 +1470,12 @@ export default function HomeScreen() {
   // Memoize handleStatusChange to prevent unnecessary re-renders
   const handleStatusChange = useCallback(async () => {
     if (!loading) {
+      console.log("🔄 [handleStatusChange] Starting status change");
+      console.log("🔄 [handleStatusChange] Current status:", isOn ? "active" : "inactive");
       setloading(true);
       const accessToken = await AsyncStorage.getItem("accessToken");
       const newStatus = !isOn ? "active" : "inactive";
+      console.log("🔄 [handleStatusChange] Changing status to:", newStatus);
       
       const changeStatus = await axios.put(
         `${getServerUri()}/driver/update-status`,
@@ -1418,10 +1489,12 @@ export default function HomeScreen() {
         }
       );
       if (changeStatus.data) {
+        console.log("✅ [handleStatusChange] Status updated successfully:", changeStatus.data.driver.status);
         const newIsOn = !isOn;
         setIsOn(newIsOn);
         isOnRef.current = newIsOn; // Update ref immediately
         await AsyncStorage.setItem("status", changeStatus.data.driver.status);
+        console.log("✅ [handleStatusChange] Local state updated - isOn:", newIsOn);
         
         // Start/stop foreground service and handle location tracking
         if (newStatus === "active") {
@@ -1451,9 +1524,24 @@ export default function HomeScreen() {
               }, 2000); // Show after 2 seconds to not interrupt the status change
             }
 
-            // If driver goes active, send current location immediately
-            if (currentLocation && ws.current && ws.current.readyState === WebSocket.OPEN) {
-              await sendLocationUpdate(currentLocation);
+            // If driver goes active, send current location immediately with retry logic
+            console.log("🔄 [handleStatusChange] Driver went active - checking if we can send location");
+            console.log("🔄 [handleStatusChange] Current location:", currentLocation);
+            console.log("🔄 [handleStatusChange] WebSocket state:", ws.current ? ws.current.readyState : "null");
+            console.log("🔄 [handleStatusChange] WebSocket connected state:", wsConnected);
+            
+            if (currentLocation) {
+              // Use retry mechanism to ensure location is sent even if WebSocket isn't immediately ready
+              console.log("✅ [handleStatusChange] Attempting to send location update with retry");
+              sendLocationUpdateWithRetry(currentLocation).then((success) => {
+                if (success) {
+                  console.log("✅ [handleStatusChange] Location update sent successfully");
+                } else {
+                  console.log("⚠️ [handleStatusChange] Location update will be retried automatically");
+                }
+              });
+            } else {
+              console.log("⚠️ [handleStatusChange] No current location available yet");
             }
           } catch (error) {
             console.error("Error starting location tracking:", error);

@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { GoogleMap, useLoadScript, Marker, InfoWindow, Polyline } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  useLoadScript,
+  Marker,
+  InfoWindow,
+  Polyline,
+} from "@react-google-maps/api";
 import api from "@/lib/api";
 import { Driver, Ride } from "@/types";
 import { getToken, logout, isCompanyUser } from "@/lib/auth";
@@ -18,7 +24,9 @@ const defaultCenter = {
   lng: 0,
 };
 
-const libraries: ("drawing" | "geometry" | "places" | "visualization")[] = ["places"];
+const libraries: ("drawing" | "geometry" | "places" | "visualization")[] = [
+  "places",
+];
 
 interface DriverLocation {
   id: string;
@@ -38,15 +46,19 @@ interface ActiveRide extends Ride {
 
 export default function MapPage() {
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-  
+
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: googleMapsApiKey,
     libraries: libraries,
   });
 
   const [drivers, setDrivers] = useState<Record<string, DriverLocation>>({});
-  const [activeRides, setActiveRides] = useState<Record<string, ActiveRide>>({});
-  const [selectedDriver, setSelectedDriver] = useState<DriverLocation | null>(null);
+  const [activeRides, setActiveRides] = useState<Record<string, ActiveRide>>(
+    {}
+  );
+  const [selectedDriver, setSelectedDriver] = useState<DriverLocation | null>(
+    null
+  );
   const [selectedRide, setSelectedRide] = useState<ActiveRide | null>(null);
   const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [mapZoom, setMapZoom] = useState(12);
@@ -54,7 +66,10 @@ export default function MapPage() {
   const [filterVehicleType, setFilterVehicleType] = useState<string>("all");
   const [showActiveRides, setShowActiveRides] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [locationError, setLocationError] = useState<string>("");
   const [hasAutoFitted, setHasAutoFitted] = useState(false);
   const [isCompany, setIsCompany] = useState(false);
@@ -72,7 +87,7 @@ export default function MapPage() {
   useEffect(() => {
     // Get WebSocket URL from environment or use default
     let wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:8080";
-    
+
     // Ensure the URL is properly formatted (remove any trailing slashes, ensure ws:// or wss:// prefix)
     wsUrl = wsUrl.trim();
     if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) {
@@ -80,95 +95,165 @@ export default function MapPage() {
     }
     // Remove trailing slash if present
     wsUrl = wsUrl.replace(/\/$/, "");
-    
+
     // Get token for authentication
     const token = getToken();
-    
+
     // Construct the full WebSocket URL with query parameters
     const params = new URLSearchParams({ role: "admin" });
     if (token) {
       params.append("token", token);
     }
     const fullWsUrl = `${wsUrl}?${params.toString()}`;
-    
-    console.log("🔌 Connecting to WebSocket:", fullWsUrl.replace(token || "", "***"));
+
+    console.log(
+      "🔌 Connecting to WebSocket:",
+      fullWsUrl.replace(token || "", "***")
+    );
     console.log("📍 Environment URL:", process.env.NEXT_PUBLIC_WEBSOCKET_URL);
-    
+
     let ws: WebSocket;
     try {
       ws = new WebSocket(fullWsUrl);
     } catch (error: any) {
       console.error("Failed to create WebSocket:", error);
       setIsConnected(false);
-      setLocationError(`Failed to create WebSocket connection: ${error.message || error}`);
+      setLocationError(
+        `Failed to create WebSocket connection: ${error.message || error}`
+      );
       return;
     }
-    
+
     // Add connection timeout
     const connectionTimeout = setTimeout(() => {
       if (ws.readyState === WebSocket.CONNECTING) {
         console.error("WebSocket connection timeout");
         ws.close();
         setIsConnected(false);
-        setLocationError("Connection timeout. Please check if the WebSocket server is running and accessible.");
+        setLocationError(
+          "Connection timeout. Please check if the WebSocket server is running and accessible."
+        );
       }
     }, 5000);
 
     ws.onopen = () => {
       clearTimeout(connectionTimeout);
-      console.log("✅ Connected to WebSocket server");
+      console.log("✅ [Dashboard] Connected to WebSocket server");
+      console.log(
+        "✅ [Dashboard] WebSocket URL:",
+        fullWsUrl.replace(token || "", "***")
+      );
       setIsConnected(true);
       setLocationError("");
     };
 
     ws.onclose = (event) => {
       clearTimeout(connectionTimeout);
-      console.log("Disconnected from WebSocket server", event.code, event.reason);
+      console.log(
+        "🔌 [Dashboard] Disconnected from WebSocket server",
+        "code:",
+        event.code,
+        "reason:",
+        event.reason || "No reason provided"
+      );
       setIsConnected(false);
       if (event.code !== 1000) {
         // Not a normal closure
-        setLocationError(`Connection closed unexpectedly (code: ${event.code}). Server may have stopped.`);
+        console.error(
+          `❌ [Dashboard] Connection closed unexpectedly (code: ${event.code})`
+        );
+        setLocationError(
+          `Connection closed unexpectedly (code: ${event.code}). Server may have stopped.`
+        );
       }
     };
 
     ws.onerror = (error) => {
       clearTimeout(connectionTimeout);
-      console.error("WebSocket error:", error);
-      console.error("Failed to connect to:", fullWsUrl);
-      console.error("Make sure the WebSocket server is running on port 8080");
+      console.error("❌ [Dashboard] WebSocket error:", error);
+      console.error(
+        "❌ [Dashboard] Failed to connect to:",
+        fullWsUrl.replace(token || "", "***")
+      );
+      console.error("❌ [Dashboard] Make sure the WebSocket server is running");
       setIsConnected(false);
-      setLocationError(`WebSocket connection failed. Trying to connect to: ${fullWsUrl}. Make sure the server is running.`);
+      setLocationError(
+        `WebSocket connection failed. Trying to connect to: ${fullWsUrl.replace(
+          token || "",
+          "***"
+        )}. Make sure the server is running.`
+      );
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log("📨 WebSocket message received:", data.type);
-        
+        console.log("📨 [Dashboard] WebSocket message received:", data.type);
+        console.log(
+          "📨 [Dashboard] Message data:",
+          JSON.stringify(data, null, 2)
+        );
+
         if (data.type === "driverLocations") {
-          console.log(`📍 Received ${Object.keys(data.drivers || {}).length} driver locations from WebSocket`);
+          const driverCount = Object.keys(data.drivers || {}).length;
+          console.log(
+            `📍 [Dashboard] Received ${driverCount} driver locations from WebSocket`
+          );
+          console.log(
+            `📍 [Dashboard] Driver IDs:`,
+            Object.keys(data.drivers || {})
+          );
           setDrivers(data.drivers || {});
         } else if (data.type === "driverLocationUpdate") {
-          console.log(`📍 Driver location update: ${data.driver?.id} - ${data.driver?.name} (${data.driver?.status})`);
-          setDrivers((prev) => ({
-            ...prev,
-            [data.driver.id]: data.driver,
-          }));
+          console.log(
+            `📍 [Dashboard] Driver location update received: ID=${data.driver?.id}, Name=${data.driver?.name}, Status=${data.driver?.status}`
+          );
+          console.log(
+            `📍 [Dashboard] Location: Lat=${data.driver?.latitude}, Lng=${data.driver?.longitude}`
+          );
+          console.log(
+            `📍 [Dashboard] Vehicle: ${data.driver?.vehicleType}, Bearing: ${data.driver?.bearing}`
+          );
+
+          setDrivers((prev) => {
+            const updated = {
+              ...prev,
+              [data.driver.id]: data.driver,
+            };
+            console.log(
+              `📍 [Dashboard] Updated drivers state. Total drivers: ${
+                Object.keys(updated).length
+              }`
+            );
+            return updated;
+          });
         } else if (data.type === "driverRemoved") {
-          console.log(`🗑️ Driver removed: ${data.driverId}`);
+          console.log(`🗑️ [Dashboard] Driver removed: ${data.driverId}`);
           setDrivers((prev) => {
             const updated = { ...prev };
             delete updated[data.driverId];
+            console.log(
+              `🗑️ [Dashboard] Removed driver ${
+                data.driverId
+              }. Remaining drivers: ${Object.keys(updated).length}`
+            );
             return updated;
           });
         } else if (data.type === "activeRides") {
-          console.log(`🚗 Received ${Object.keys(data.rides || {}).length} active rides from WebSocket`);
+          const rideCount = Object.keys(data.rides || {}).length;
+          console.log(
+            `🚗 [Dashboard] Received ${rideCount} active rides from WebSocket`
+          );
           setActiveRides(data.rides || {});
         } else if (data.type === "activeRidesUpdate") {
+          console.log(`🚗 [Dashboard] Active rides update received`);
           setActiveRides(data.rides || {});
+        } else {
+          console.log(`⚠️ [Dashboard] Unknown message type: ${data.type}`);
         }
       } catch (error) {
-        console.error("Error parsing WebSocket message:", error);
+        console.error("❌ [Dashboard] Error parsing WebSocket message:", error);
+        console.error("❌ [Dashboard] Raw message:", event.data);
       }
     };
 
@@ -190,25 +275,26 @@ export default function MapPage() {
 
     const fetchDriversFromWebSocketServer = async () => {
       try {
-        const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:8080";
+        const wsUrl =
+          process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:8080";
         // Convert WebSocket URL to HTTP URL
         // Handle both ws:// and wss:// protocols
         let httpUrl = wsUrl.replace(/^wss?:\/\//, "").replace(/\/$/, "");
-        
+
         // For local development, use http://, for production wss:// should map to https://
         if (wsUrl.startsWith("wss://")) {
           httpUrl = `https://${httpUrl}`;
         } else {
           httpUrl = `http://${httpUrl}`;
         }
-        
+
         const apiUrl = `${httpUrl}/api/drivers`;
         console.log(`📡 Attempting to fetch drivers from: ${apiUrl}`);
-        
+
         // Create abort controller for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-        
+
         try {
           const response = await fetch(apiUrl, {
             method: "GET",
@@ -217,21 +303,27 @@ export default function MapPage() {
             },
             signal: controller.signal,
           });
-          
+
           clearTimeout(timeoutId);
-          
+
           if (response.ok) {
             const data = await response.json();
             const wsDrivers = data.drivers || {};
-            console.log(`✅ Fetched ${Object.keys(wsDrivers).length} drivers from WebSocket server HTTP API`);
-            
+            console.log(
+              `✅ Fetched ${
+                Object.keys(wsDrivers).length
+              } drivers from WebSocket server HTTP API`
+            );
+
             // Merge with existing drivers
             setDrivers((prev) => ({
               ...prev,
               ...wsDrivers,
             }));
           } else {
-            console.warn(`⚠️ WebSocket server HTTP API returned status ${response.status}`);
+            console.warn(
+              `⚠️ WebSocket server HTTP API returned status ${response.status}`
+            );
           }
         } finally {
           clearTimeout(timeoutId);
@@ -240,11 +332,21 @@ export default function MapPage() {
         // Silently fail - this is an optional fallback
         // WebSocket messages are the primary source of driver locations
         if (error.name === "AbortError") {
-          console.debug("⏱️ WebSocket server HTTP API request timed out (this is optional)");
-        } else if (error.name === "TypeError" && error.message.includes("Failed to fetch")) {
-          console.debug("🌐 WebSocket server HTTP API not accessible (CORS or network issue - this is optional)");
+          console.debug(
+            "⏱️ WebSocket server HTTP API request timed out (this is optional)"
+          );
+        } else if (
+          error.name === "TypeError" &&
+          error.message.includes("Failed to fetch")
+        ) {
+          console.debug(
+            "🌐 WebSocket server HTTP API not accessible (CORS or network issue - this is optional)"
+          );
         } else {
-          console.debug("WebSocket server HTTP API not available (this is optional):", error.message);
+          console.debug(
+            "WebSocket server HTTP API not available (this is optional):",
+            error.message
+          );
         }
       }
     };
@@ -302,7 +404,7 @@ export default function MapPage() {
           setLocationError("Unable to get your location. Using default view.");
           // Fallback to a reasonable default if geolocation fails
           // You can set this to your city's coordinates
-          setMapCenter({ lat: 40.7128, lng: -74.0060 }); // New York as fallback
+          setMapCenter({ lat: 40.7128, lng: -74.006 }); // New York as fallback
         },
         {
           enableHighAccuracy: true,
@@ -318,34 +420,55 @@ export default function MapPage() {
   // Auto-fit map to show all drivers when they first appear
   // Only auto-fit once when drivers are first loaded, not on every filter change
   useEffect(() => {
-    if (isLoaded && mapRef.current && Object.keys(drivers).length > 0 && !hasAutoFitted) {
+    if (
+      isLoaded &&
+      mapRef.current &&
+      Object.keys(drivers).length > 0 &&
+      !hasAutoFitted
+    ) {
       const filtered = Object.values(drivers).filter((driver) => {
-        if (filterStatus !== "all" && driver.status !== filterStatus) return false;
-        if (filterVehicleType !== "all" && driver.vehicleType !== filterVehicleType) return false;
+        if (filterStatus !== "all" && driver.status !== filterStatus)
+          return false;
+        if (
+          filterVehicleType !== "all" &&
+          driver.vehicleType !== filterVehicleType
+        )
+          return false;
         return true;
       });
 
       if (filtered.length > 0) {
         const bounds = new google.maps.LatLngBounds();
-        
+
         // Add user location if available
         if (userLocation) {
-          bounds.extend(new google.maps.LatLng(userLocation.lat, userLocation.lng));
+          bounds.extend(
+            new google.maps.LatLng(userLocation.lat, userLocation.lng)
+          );
         }
-        
+
         // Add all driver locations
         filtered.forEach((driver) => {
-          bounds.extend(new google.maps.LatLng(driver.latitude, driver.longitude));
+          bounds.extend(
+            new google.maps.LatLng(driver.latitude, driver.longitude)
+          );
         });
 
         // Add active ride locations if showing
         if (showActiveRides) {
           Object.values(activeRides).forEach((ride) => {
             if (ride.pickup) {
-              bounds.extend(new google.maps.LatLng(ride.pickup.lat, ride.pickup.lng));
+              bounds.extend(
+                new google.maps.LatLng(ride.pickup.lat, ride.pickup.lng)
+              );
             }
             if (ride.destination) {
-              bounds.extend(new google.maps.LatLng(ride.destination.lat, ride.destination.lng));
+              bounds.extend(
+                new google.maps.LatLng(
+                  ride.destination.lat,
+                  ride.destination.lng
+                )
+              );
             }
           });
         }
@@ -353,22 +476,35 @@ export default function MapPage() {
         // Only fit bounds if we have at least one location
         if (bounds.getNorthEast() && bounds.getSouthWest()) {
           mapRef.current.fitBounds(bounds);
-          
+
           // Set a maximum zoom level to prevent too much zoom out
-          google.maps.event.addListenerOnce(mapRef.current, "bounds_changed", () => {
-            if (mapRef.current) {
-              const currentZoom = mapRef.current.getZoom();
-              if (currentZoom && currentZoom > 15) {
-                mapRef.current.setZoom(15);
+          google.maps.event.addListenerOnce(
+            mapRef.current,
+            "bounds_changed",
+            () => {
+              if (mapRef.current) {
+                const currentZoom = mapRef.current.getZoom();
+                if (currentZoom && currentZoom > 15) {
+                  mapRef.current.setZoom(15);
+                }
               }
             }
-          });
-          
+          );
+
           setHasAutoFitted(true);
         }
       }
     }
-  }, [isLoaded, drivers, filterStatus, filterVehicleType, showActiveRides, activeRides, userLocation, hasAutoFitted]);
+  }, [
+    isLoaded,
+    drivers,
+    filterStatus,
+    filterVehicleType,
+    showActiveRides,
+    activeRides,
+    userLocation,
+    hasAutoFitted,
+  ]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -394,7 +530,9 @@ export default function MapPage() {
             }
           },
           (error) => {
-            alert("Unable to get your location. Please enable location permissions.");
+            alert(
+              "Unable to get your location. Please enable location permissions."
+            );
           }
         );
       }
@@ -404,48 +542,68 @@ export default function MapPage() {
   const fitAllDrivers = () => {
     if (isLoaded && mapRef.current) {
       const filtered = Object.values(drivers).filter((driver) => {
-        if (filterStatus !== "all" && driver.status !== filterStatus) return false;
-        if (filterVehicleType !== "all" && driver.vehicleType !== filterVehicleType) return false;
+        if (filterStatus !== "all" && driver.status !== filterStatus)
+          return false;
+        if (
+          filterVehicleType !== "all" &&
+          driver.vehicleType !== filterVehicleType
+        )
+          return false;
         return true;
       });
 
       if (filtered.length > 0) {
         const bounds = new google.maps.LatLngBounds();
-        
+
         // Include user location if available
         if (userLocation) {
-          bounds.extend(new google.maps.LatLng(userLocation.lat, userLocation.lng));
+          bounds.extend(
+            new google.maps.LatLng(userLocation.lat, userLocation.lng)
+          );
         }
-        
+
         // Add all filtered driver locations
         filtered.forEach((driver) => {
-          bounds.extend(new google.maps.LatLng(driver.latitude, driver.longitude));
+          bounds.extend(
+            new google.maps.LatLng(driver.latitude, driver.longitude)
+          );
         });
-        
+
         // Add active ride locations if showing
         if (showActiveRides) {
           Object.values(activeRides).forEach((ride) => {
             if (ride.pickup) {
-              bounds.extend(new google.maps.LatLng(ride.pickup.lat, ride.pickup.lng));
+              bounds.extend(
+                new google.maps.LatLng(ride.pickup.lat, ride.pickup.lng)
+              );
             }
             if (ride.destination) {
-              bounds.extend(new google.maps.LatLng(ride.destination.lat, ride.destination.lng));
+              bounds.extend(
+                new google.maps.LatLng(
+                  ride.destination.lat,
+                  ride.destination.lng
+                )
+              );
             }
           });
         }
-        
+
         if (bounds.getNorthEast() && bounds.getSouthWest()) {
           mapRef.current.fitBounds(bounds);
-          
+
           // Set maximum zoom to prevent too much zoom out
-          google.maps.event.addListenerOnce(mapRef.current, "bounds_changed", () => {
-            if (mapRef.current) {
-              const currentZoom = mapRef.current.getZoom();
-              if (currentZoom && currentZoom > 15) {
-                mapRef.current.setZoom(15);
+          google.maps.event.addListenerOnce(
+            mapRef.current,
+            "bounds_changed",
+            () => {
+              if (mapRef.current) {
+                const currentZoom = mapRef.current.getZoom();
+                if (currentZoom && currentZoom > 15) {
+                  mapRef.current.setZoom(15);
+                }
               }
             }
-          });
+          );
         }
       } else {
         alert("No drivers to show. Please adjust your filters.");
@@ -453,19 +611,24 @@ export default function MapPage() {
     }
   };
 
-  const getDriverIcon = (status: string, vehicleType: string, bearing?: number | null) => {
+  const getDriverIcon = (
+    status: string,
+    vehicleType: string,
+    bearing?: number | null
+  ) => {
     if (!isLoaded) {
       return undefined;
     }
     const color = status === "active" ? "#10B981" : "#6B7280";
-    
+
     // Car icon SVG path (points North by default)
     // This is a car shape pointing upward (North) - top view
     // Car body: rectangle with rounded front
-    const carPath = "M -12,-20 L -10,-24 L 10,-24 L 12,-20 L 12,8 L 8,12 L -8,12 L -12,8 Z " +
-                    "M -8,-20 L -6,-22 L 6,-22 L 8,-20 L 8,6 L 6,8 L -6,8 L -8,6 Z " +
-                    "M -10,-18 L -8,-18 M 8,-18 L 10,-18";
-    
+    const carPath =
+      "M -12,-20 L -10,-24 L 10,-24 L 12,-20 L 12,8 L 8,12 L -8,12 L -12,8 Z " +
+      "M -8,-20 L -6,-22 L 6,-22 L 8,-20 L 8,6 L 6,8 L -6,8 L -8,6 Z " +
+      "M -10,-18 L -8,-18 M 8,-18 L 10,-18";
+
     return {
       path: carPath,
       scale: 1.0,
@@ -480,7 +643,8 @@ export default function MapPage() {
 
   const filteredDrivers = Object.values(drivers).filter((driver) => {
     if (filterStatus !== "all" && driver.status !== filterStatus) return false;
-    if (filterVehicleType !== "all" && driver.vehicleType !== filterVehicleType) return false;
+    if (filterVehicleType !== "all" && driver.vehicleType !== filterVehicleType)
+      return false;
     return true;
   });
 
@@ -519,7 +683,10 @@ export default function MapPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col" style={{ marginTop: 0, paddingTop: 0 }}>
+    <div
+      className="h-screen flex flex-col"
+      style={{ marginTop: 0, paddingTop: 0 }}
+    >
       {/* Controls */}
       <div className="bg-white shadow-sm border-b p-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -573,9 +740,15 @@ export default function MapPage() {
             <span className="text-sm text-gray-700">Show Active Rides</span>
           </label>
 
-          <div className={`flex items-center gap-2 ${mounted && isCompany ? "" : "ml-auto"}`}>
+          <div
+            className={`flex items-center gap-2 ${
+              mounted && isCompany ? "" : "ml-auto"
+            }`}
+          >
             <div
-              className={`w-3 h-3 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
+              className={`w-3 h-3 rounded-full ${
+                isConnected ? "bg-green-500" : "bg-red-500"
+              }`}
             />
             <span className="text-sm text-gray-600">
               {isConnected ? "Connected" : "Disconnected"}
@@ -583,11 +756,13 @@ export default function MapPage() {
           </div>
 
           <div className="text-sm text-gray-600">
-            Drivers: {filteredDrivers.length} / {Object.keys(drivers).length} total | Active Rides: {Object.keys(activeRides).length}
+            Drivers: {filteredDrivers.length} / {Object.keys(drivers).length}{" "}
+            total | Active Rides: {Object.keys(activeRides).length}
           </div>
           {Object.keys(drivers).length === 0 && isConnected && (
             <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
-              ⚠️ No drivers with location data. Drivers appear after sending location updates.
+              ⚠️ No drivers with location data. Drivers appear after sending
+              location updates.
             </div>
           )}
 
@@ -622,11 +797,16 @@ export default function MapPage() {
           </div>
         </div>
         {locationError && (
-          <div className="mt-2 text-xs text-yellow-600 bg-yellow-50 p-2 rounded">{locationError}</div>
+          <div className="mt-2 text-xs text-yellow-600 bg-yellow-50 p-2 rounded">
+            {locationError}
+          </div>
         )}
         {!isConnected && (
           <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded">
-            ⚠️ WebSocket disconnected. Make sure the server is running: <code className="bg-gray-200 px-1 rounded">cd socket && node server.js</code>
+            ⚠️ WebSocket disconnected. Make sure the server is running:{" "}
+            <code className="bg-gray-200 px-1 rounded">
+              cd socket && node server.js
+            </code>
           </div>
         )}
       </div>
@@ -662,67 +842,80 @@ export default function MapPage() {
             />
           )}
 
-            {/* Driver Markers */}
-            {filteredDrivers.map((driver) => {
-              const icon = getDriverIcon(driver.status, driver.vehicleType, driver.bearing);
+          {/* Driver Markers */}
+          {filteredDrivers.map((driver) => {
+            const icon = getDriverIcon(
+              driver.status,
+              driver.vehicleType,
+              driver.bearing
+            );
+            return (
+              <Marker
+                key={driver.id}
+                position={{ lat: driver.latitude, lng: driver.longitude }}
+                icon={icon}
+                onClick={() => setSelectedDriver(driver)}
+                title={driver.name}
+              />
+            );
+          })}
+
+          {/* Active Ride Routes */}
+          {showActiveRides &&
+            Object.values(activeRides).map((ride) => {
+              if (!ride.pickup || !ride.destination) return null;
               return (
-                <Marker
-                  key={driver.id}
-                  position={{ lat: driver.latitude, lng: driver.longitude }}
-                  icon={icon}
-                  onClick={() => setSelectedDriver(driver)}
-                  title={driver.name}
+                <Polyline
+                  key={ride.id}
+                  path={[
+                    { lat: ride.pickup.lat, lng: ride.pickup.lng },
+                    { lat: ride.destination.lat, lng: ride.destination.lng },
+                  ]}
+                  options={{
+                    strokeColor: "#3B82F6",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 3,
+                  }}
                 />
               );
             })}
 
-            {/* Active Ride Routes */}
-            {showActiveRides &&
-              Object.values(activeRides).map((ride) => {
-                if (!ride.pickup || !ride.destination) return null;
-                return (
-                  <Polyline
-                    key={ride.id}
-                    path={[
-                      { lat: ride.pickup.lat, lng: ride.pickup.lng },
-                      { lat: ride.destination.lat, lng: ride.destination.lng },
-                    ]}
-                    options={{
-                      strokeColor: "#3B82F6",
-                      strokeOpacity: 0.8,
-                      strokeWeight: 3,
-                    }}
-                  />
-                );
-              })}
-
-            {/* Driver Info Window */}
-            {selectedDriver && (
-              <InfoWindow
-                position={{ lat: selectedDriver.latitude, lng: selectedDriver.longitude }}
-                onCloseClick={() => setSelectedDriver(null)}
-              >
-                <div className="p-2">
-                  <h3 className="font-semibold text-gray-900">{selectedDriver.name}</h3>
-                  <p className="text-sm text-gray-600">Status: {selectedDriver.status}</p>
-                  <p className="text-sm text-gray-600">Vehicle: {selectedDriver.vehicleType}</p>
-                  <p className="text-sm text-gray-500">
-                    Last update: {new Date(selectedDriver.timestamp).toLocaleTimeString()}
-                  </p>
-                  <button
-                    onClick={() => {
-                      window.location.href = `/dashboard/drivers/${selectedDriver.id}`;
-                    }}
-                    className="mt-2 text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    View Details →
-                  </button>
-                </div>
-              </InfoWindow>
-            )}
+          {/* Driver Info Window */}
+          {selectedDriver && (
+            <InfoWindow
+              position={{
+                lat: selectedDriver.latitude,
+                lng: selectedDriver.longitude,
+              }}
+              onCloseClick={() => setSelectedDriver(null)}
+            >
+              <div className="p-2">
+                <h3 className="font-semibold text-gray-900">
+                  {selectedDriver.name}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Status: {selectedDriver.status}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Vehicle: {selectedDriver.vehicleType}
+                </p>
+                <p className="text-sm text-gray-500">
+                  Last update:{" "}
+                  {new Date(selectedDriver.timestamp).toLocaleTimeString()}
+                </p>
+                <button
+                  onClick={() => {
+                    window.location.href = `/dashboard/drivers/${selectedDriver.id}`;
+                  }}
+                  className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                >
+                  View Details →
+                </button>
+              </div>
+            </InfoWindow>
+          )}
         </GoogleMap>
       </div>
     </div>
   );
 }
-

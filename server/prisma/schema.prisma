@@ -177,6 +177,7 @@ model TripPoint {
   isFinalPoint    Boolean        @default(false)
   expectedTime    DateTime?
   reachedAt       DateTime?
+  employees       Json?          // Array of { name: string, employeeId?: string }
   scheduledTrip   ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt

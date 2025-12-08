@@ -212,6 +212,8 @@ const broadcastToAdmins = (data) => {
   let adminCount = 0;
   let sentCount = 0;
   
+  console.log(`📡 [broadcastToAdmins] Broadcasting ${data.type} to admin clients`);
+  
   wss.clients.forEach((client) => {
     if (client.isAdmin) {
       adminCount++;
@@ -222,17 +224,21 @@ const broadcastToAdmins = (data) => {
           
           // Filter by company if this is a COMPANY user
           if (client.companyId && client.companyDriverIds) {
+            console.log(`🔍 [broadcastToAdmins] Filtering for company ${client.companyId} with ${client.companyDriverIds.length} drivers`);
             if (data.type === "driverLocations" || data.type === "driverLocationUpdate") {
               if (data.type === "driverLocations") {
                 dataToSend = {
                   ...data,
                   drivers: filterDriversByCompany(data.drivers || {}, client.companyDriverIds),
                 };
+                console.log(`🔍 [broadcastToAdmins] Filtered drivers: ${Object.keys(dataToSend.drivers).length} drivers`);
               } else if (data.type === "driverLocationUpdate") {
                 // Only send if driver belongs to company
                 if (!client.companyDriverIds.includes(data.driver?.id)) {
+                  console.log(`⏭️ [broadcastToAdmins] Skipping driver ${data.driver?.id} - not in company ${client.companyId}`);
                   return; // Skip this update
                 }
+                console.log(`✅ [broadcastToAdmins] Driver ${data.driver?.id} belongs to company ${client.companyId}`);
               }
             } else if (data.type === "activeRides" || data.type === "activeRidesUpdate") {
               dataToSend = {
@@ -244,19 +250,20 @@ const broadcastToAdmins = (data) => {
           
           client.send(JSON.stringify(dataToSend));
           sentCount++;
+          console.log(`✅ [broadcastToAdmins] Sent ${data.type} to admin client`);
         } catch (error) {
-          console.error(`❌ Error sending to admin client:`, error);
+          console.error(`❌ [broadcastToAdmins] Error sending to admin client:`, error);
         }
       } else {
-        console.log(`⚠️ Admin client not ready (state: ${client.readyState})`);
+        console.log(`⚠️ [broadcastToAdmins] Admin client not ready (state: ${client.readyState})`);
       }
     }
   });
   
   if (adminCount > 0) {
-    console.log(`📡 Broadcasted ${data.type} to ${sentCount}/${adminCount} admin clients`);
+    console.log(`📡 [broadcastToAdmins] Broadcasted ${data.type} to ${sentCount}/${adminCount} admin clients`);
   } else {
-    console.log(`⚠️ No admin clients connected to receive ${data.type}`);
+    console.log(`⚠️ [broadcastToAdmins] No admin clients connected to receive ${data.type}`);
   }
 };
 
@@ -409,7 +416,15 @@ wss.on("connection", (ws, req) => {
       
       // Log driver location updates in detail
       if (data.type === "locationUpdate" && data.role === "driver") {
-        console.log(`🚗 Driver location update received from driver ID: ${data.driver}`);
+        console.log(`🚗 [WebSocket] Driver location update received from driver ID: ${data.driver}`);
+        console.log(`🚗 [WebSocket] Location data:`, {
+          latitude: data.data?.latitude,
+          longitude: data.data?.longitude,
+          heading: data.data?.heading,
+          status: data.data?.status,
+          name: data.data?.name,
+          vehicleType: data.data?.vehicleType,
+        });
       }
 
       if (data.type === "locationUpdate" && data.role === "driver") {
@@ -417,6 +432,8 @@ wss.on("connection", (ws, req) => {
         ws.driverId = data.driver;
         
         const driverStatus = data.data.status || "active";
+        
+        console.log(`📝 [WebSocket] Processing location update for driver ${data.driver} with status: ${driverStatus}`);
         
         drivers[data.driver] = {
           id: data.driver,
@@ -428,15 +445,17 @@ wss.on("connection", (ws, req) => {
           vehicleType: data.data.vehicleType || "Car",
           timestamp: new Date().toISOString(),
         };
-        console.log(`✅ Updated driver location: ID=${data.driver}, Status=${driverStatus}, Name=${drivers[data.driver].name}, Lat=${data.data.latitude}, Lng=${data.data.longitude}, Bearing=${drivers[data.driver].bearing}`);
-        console.log(`📊 Total drivers in system: ${Object.keys(drivers).length}`);
+        console.log(`✅ [WebSocket] Updated driver location: ID=${data.driver}, Status=${driverStatus}, Name=${drivers[data.driver].name}, Lat=${data.data.latitude}, Lng=${data.data.longitude}, Bearing=${drivers[data.driver].bearing}`);
+        console.log(`📊 [WebSocket] Total drivers in system: ${Object.keys(drivers).length}`);
 
         // Broadcast to all admin clients
         const updateMessage = {
           type: "driverLocationUpdate",
           driver: drivers[data.driver],
         };
-        console.log(`📡 Broadcasting driver location update for driver ${data.driver} to admin clients`);
+        console.log(`📡 [WebSocket] Broadcasting driver location update for driver ${data.driver} to admin clients`);
+        const adminCount = Array.from(wss.clients).filter(client => client.isAdmin).length;
+        console.log(`📡 [WebSocket] Admin clients connected: ${adminCount}`);
         broadcastToAdmins(updateMessage);
       }
 
@@ -474,17 +493,20 @@ wss.on("connection", (ws, req) => {
         // Store driver ID in the WebSocket connection for cleanup on disconnect
         ws.driverId = data.driver;
         
+        console.log(`🔄 [WebSocket] Driver status change received: driver=${data.driver}, status=${data.status}`);
+        
         if (data.status === "inactive") {
           // Remove driver from available drivers when they go inactive
-          console.log(`Driver ${data.driver} went inactive - removing from available drivers`);
+          console.log(`🔄 [WebSocket] Driver ${data.driver} went inactive - removing from available drivers`);
           delete drivers[data.driver];
+          console.log(`📊 [WebSocket] Total drivers in system after removal: ${Object.keys(drivers).length}`);
           // Broadcast removal to admin clients
           broadcastToAdmins({
             type: "driverRemoved",
             driverId: data.driver,
           });
         } else if (data.status === "active") {
-          console.log(`Driver ${data.driver} went active`);
+          console.log(`🔄 [WebSocket] Driver ${data.driver} went active - waiting for location update`);
           // Driver will be added back when they send their next location update
         }
       }

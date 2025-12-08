@@ -15,7 +15,9 @@ type LedgerSummary = {
   ruleBreakdown: Record<string, { trips: number; netAmount: number }>;
 };
 
-const summarizeLedgerEntries = (entries: Array<LedgerBase | LedgerWithTrip>): LedgerSummary => {
+const summarizeLedgerEntries = (
+  entries: Array<LedgerBase | LedgerWithTrip>
+): LedgerSummary => {
   return entries.reduce<LedgerSummary>(
     (acc, entry) => {
       const net = entry.netAmount ?? 0;
@@ -24,8 +26,14 @@ const summarizeLedgerEntries = (entries: Array<LedgerBase | LedgerWithTrip>): Le
 
       acc.totalTrips += 1;
       acc.netAmount += net;
-      acc.statusCounts[statusKey] = acc.statusCounts[statusKey] || { trips: 0, netAmount: 0 };
-      acc.ruleBreakdown[ruleKey] = acc.ruleBreakdown[ruleKey] || { trips: 0, netAmount: 0 };
+      acc.statusCounts[statusKey] = acc.statusCounts[statusKey] || {
+        trips: 0,
+        netAmount: 0,
+      };
+      acc.ruleBreakdown[ruleKey] = acc.ruleBreakdown[ruleKey] || {
+        trips: 0,
+        netAmount: 0,
+      };
 
       acc.statusCounts[statusKey].trips += 1;
       acc.statusCounts[statusKey].netAmount += net;
@@ -92,7 +100,9 @@ const ledgerTripInclude = {
   },
 } satisfies Prisma.ScheduledTripLedgerInclude;
 
-type LedgerWithTrip = Prisma.ScheduledTripLedgerGetPayload<{ include: typeof ledgerTripInclude }>;
+type LedgerWithTrip = Prisma.ScheduledTripLedgerGetPayload<{
+  include: typeof ledgerTripInclude;
+}>;
 type LedgerBase = Prisma.ScheduledTripLedgerGetPayload<{ include: {} }>;
 
 const fetchLedgerEntries = async (params: { start: Date; end: Date }) => {
@@ -109,7 +119,10 @@ const fetchLedgerEntries = async (params: { start: Date; end: Date }) => {
   });
 };
 
-const fetchLedgerEntriesWithTrips = async (params: { start: Date; end: Date }) => {
+const fetchLedgerEntriesWithTrips = async (params: {
+  start: Date;
+  end: Date;
+}) => {
   const { start, end } = params;
 
   return prisma.scheduledTripLedger.findMany({
@@ -303,7 +316,7 @@ export const getDashboardStats = async (req: any, res: Response) => {
     todayStartForEmergency.setHours(0, 0, 0, 0);
     const tomorrowForEmergency = new Date(todayStartForEmergency);
     tomorrowForEmergency.setDate(tomorrowForEmergency.getDate() + 1);
-    
+
     const emergencyTerminationsToday = await prisma.emergencyUsage.count({
       where: {
         usedAt: {
@@ -461,7 +474,14 @@ export const updateUserStatus = async (req: any, res: Response) => {
 // Get All Drivers
 export const getAllDrivers = async (req: any, res: Response) => {
   try {
-    const { page = 1, limit = 10, search, status, vehicleType, includeAll } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      status,
+      vehicleType,
+      includeAll,
+    } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
@@ -980,10 +1000,14 @@ export const assignDriversToCompany = async (req: any, res: Response) => {
     });
 
     const existingDriverIds = existingAssignments.map((a) => a.driverId);
-    
+
     // Determine which drivers to add and which to remove
-    const driversToAdd = driverIds.filter((driverId) => !existingDriverIds.includes(driverId));
-    const driversToRemove = existingDriverIds.filter((driverId) => !driverIds.includes(driverId));
+    const driversToAdd = driverIds.filter(
+      (driverId) => !existingDriverIds.includes(driverId)
+    );
+    const driversToRemove = existingDriverIds.filter(
+      (driverId) => !driverIds.includes(driverId)
+    );
 
     // Use a transaction to ensure atomicity
     await prisma.$transaction(async (tx) => {
@@ -1023,7 +1047,9 @@ export const assignDriversToCompany = async (req: any, res: Response) => {
 
     res.status(200).json({
       success: true,
-      message: `Successfully updated driver assignments: ${changes.join(", ")}. Total: ${driverIds.length} driver(s) assigned to company`,
+      message: `Successfully updated driver assignments: ${changes.join(
+        ", "
+      )}. Total: ${driverIds.length} driver(s) assigned to company`,
     });
   } catch (error: any) {
     console.error("Assign drivers to company error:", error);
@@ -1175,7 +1201,15 @@ export const verifyDriverDocuments = async (req: any, res: Response) => {
 // Get All Rides
 export const getAllRides = async (req: any, res: Response) => {
   try {
-    const { page = 1, limit = 10, status, startDate, endDate, userId, driverId } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      startDate,
+      endDate,
+      userId,
+      driverId,
+    } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
@@ -1484,7 +1518,8 @@ export const createScheduledTrip = async (req: any, res: Response) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Name, tripDate, scheduledTime, companyId, and points are required",
+        message:
+          "Name, tripDate, scheduledTime, companyId, and points are required",
       });
     }
 
@@ -1513,7 +1548,8 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       if (missingExpectedTimes.length > 0) {
         return res.status(400).json({
           success: false,
-          message: "For Arrival trips, all checkpoints must have an expected time",
+          message:
+            "For Arrival trips, all checkpoints must have an expected time",
         });
       }
     }
@@ -1543,7 +1579,9 @@ export const createScheduledTrip = async (req: any, res: Response) => {
     }
 
     const resolvedPrice =
-      price !== undefined && price !== null ? parseFloat(price) : company.defaultScheduledTripPrice;
+      price !== undefined && price !== null
+        ? parseFloat(price)
+        : company.defaultScheduledTripPrice;
 
     if (isNaN(resolvedPrice) || resolvedPrice <= 0) {
       return res.status(400).json({
@@ -1572,11 +1610,30 @@ export const createScheduledTrip = async (req: any, res: Response) => {
               // expectedTime comes as "HH:MM" format, combine with tripDate
               // Store without "Z" suffix so it's interpreted in server timezone
               // This ensures the time stored represents the local time entered by the user
-              const [hours, minutes] = point.expectedTime.split(':');
+              const [hours, minutes] = point.expectedTime.split(":");
               // Create date string without "Z" - will be interpreted in server timezone
               // Both expectedTime and reachedAt will be compared in UTC (via getTime())
-              const dateTimeString = `${tripDate}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00`;
+              const dateTimeString = `${tripDate}T${hours.padStart(
+                2,
+                "0"
+              )}:${minutes.padStart(2, "0")}:00`;
               expectedTimeValue = new Date(dateTimeString);
+            }
+
+            // Process employees array if provided
+            let employeesValue = null;
+            if (
+              point.employees &&
+              Array.isArray(point.employees) &&
+              point.employees.length > 0
+            ) {
+              // Validate and format employees array
+              employeesValue = point.employees
+                .map((emp: any) => ({
+                  name: emp.name || "",
+                  ...(emp.employeeId && { employeeId: emp.employeeId }),
+                }))
+                .filter((emp: any) => emp.name.trim() !== "");
             }
 
             return {
@@ -1586,6 +1643,8 @@ export const createScheduledTrip = async (req: any, res: Response) => {
               order: point.order !== undefined ? point.order : index,
               isFinalPoint: point.isFinalPoint === true,
               ...(expectedTimeValue && { expectedTime: expectedTimeValue }),
+              ...(employeesValue &&
+                employeesValue.length > 0 && { employees: employeesValue }),
             };
           }),
         },
@@ -1739,7 +1798,9 @@ export const getScheduledTrips = async (req: any, res: Response) => {
       "createdAt",
       "status",
     ];
-    const sortFieldValue = validSortFields.includes(sortField) ? sortField : "createdAt";
+    const sortFieldValue = validSortFields.includes(sortField)
+      ? sortField
+      : "createdAt";
     const sortDir = sortDirection === "asc" ? "asc" : "desc";
 
     // Handle special sorting cases
@@ -1821,7 +1882,10 @@ export const getScheduledTrips = async (req: any, res: Response) => {
   }
 };
 
-export const getScheduledTripEarningsSummary = async (req: any, res: Response) => {
+export const getScheduledTripEarningsSummary = async (
+  req: any,
+  res: Response
+) => {
   try {
     const today = new Date();
     const todayBounds = normalizeRange(today, today);
@@ -1832,7 +1896,10 @@ export const getScheduledTripEarningsSummary = async (req: any, res: Response) =
 
     const [todayEntries, lastTwoWeeksEntries] = await Promise.all([
       fetchLedgerEntries({ start: todayBounds.start, end: todayBounds.end }),
-      fetchLedgerEntries({ start: lastTwoWeeksBounds.start, end: lastTwoWeeksBounds.end }),
+      fetchLedgerEntries({
+        start: lastTwoWeeksBounds.start,
+        end: lastTwoWeeksBounds.end,
+      }),
     ]);
 
     const todaySummary = summarizeLedgerEntries(todayEntries);
@@ -1866,7 +1933,10 @@ export const getScheduledTripEarningsSummary = async (req: any, res: Response) =
   }
 };
 
-export const getScheduledTripEarningsRange = async (req: any, res: Response) => {
+export const getScheduledTripEarningsRange = async (
+  req: any,
+  res: Response
+) => {
   try {
     const { startDate, endDate, includeTrips } = req.query;
 
@@ -2054,7 +2124,16 @@ export const getScheduledTripById = async (req: any, res: Response) => {
 export const updateScheduledTrip = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, tripDate, scheduledTime, assignedCaptainId, points, companyId, price, tripType } = req.body;
+    const {
+      name,
+      tripDate,
+      scheduledTime,
+      assignedCaptainId,
+      points,
+      companyId,
+      price,
+      tripType,
+    } = req.body;
 
     // Check if trip exists and is not already active
     const existingTrip = await prisma.scheduledTrip.findUnique({
@@ -2185,7 +2264,8 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
         if (missingExpectedTimes.length > 0) {
           return res.status(400).json({
             success: false,
-            message: "For Arrival trips, all checkpoints must have an expected time",
+            message:
+              "For Arrival trips, all checkpoints must have an expected time",
           });
         }
       }
@@ -2193,10 +2273,16 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
       // Validate points have required fields
       for (let i = 0; i < points.length; i++) {
         const point = points[i];
-        if (!point.name || point.latitude === undefined || point.longitude === undefined) {
+        if (
+          !point.name ||
+          point.latitude === undefined ||
+          point.longitude === undefined
+        ) {
           return res.status(400).json({
             success: false,
-            message: `Checkpoint ${i + 1} is missing required fields (name, latitude, longitude)`,
+            message: `Checkpoint ${
+              i + 1
+            } is missing required fields (name, latitude, longitude)`,
           });
         }
       }
@@ -2218,14 +2304,34 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
             // expectedTime comes as "HH:MM" format, combine with tripDate
             // Store without "Z" suffix so it's interpreted in server timezone
             // This ensures the time stored represents the local time entered by the user
-            const tripDateStr = tripDateForPoints instanceof Date 
-              ? tripDateForPoints.toISOString().split('T')[0]
-              : tripDateForPoints;
-            const [hours, minutes] = point.expectedTime.split(':');
+            const tripDateStr =
+              tripDateForPoints instanceof Date
+                ? tripDateForPoints.toISOString().split("T")[0]
+                : tripDateForPoints;
+            const [hours, minutes] = point.expectedTime.split(":");
             // Create date string without "Z" - will be interpreted in server timezone
             // Both expectedTime and reachedAt will be compared in UTC (via getTime())
-            const dateTimeString = `${tripDateStr}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00`;
+            const dateTimeString = `${tripDateStr}T${hours.padStart(
+              2,
+              "0"
+            )}:${minutes.padStart(2, "0")}:00`;
             expectedTimeValue = new Date(dateTimeString);
+          }
+
+          // Process employees array if provided
+          let employeesValue = null;
+          if (
+            point.employees &&
+            Array.isArray(point.employees) &&
+            point.employees.length > 0
+          ) {
+            // Validate and format employees array
+            employeesValue = point.employees
+              .map((emp: any) => ({
+                name: emp.name || "",
+                ...(emp.employeeId && { employeeId: emp.employeeId }),
+              }))
+              .filter((emp: any) => emp.name.trim() !== "");
           }
 
           return {
@@ -2236,6 +2342,8 @@ export const updateScheduledTrip = async (req: any, res: Response) => {
             order: point.order !== undefined ? point.order : index,
             isFinalPoint: point.isFinalPoint === true,
             ...(expectedTimeValue && { expectedTime: expectedTimeValue }),
+            ...(employeesValue &&
+              employeesValue.length > 0 && { employees: employeesValue }),
           };
         }),
       });
@@ -2405,7 +2513,10 @@ export const forceCloseTrip = async (req: any, res: Response) => {
     const financeResult = await applyForceClosedDeduction(id);
 
     if (!financeResult.success) {
-      console.error("Failed to apply force closed deduction:", financeResult.reason);
+      console.error(
+        "Failed to apply force closed deduction:",
+        financeResult.reason
+      );
       // Note: Trip status is already updated, but financial deduction failed
       // This is logged but we still return success since the status change succeeded
     }
@@ -2463,7 +2574,10 @@ export const forceCloseTrip = async (req: any, res: Response) => {
  * @param price - The trip price
  * @returns The deduction amount (0 if no deduction applies)
  */
-function calculateDeductionForStatus(status: string, price: number | null): number {
+function calculateDeductionForStatus(
+  status: string,
+  price: number | null
+): number {
   const baseAmount = price ?? 0;
 
   switch (status) {
@@ -2731,4 +2845,3 @@ export const getEmergencyLogs = async (req: any, res: Response) => {
     });
   }
 };
-
