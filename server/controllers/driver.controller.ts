@@ -854,6 +854,25 @@ export const getScheduledTrips = async (req: any, res: Response) => {
 
     const isOnline = captain?.status === "active";
 
+    // Helper function to parse employees JSON field
+    const parseEmployees = (
+      employees: any
+    ): Array<{ name: string; employeeId?: string }> | null => {
+      if (!employees) return null;
+      if (typeof employees === "string") {
+        try {
+          const parsed = JSON.parse(employees);
+          return Array.isArray(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      }
+      if (Array.isArray(employees)) {
+        return employees;
+      }
+      return null;
+    };
+
     // For each scheduled trip, check activation status if it's scheduled
     const tripsWithActivationStatus = await Promise.all(
       trips.map(async (trip) => {
@@ -906,10 +925,16 @@ export const getScheduledTrips = async (req: any, res: Response) => {
           }
         }
 
-        return {
+        const tripWithParsedEmployees = {
           ...trip,
+          points: trip.points.map((point: any) => ({
+            ...point,
+            employees: parseEmployees(point.employees),
+          })),
           activationStatus,
         };
+
+        return tripWithParsedEmployees;
       })
     );
 
@@ -1051,9 +1076,38 @@ export const startScheduledTrip = async (req: any, res: Response) => {
       },
     });
 
+    // Helper function to parse employees JSON field
+    const parseEmployees = (
+      employees: any
+    ): Array<{ name: string; employeeId?: string }> | null => {
+      if (!employees) return null;
+      if (typeof employees === "string") {
+        try {
+          const parsed = JSON.parse(employees);
+          return Array.isArray(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      }
+      if (Array.isArray(employees)) {
+        return employees;
+      }
+      return null;
+    };
+
+    const tripWithParsedEmployees = updatedTrip
+      ? {
+          ...updatedTrip,
+          points: updatedTrip.points.map((point: any) => ({
+            ...point,
+            employees: parseEmployees(point.employees),
+          })),
+        }
+      : null;
+
     res.status(200).json({
       success: true,
-      trip: updatedTrip,
+      trip: tripWithParsedEmployees,
       message: "Trip started successfully",
     });
   } catch (error: any) {
@@ -1215,9 +1269,38 @@ export const updateTripProgress = async (req: any, res: Response) => {
       },
     });
 
+    // Helper function to parse employees JSON field
+    const parseEmployees = (
+      employees: any
+    ): Array<{ name: string; employeeId?: string }> | null => {
+      if (!employees) return null;
+      if (typeof employees === "string") {
+        try {
+          const parsed = JSON.parse(employees);
+          return Array.isArray(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      }
+      if (Array.isArray(employees)) {
+        return employees;
+      }
+      return null;
+    };
+
+    const tripWithParsedEmployees = updatedTrip
+      ? {
+          ...updatedTrip,
+          points: updatedTrip.points.map((point: any) => ({
+            ...point,
+            employees: parseEmployees(point.employees),
+          })),
+        }
+      : null;
+
     const response: any = {
       success: true,
-      trip: updatedTrip,
+      trip: tripWithParsedEmployees,
       message: isFinalPoint
         ? "Trip completed successfully"
         : "Checkpoint reached",

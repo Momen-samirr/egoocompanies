@@ -195,3 +195,40 @@ export interface PaginationParams {
   filters?: TripFilters;
   search?: string;
 }
+
+export interface TripTemplatePoint {
+  id?: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  order: number;
+  isFinalPoint: boolean;
+  expectedTime?: string | null; // Stored as "HH:MM" format
+  employees?: Array<{ name: string; employeeId?: string }>;
+}
+
+export interface TripTemplate {
+  id: string;
+  name: string;
+  description?: string | null;
+  companyId?: string | null;
+  tripType: TripType;
+  assignedCaptainId?: string | null;
+  createdById: string;
+  price?: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  company?: Company;
+  assignedCaptain?: {
+    id: string;
+    name: string;
+    phone_number: string;
+    email: string;
+  };
+  points: TripTemplatePoint[];
+}

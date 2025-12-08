@@ -2845,3 +2845,720 @@ export const getEmergencyLogs = async (req: any, res: Response) => {
     });
   }
 };
+
+// Create Trip Template
+export const createTripTemplate = async (req: any, res: Response) => {
+  try {
+    const {
+      name,
+      description,
+      companyId,
+      tripType,
+      assignedCaptainId,
+      price,
+      points,
+    } = req.body;
+
+    if (!name || !points || !Array.isArray(points) || points.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Name and points are required",
+      });
+    }
+
+    // Validate tripType
+    if (tripType && tripType !== "ARRIVAL" && tripType !== "DEPARTURE") {
+      return res.status(400).json({
+        success: false,
+        message: "tripType must be either 'ARRIVAL' or 'DEPARTURE'",
+      });
+    }
+
+    const hasFinalPoint = points.some((p: any) => p.isFinalPoint === true);
+    if (!hasFinalPoint) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one point must be marked as final point",
+      });
+    }
+
+    if (assignedCaptainId) {
+      const captain = await prisma.driver.findUnique({
+        where: { id: assignedCaptainId },
+      });
+
+      if (!captain) {
+        return res.status(404).json({
+          success: false,
+          message: "Captain not found",
+        });
+      }
+    }
+
+    let resolvedPrice =
+      price !== undefined && price !== null ? parseFloat(price) : null;
+    if (companyId) {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+      });
+
+      if (!company) {
+        return res.status(404).json({
+          success: false,
+          message: "Company not found",
+        });
+      }
+
+      if (resolvedPrice === null) {
+        resolvedPrice = company.defaultScheduledTripPrice;
+      }
+    }
+
+    if (
+      resolvedPrice !== null &&
+      (isNaN(resolvedPrice) || resolvedPrice <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Trip price must be a positive number",
+      });
+    }
+
+    const template = await prisma.tripTemplate.create({
+      data: {
+        name,
+        description: description || null,
+        companyId: companyId || null,
+        tripType: tripType || "DEPARTURE",
+        assignedCaptainId: assignedCaptainId || null,
+        price: resolvedPrice || 0,
+        createdById: req.admin.id,
+        points: {
+          create: points.map((point: any, index: number) => {
+            // Process employees array if provided
+            let employeesValue = null;
+            if (
+              point.employees &&
+              Array.isArray(point.employees) &&
+              point.employees.length > 0
+            ) {
+              employeesValue = point.employees
+                .map((emp: any) => ({
+                  name: emp.name || "",
+                  ...(emp.employeeId && { employeeId: emp.employeeId }),
+                }))
+                .filter((emp: any) => emp.name.trim() !== "");
+            }
+
+            return {
+              name: point.name,
+              latitude: parseFloat(point.latitude),
+              longitude: parseFloat(point.longitude),
+              order: point.order !== undefined ? point.order : index,
+              isFinalPoint: point.isFinalPoint === true,
+              expectedTime: point.expectedTime || null, // Store as "HH:MM" string
+              ...(employeesValue &&
+                employeesValue.length > 0 && { employees: employeesValue }),
+            };
+          }),
+        },
+      },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        company: true,
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+          },
+        },
+        points: {
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      template,
+    });
+  } catch (error: any) {
+    console.error("Create trip template error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get All Trip Templates
+export const getTripTemplates = async (req: any, res: Response) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      companyId,
+      name,
+      search,
+      sortField = "createdAt",
+      sortDirection = "desc",
+    } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where: any = {};
+
+    // Filter by company if user is COMPANY role
+    if (req.admin && req.admin.role === "COMPANY" && req.admin.companyId) {
+      where.companyId = req.admin.companyId;
+    } else if (companyId) {
+      where.companyId = companyId;
+    }
+
+    // Handle name filter
+    if (name) {
+      where.name = {
+        contains: name,
+        mode: "insensitive",
+      };
+    }
+
+    // Handle general search
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        {
+          company: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+      ];
+    }
+
+    const [templates, total] = await Promise.all([
+      prisma.tripTemplate.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: {
+          [sortField]: sortDirection,
+        },
+        include: {
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          company: true,
+          assignedCaptain: {
+            select: {
+              id: true,
+              name: true,
+              phone_number: true,
+              email: true,
+            },
+          },
+          points: {
+            orderBy: { order: "asc" },
+          },
+        },
+      }),
+      prisma.tripTemplate.count({ where }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      templates,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    });
+  } catch (error: any) {
+    console.error("Get trip templates error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get Trip Template By ID
+export const getTripTemplateById = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const template = await prisma.tripTemplate.findUnique({
+      where: { id },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        company: true,
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+          },
+        },
+        points: {
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: "Template not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      template,
+    });
+  } catch (error: any) {
+    console.error("Get trip template by id error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Update Trip Template
+export const updateTripTemplate = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      description,
+      companyId,
+      tripType,
+      assignedCaptainId,
+      price,
+      points,
+    } = req.body;
+
+    const existingTemplate = await prisma.tripTemplate.findUnique({
+      where: { id },
+    });
+
+    if (!existingTemplate) {
+      return res.status(404).json({
+        success: false,
+        message: "Template not found",
+      });
+    }
+
+    // Validate tripType if provided
+    if (tripType && tripType !== "ARRIVAL" && tripType !== "DEPARTURE") {
+      return res.status(400).json({
+        success: false,
+        message: "tripType must be either 'ARRIVAL' or 'DEPARTURE'",
+      });
+    }
+
+    if (points && Array.isArray(points)) {
+      const hasFinalPoint = points.some((p: any) => p.isFinalPoint === true);
+      if (!hasFinalPoint) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one point must be marked as final point",
+        });
+      }
+    }
+
+    if (assignedCaptainId) {
+      const captain = await prisma.driver.findUnique({
+        where: { id: assignedCaptainId },
+      });
+
+      if (!captain) {
+        return res.status(404).json({
+          success: false,
+          message: "Captain not found",
+        });
+      }
+    }
+
+    let resolvedPrice =
+      price !== undefined && price !== null
+        ? parseFloat(price)
+        : existingTemplate.price;
+    if (companyId) {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+      });
+
+      if (!company) {
+        return res.status(404).json({
+          success: false,
+          message: "Company not found",
+        });
+      }
+
+      if (resolvedPrice === null || resolvedPrice === undefined) {
+        resolvedPrice = company.defaultScheduledTripPrice;
+      }
+    }
+
+    if (
+      resolvedPrice !== null &&
+      resolvedPrice !== undefined &&
+      (isNaN(resolvedPrice) || resolvedPrice <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Trip price must be a positive number",
+      });
+    }
+
+    // Update template
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description || null;
+    if (companyId !== undefined) updateData.companyId = companyId || null;
+    if (tripType !== undefined) updateData.tripType = tripType;
+    if (assignedCaptainId !== undefined)
+      updateData.assignedCaptainId = assignedCaptainId || null;
+    if (resolvedPrice !== undefined && resolvedPrice !== null)
+      updateData.price = resolvedPrice;
+
+    const template = await prisma.tripTemplate.update({
+      where: { id },
+      data: updateData,
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        company: true,
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            email: true,
+          },
+        },
+        points: {
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+
+    // Update points if provided
+    if (points && Array.isArray(points)) {
+      // Delete existing points
+      await prisma.tripTemplatePoint.deleteMany({
+        where: { templateId: id },
+      });
+
+      // Create new points
+      await prisma.tripTemplatePoint.createMany({
+        data: points.map((point: any, index: number) => {
+          let employeesValue = null;
+          if (
+            point.employees &&
+            Array.isArray(point.employees) &&
+            point.employees.length > 0
+          ) {
+            employeesValue = point.employees
+              .map((emp: any) => ({
+                name: emp.name || "",
+                ...(emp.employeeId && { employeeId: emp.employeeId }),
+              }))
+              .filter((emp: any) => emp.name.trim() !== "");
+          }
+
+          return {
+            templateId: id,
+            name: point.name,
+            latitude: parseFloat(point.latitude),
+            longitude: parseFloat(point.longitude),
+            order: point.order !== undefined ? point.order : index,
+            isFinalPoint: point.isFinalPoint === true,
+            expectedTime: point.expectedTime || null,
+            ...(employeesValue &&
+              employeesValue.length > 0 && { employees: employeesValue }),
+          };
+        }),
+      });
+
+      // Fetch updated template with points
+      const updatedTemplate = await prisma.tripTemplate.findUnique({
+        where: { id },
+        include: {
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          company: true,
+          assignedCaptain: {
+            select: {
+              id: true,
+              name: true,
+              phone_number: true,
+              email: true,
+            },
+          },
+          points: {
+            orderBy: { order: "asc" },
+          },
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        template: updatedTemplate,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      template,
+    });
+  } catch (error: any) {
+    console.error("Update trip template error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Delete Trip Template
+export const deleteTripTemplate = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const template = await prisma.tripTemplate.findUnique({
+      where: { id },
+    });
+
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: "Template not found",
+      });
+    }
+
+    await prisma.tripTemplate.delete({
+      where: { id },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Template deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("Delete trip template error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Create Multiple Trips From Template
+export const createTripsFromTemplate = async (req: any, res: Response) => {
+  try {
+    const { templateId, trips } = req.body;
+
+    if (!templateId || !trips || !Array.isArray(trips) || trips.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Template ID and trips array are required",
+      });
+    }
+
+    const template = await prisma.tripTemplate.findUnique({
+      where: { id: templateId },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+        company: true,
+      },
+    });
+
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: "Template not found",
+      });
+    }
+
+    const createdTrips = [];
+    const errors = [];
+
+    for (const tripData of trips) {
+      try {
+        const { name, tripDate, scheduledTime } = tripData;
+
+        if (!name || !tripDate || !scheduledTime) {
+          errors.push({
+            trip: tripData,
+            error: "Name, tripDate, and scheduledTime are required",
+          });
+          continue;
+        }
+
+        const scheduledDateTime = new Date(`${tripDate}T${scheduledTime}`);
+
+        // Use template's price or company default, or tripData price if provided
+        let resolvedPrice =
+          tripData.price !== undefined && tripData.price !== null
+            ? parseFloat(tripData.price)
+            : template.price || 0;
+
+        if (template.companyId && resolvedPrice === 0 && template.company) {
+          resolvedPrice = template.company.defaultScheduledTripPrice;
+        }
+
+        if (isNaN(resolvedPrice) || resolvedPrice <= 0) {
+          errors.push({
+            trip: tripData,
+            error: "Trip price must be a positive number",
+          });
+          continue;
+        }
+
+        const trip = await prisma.scheduledTrip.create({
+          data: {
+            name,
+            tripDate: new Date(tripDate),
+            scheduledTime: scheduledDateTime,
+            tripType: template.tripType,
+            assignedCaptainId:
+              tripData.assignedCaptainId || template.assignedCaptainId || null,
+            createdById: req.admin.id,
+            companyId: template.companyId,
+            price: resolvedPrice,
+            points: {
+              create: template.points.map((point, index) => {
+                // Parse expectedTime if provided (from template or tripData override)
+                let expectedTimeValue = null;
+                const expectedTime =
+                  tripData.pointOverrides?.[index]?.expectedTime ||
+                  point.expectedTime;
+                if (expectedTime) {
+                  const [hours, minutes] = expectedTime.split(":");
+                  const dateTimeString = `${tripDate}T${hours.padStart(
+                    2,
+                    "0"
+                  )}:${minutes.padStart(2, "0")}:00`;
+                  expectedTimeValue = new Date(dateTimeString);
+                }
+
+                // Use employees from template or override from tripData
+                let employeesValue = null;
+                const employees =
+                  tripData.pointOverrides?.[index]?.employees ||
+                  point.employees;
+                if (
+                  employees &&
+                  Array.isArray(employees) &&
+                  employees.length > 0
+                ) {
+                  employeesValue = employees
+                    .map((emp: any) => ({
+                      name: emp.name || "",
+                      ...(emp.employeeId && { employeeId: emp.employeeId }),
+                    }))
+                    .filter((emp: any) => emp.name.trim() !== "");
+                }
+
+                return {
+                  name: tripData.pointOverrides?.[index]?.name || point.name,
+                  latitude:
+                    tripData.pointOverrides?.[index]?.latitude !== undefined
+                      ? parseFloat(tripData.pointOverrides[index].latitude)
+                      : point.latitude,
+                  longitude:
+                    tripData.pointOverrides?.[index]?.longitude !== undefined
+                      ? parseFloat(tripData.pointOverrides[index].longitude)
+                      : point.longitude,
+                  order: point.order,
+                  isFinalPoint: point.isFinalPoint,
+                  ...(expectedTimeValue && { expectedTime: expectedTimeValue }),
+                  ...(employeesValue &&
+                    employeesValue.length > 0 && { employees: employeesValue }),
+                };
+              }),
+            },
+          },
+          include: {
+            assignedCaptain: {
+              select: {
+                id: true,
+                name: true,
+                phone_number: true,
+                email: true,
+              },
+            },
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            company: true,
+            points: {
+              orderBy: { order: "asc" },
+            },
+          },
+        });
+
+        createdTrips.push(trip);
+      } catch (error: any) {
+        errors.push({
+          trip: tripData,
+          error: error.message || "Failed to create trip",
+        });
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      created: createdTrips.length,
+      trips: createdTrips,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error: any) {
+    console.error("Create trips from template error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};

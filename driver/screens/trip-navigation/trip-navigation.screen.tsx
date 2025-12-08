@@ -24,6 +24,7 @@ import { calculateDistance } from "@/utils/haversine";
 import CheckpointCard from "@/components/trip/CheckpointCard";
 import ETADisplay from "@/components/common/ETADisplay";
 import EmergencyEndSlider from "@/components/trip/EmergencyEndSlider";
+import EmployeeBottomSheet from "@/components/trip/EmployeeBottomSheet";
 import { spacing, shadows } from "@/styles/design-system";
 import fonts from "@/themes/app.fonts";
 import NavigationArrow from "@/components/navigation/NavigationArrow";
@@ -87,6 +88,7 @@ export default function TripNavigationScreen() {
   const [canUseEmergency, setCanUseEmergency] = useState(true);
   const [emergencyDisabledMessage, setEmergencyDisabledMessage] =
     useState<string>("");
+  const [isEmployeeSheetVisible, setIsEmployeeSheetVisible] = useState(false);
   const mapRef = useRef<MapView>(null);
   const locationWatchSubscription =
     useRef<Location.LocationSubscription | null>(null);
@@ -1164,9 +1166,19 @@ export default function TripNavigationScreen() {
               {currentPoint.name}
             </Text>
 
-            {/* Employees at Current Checkpoint */}
+            {/* Employees at Current Checkpoint - Trigger Button */}
             {currentPoint.employees && currentPoint.employees.length > 0 && (
-              <View
+              <TouchableOpacity
+                onPress={() => {
+                  console.log(
+                    "Opening employee sheet for:",
+                    currentPoint.name,
+                    "Employees:",
+                    currentPoint.employees
+                  );
+                  setIsEmployeeSheetVisible(true);
+                }}
+                activeOpacity={0.7}
                 style={{
                   backgroundColor: `${color.primary}10`,
                   borderRadius: 8,
@@ -1174,55 +1186,56 @@ export default function TripNavigationScreen() {
                   marginBottom: spacing.md,
                   borderWidth: 1,
                   borderColor: `${color.primary}30`,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: fontSizes.FONT13,
-                    fontFamily: fonts.bold,
-                    color: color.primary,
-                    marginBottom: spacing.sm,
-                  }}
-                >
-                  👥 Employees to Pick Up ({currentPoint.employees.length})
-                </Text>
-                {currentPoint.employees.map((emp, empIndex) => (
-                  <View
-                    key={empIndex}
+                <View style={{ flex: 1 }}>
+                  <Text
                     style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      marginBottom:
-                        empIndex < currentPoint.employees!.length - 1
-                          ? spacing.xs
-                          : 0,
+                      fontSize: fontSizes.FONT13,
+                      fontFamily: fonts.bold,
+                      color: color.primary,
+                      marginBottom: spacing.xs / 2,
                     }}
                   >
-                    <Text
-                      style={{
-                        fontSize: fontSizes.FONT14,
-                        fontFamily: fonts.medium,
-                        color: colors.text,
-                        flex: 1,
-                      }}
-                    >
-                      • {emp.name}
-                      {emp.employeeId && (
-                        <Text
-                          style={{
-                            fontSize: fontSizes.FONT12,
-                            fontFamily: fonts.regular,
-                            color: color.text.tertiary,
-                          }}
-                        >
-                          {" "}
-                          (ID: {emp.employeeId})
-                        </Text>
-                      )}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+                    👥 Employees to Pick Up
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: fontSizes.FONT12,
+                      fontFamily: fonts.regular,
+                      color: color.text.secondary,
+                    }}
+                  >
+                    {currentPoint.employees.length} employee
+                    {currentPoint.employees.length !== 1 ? "s" : ""} • Tap to
+                    view
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: color.primary,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    marginLeft: spacing.md,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: fontSizes.FONT14,
+                      fontFamily: fonts.bold,
+                      color: color.whiteColor,
+                    }}
+                  >
+                    {currentPoint.employees.length}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             )}
 
             <ETADisplay
@@ -1323,6 +1336,20 @@ export default function TripNavigationScreen() {
           />
         )}
       </ScrollView>
+
+      {/* Employee Bottom Sheet */}
+      {currentPoint && (
+        <EmployeeBottomSheet
+          visible={
+            isEmployeeSheetVisible &&
+            !!currentPoint.employees &&
+            currentPoint.employees.length > 0
+          }
+          onClose={() => setIsEmployeeSheetVisible(false)}
+          checkpointName={currentPoint.name}
+          employees={currentPoint.employees || []}
+        />
+      )}
     </View>
   );
 }

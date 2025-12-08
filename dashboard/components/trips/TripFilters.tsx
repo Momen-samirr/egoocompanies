@@ -1,11 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Select, { MultiValue } from "react-select";
-import { TripFilters as TripFiltersType, ScheduledTripStatus } from "@/types/trip";
+import {
+  TripFilters as TripFiltersType,
+  ScheduledTripStatus,
+} from "@/types/trip";
 import { FunnelIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import Button from "@/components/common/Button";
 import api from "@/lib/api";
+import {
+  generateWeekOptions,
+  getCurrentWeek,
+  weekRangeToDateStrings,
+  WeekRange,
+} from "@/lib/utils/weekUtils";
 
 interface CompanyOption {
   id: string;
@@ -67,7 +76,8 @@ export default function TripFilters({
     localFilters.checkpoints?.min !== undefined ||
     localFilters.checkpoints?.max !== undefined ||
     localFilters.dateRange?.start ||
-    localFilters.dateRange?.end;
+    localFilters.dateRange?.end ||
+    localFilters.week; // Include week filter
 
   const handleFilterChange = <K extends keyof TripFiltersType>(
     key: K,
@@ -93,6 +103,45 @@ export default function TripFilters({
     onClear();
   };
 
+  // Generate week options
+  const weekOptions = useMemo(() => {
+    return generateWeekOptions(new Date(), 10, 10);
+  }, []);
+
+  // Find selected week based on dateRange
+  const selectedWeek = useMemo(() => {
+    if (!localFilters.dateRange?.start || !localFilters.dateRange?.end) {
+      return null;
+    }
+    const startDate = new Date(localFilters.dateRange.start);
+    const endDate = new Date(localFilters.dateRange.end);
+
+    // Check if the date range matches a week range (Sunday-Saturday)
+    return (
+      weekOptions.find((week) => {
+        const weekStartStr = week.start.toISOString().split("T")[0];
+        const weekEndStr = week.end.toISOString().split("T")[0];
+        return (
+          weekStartStr === localFilters.dateRange?.start &&
+          weekEndStr === localFilters.dateRange?.end
+        );
+      }) || null
+    );
+  }, [localFilters.dateRange, weekOptions]);
+
+  const handleWeekChange = (week: WeekRange | null) => {
+    if (week) {
+      const dateStrings = weekRangeToDateStrings(week);
+      handleFilterChange("dateRange", {
+        start: dateStrings.start,
+        end: dateStrings.end,
+      });
+    } else {
+      // Clear week filter
+      handleFilterChange("dateRange", undefined);
+    }
+  };
+
   const activeFilterCount = [
     localFilters.status?.length || 0,
     localFilters.name ? 1 : 0,
@@ -109,7 +158,7 @@ export default function TripFilters({
   const applyQuickFilter = (preset: "today" | "thisWeek" | "thisMonth") => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     let startDate: string;
     let endDate: string = new Date().toISOString().split("T")[0];
 
@@ -155,7 +204,36 @@ export default function TripFilters({
               </span>
             )}
           </button>
-          
+
+          {/* Week Selector */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 whitespace-nowrap">
+              Week:
+            </label>
+            <Select<{ value: WeekRange; label: string }, false>
+              options={weekOptions.map((week) => ({
+                value: week,
+                label: week.label,
+              }))}
+              value={
+                selectedWeek
+                  ? { value: selectedWeek, label: selectedWeek.label }
+                  : null
+              }
+              onChange={(option) => handleWeekChange(option?.value || null)}
+              placeholder="Select week..."
+              isClearable
+              className="text-sm min-w-[180px]"
+              styles={{
+                control: (base) => ({
+                  ...base,
+                  minHeight: "38px",
+                  fontSize: "14px",
+                }),
+              }}
+            />
+          </div>
+
           {/* Quick Filter Presets */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Quick:</span>
@@ -182,7 +260,7 @@ export default function TripFilters({
             </button>
           </div>
         </div>
-        
+
         {hasActiveFilters && (
           <Button
             variant="ghost"
@@ -257,10 +335,7 @@ export default function TripFilters({
             <select
               value={localFilters.companyId || ""}
               onChange={(event) =>
-                handleFilterChange(
-                  "companyId",
-                  event.target.value || undefined
-                )
+                handleFilterChange("companyId", event.target.value || undefined)
               }
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
             >
@@ -349,4 +424,3 @@ export default function TripFilters({
     </div>
   );
 }
-

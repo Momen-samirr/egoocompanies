@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useFieldArray, Controller, FieldErrors } from "react-hook-form";
+import { useRouter, useParams } from "next/navigation";
+import { useFieldArray, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
-import { useTripForm } from "@/hooks/useTripForm";
 import LocationPicker from "@/components/trips/LocationPicker";
 import CaptainSelector from "@/components/trips/CaptainSelector";
 import FormField from "@/components/common/FormField";
 import Card, { CardBody, CardHeader } from "@/components/common/Card";
 import Button from "@/components/common/Button";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
 import {
   PlusIcon,
   TrashIcon,
@@ -20,66 +23,98 @@ import {
   UserIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { LocationData, TripFormData } from "@/types/trip";
+import { LocationData, TripTemplate } from "@/types/trip";
 import { Company } from "@/types";
 
-export default function CreateTripPage() {
+// Template form schema
+const templateFormSchema = z.object({
+  name: z
+    .string()
+    .min(3, "Template name must be at least 3 characters")
+    .max(100, "Template name must be less than 100 characters"),
+  description: z
+    .string()
+    .max(500, "Description must be less than 500 characters")
+    .optional(),
+  tripType: z.enum(["ARRIVAL", "DEPARTURE"]),
+  assignedCaptainId: z.string().optional(),
+  companyId: z.string().min(1, "Company is required"),
+  price: z
+    .number({
+      message: "Price must be a number",
+    })
+    .positive("Price must be greater than zero")
+    .optional(),
+  points: z
+    .array(
+      z.object({
+        name: z.string().min(1, "Checkpoint name is required"),
+        latitude: z.number(),
+        longitude: z.number(),
+        order: z.number().int().min(0),
+        isFinalPoint: z.boolean(),
+        expectedTime: z
+          .string()
+          .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+            message: "Invalid time format. Use HH:MM format",
+          })
+          .optional(),
+        employees: z
+          .array(
+            z.object({
+              name: z.string().max(100).optional().default(""),
+              employeeId: z.string().max(50).optional(),
+            })
+          )
+          .optional(),
+      })
+    )
+    .min(1, "At least one checkpoint is required")
+    .max(20, "Maximum 20 checkpoints allowed")
+    .refine(
+      (points) => {
+        const coordinates = points.map(
+          (p) => `${p.latitude.toFixed(6)},${p.longitude.toFixed(6)}`
+        );
+        return new Set(coordinates).size === coordinates.length;
+      },
+      {
+        message: "Duplicate checkpoints are not allowed",
+      }
+    )
+    .refine(
+      (points) => {
+        return points.some((p) => p.isFinalPoint);
+      },
+      {
+        message: "At least one checkpoint must be marked as the final point",
+      }
+    ),
+});
+
+type TemplateFormData = z.infer<typeof templateFormSchema>;
+
+export default function EditTemplatePage() {
   const router = useRouter();
+  const params = useParams();
+  const templateId = params.id as string;
+  const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [checkpointLocations, setCheckpointLocations] = useState<
     Map<number, LocationData | null>
   >(new Map());
 
-  const { form, handleSubmit, handleDraftSave, isSubmitting, isDirty } =
-    useTripForm({
-      onSubmit: async (data) => {
-        // Get timezone offset for time preservation
-        const now = new Date();
-        const timezoneOffset = -now.getTimezoneOffset();
-        const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
-        const offsetMinutes = Math.abs(timezoneOffset) % 60;
-        const offsetSign = timezoneOffset >= 0 ? "+" : "-";
-        const timezoneString = `${offsetSign}${String(offsetHours).padStart(
-          2,
-          "0"
-        )}:${String(offsetMinutes).padStart(2, "0")}`;
-        const scheduledTimeWithTimezone = `${data.scheduledTime}:00${timezoneString}`;
-
-        const response = await api.post("/admin/trips", {
-          name: data.name,
-          tripDate: data.tripDate,
-          scheduledTime: scheduledTimeWithTimezone,
-          tripType: data.tripType,
-          assignedCaptainId: data.assignedCaptainId || undefined,
-          companyId: data.companyId,
-          price: data.price,
-          points: data.points,
-        });
-
-        if (response.data.success) {
-          toast.success("Trip created successfully!");
-          router.push("/dashboard/trips");
-        }
-      },
-      onDraftSave: () => {
-        toast.success("Draft saved", { duration: 2000 });
-      },
-      onError: (errors: FieldErrors<TripFormData>) => {
-        const firstError = Object.values(errors)[0];
-        const firstMessage =
-          typeof firstError === "object" &&
-          firstError &&
-          "message" in firstError
-            ? (firstError as { message?: string }).message
-            : undefined;
-
-        if (firstMessage) {
-          toast.error(firstMessage);
-        } else {
-          toast.error("Please fix the errors in the form");
-        }
-      },
-    });
+  const form = useForm<TemplateFormData>({
+    resolver: zodResolver(templateFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      tripType: "DEPARTURE",
+      companyId: "",
+      price: undefined,
+      points: [],
+    },
+  });
 
   const companyIdRegister = form.register("companyId");
 
@@ -89,27 +124,58 @@ export default function CreateTripPage() {
   });
 
   useEffect(() => {
-    const fetchCompanies = async () => {
+    const fetchData = async () => {
       try {
-        const response = await api.get("/admin/companies");
-        setCompanies(response.data.companies || []);
+        setLoading(true);
+        const [templateResponse, companiesResponse] = await Promise.all([
+          api.get(`/admin/trip-templates/${templateId}`),
+          api.get("/admin/companies"),
+        ]);
+
+        const template: TripTemplate = templateResponse.data.template;
+        setCompanies(companiesResponse.data.companies || []);
+
+        // Set form values from template
+        form.reset({
+          name: template.name,
+          description: template.description || "",
+          tripType: template.tripType,
+          assignedCaptainId: template.assignedCaptainId || "",
+          companyId: template.companyId || "",
+          price: template.price,
+          points: template.points.map((point) => ({
+            name: point.name,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            order: point.order,
+            isFinalPoint: point.isFinalPoint,
+            expectedTime: point.expectedTime || undefined,
+            employees: point.employees || [],
+          })),
+        });
+
+        // Set checkpoint locations
+        const locations = new Map<number, LocationData | null>();
+        template.points.forEach((point, index) => {
+          locations.set(index, {
+            latitude: point.latitude,
+            longitude: point.longitude,
+          });
+        });
+        setCheckpointLocations(locations);
       } catch (error) {
-        console.error("Error fetching companies:", error);
-        toast.error("Failed to load companies");
+        console.error("Error fetching template:", error);
+        toast.error("Failed to load template");
+        router.push("/dashboard/trips/templates");
+      } finally {
+        setLoading(false);
       }
     };
-    fetchCompanies();
-  }, []);
 
-  useEffect(() => {
-    if (companies.length > 0 && !form.getValues("companyId")) {
-      const defaultCompany = companies[0];
-      form.setValue("companyId", defaultCompany.id, { shouldValidate: true });
-      form.setValue("price", defaultCompany.defaultScheduledTripPrice, {
-        shouldValidate: true,
-      });
+    if (templateId) {
+      fetchData();
     }
-  }, [companies, form]);
+  }, [templateId, router, form]);
 
   const addCheckpoint = () => {
     append({
@@ -125,10 +191,8 @@ export default function CreateTripPage() {
   const removeCheckpoint = (index: number) => {
     if (fields.length > 1) {
       remove(index);
-      // Clean up location data
       const newMap = new Map(checkpointLocations);
       newMap.delete(index);
-      // Reindex remaining locations
       const reindexed = new Map<number, LocationData | null>();
       newMap.forEach((value, key) => {
         if (key > index) {
@@ -154,7 +218,6 @@ export default function CreateTripPage() {
     const newIndex = direction === "up" ? index - 1 : index + 1;
     move(index, newIndex);
 
-    // Update location map
     const newMap = new Map(checkpointLocations);
     const location1 = newMap.get(index);
     const location2 = newMap.get(newIndex);
@@ -188,114 +251,124 @@ export default function CreateTripPage() {
     }
   };
 
+  const onSubmit = async (data: TemplateFormData) => {
+    try {
+      const response = await api.put(`/admin/trip-templates/${templateId}`, {
+        name: data.name,
+        description: data.description || null,
+        tripType: data.tripType,
+        assignedCaptainId: data.assignedCaptainId || undefined,
+        companyId: data.companyId,
+        price: data.price,
+        points: data.points,
+      });
+
+      if (response.data.success) {
+        toast.success("Template updated successfully!");
+        router.push("/dashboard/trips/templates");
+      }
+    } catch (error: any) {
+      console.error("Error updating template:", error);
+      toast.error(error.response?.data?.message || "Failed to update template");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner size="lg" text="Loading template..." />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
-            Create Scheduled Trip
+            Edit Trip Template
           </h1>
-          {isDirty && (
-            <p className="text-sm text-gray-500 mt-1">
-              You have unsaved changes
-            </p>
-          )}
+          <p className="text-sm text-gray-500 mt-1">
+            Update template details and route
+          </p>
         </div>
         <Button
           variant="secondary"
           onClick={() => router.back()}
-          disabled={isSubmitting}
+          disabled={form.formState.isSubmitting}
         >
           Cancel
         </Button>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={form.handleSubmit(onSubmit)}>
         <div className="space-y-6">
-          {/* Section 1: Basic Information */}
+          {/* Basic Information */}
           <Card>
             <CardHeader>
               <h2 className="text-xl font-semibold text-gray-900">
                 Basic Information
               </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Enter the trip name, date, and scheduled time
-              </p>
             </CardHeader>
             <CardBody>
               <div className="space-y-4">
                 <FormField
-                  label="Trip Name"
+                  label="Template Name"
                   required
                   error={form.formState.errors.name}
                 >
                   <input
                     type="text"
                     {...form.register("name")}
-                    placeholder="e.g., Morning Route - Downtown"
+                    placeholder="e.g., Morning Route Template"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                  />
+                </FormField>
+
+                <FormField
+                  label="Description"
+                  error={form.formState.errors.description}
+                >
+                  <textarea
+                    {...form.register("description")}
+                    placeholder="Optional description for this template"
+                    rows={3}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                   />
                 </FormField>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
-                    label="Trip Date"
+                    label="Trip Type"
                     required
-                    error={form.formState.errors.tripDate}
+                    error={form.formState.errors.tripType}
                   >
-                    <input
-                      type="date"
-                      {...form.register("tripDate")}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                    />
+                    <div className="flex gap-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="ARRIVAL"
+                          {...form.register("tripType")}
+                          className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                        />
+                        <span className="text-sm font-medium text-gray-700">
+                          Arrival (Hodoor)
+                        </span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="DEPARTURE"
+                          {...form.register("tripType")}
+                          className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                        />
+                        <span className="text-sm font-medium text-gray-700">
+                          Departure (Ensraf)
+                        </span>
+                      </label>
+                    </div>
                   </FormField>
 
-                  <FormField
-                    label="Scheduled Time"
-                    required
-                    error={form.formState.errors.scheduledTime}
-                  >
-                    <input
-                      type="time"
-                      {...form.register("scheduledTime")}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                    />
-                  </FormField>
-                </div>
-
-                <FormField
-                  label="Trip Type"
-                  required
-                  error={form.formState.errors.tripType}
-                  hint="Arrival trips require expected times for all checkpoints. Departure trips have optional checkpoint times."
-                >
-                  <div className="flex gap-4">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="ARRIVAL"
-                        {...form.register("tripType")}
-                        className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                      />
-                      <span className="text-sm font-medium text-gray-700">
-                        Arrival (Hodoor)
-                      </span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="DEPARTURE"
-                        {...form.register("tripType")}
-                        className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                      />
-                      <span className="text-sm font-medium text-gray-700">
-                        Departure (Ensraf)
-                      </span>
-                    </label>
-                  </div>
-                </FormField>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     label="Company"
                     required
@@ -321,45 +394,41 @@ export default function CreateTripPage() {
                         </option>
                       ))}
                     </select>
-                    {companies.length === 0 && (
-                      <p className="text-sm text-amber-600 mt-2">
-                        Please add a company before scheduling trips.
-                      </p>
-                    )}
-                  </FormField>
-
-                  <FormField
-                    label="Trip Price"
-                    required
-                    error={form.formState.errors.price}
-                  >
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      {...form.register("price", { valueAsNumber: true })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                    />
                   </FormField>
                 </div>
+
+                <FormField
+                  label="Default Trip Price"
+                  error={form.formState.errors.price}
+                  hint="Optional - will use company default if not specified"
+                >
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...form.register("price", { valueAsNumber: true })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                  />
+                </FormField>
               </div>
             </CardBody>
           </Card>
 
-          {/* Section 2: Assignment */}
+          {/* Assignment */}
           <Card>
             <CardHeader>
               <h2 className="text-xl font-semibold text-gray-900">
                 Assignment
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                Optionally assign a captain to this trip
+                Optionally assign a default captain to trips created from this
+                template
               </p>
             </CardHeader>
             <CardBody>
               <FormField
                 label="Assign Captain"
-                hint="Optional - can be assigned later. Search by phone number, name, or email."
+                hint="Optional - can be assigned later"
                 error={form.formState.errors.assignedCaptainId}
               >
                 <Controller
@@ -372,7 +441,7 @@ export default function CreateTripPage() {
                         field.onChange(captainId || "");
                       }}
                       error={fieldState.error}
-                      disabled={isSubmitting}
+                      disabled={form.formState.isSubmitting}
                     />
                   )}
                 />
@@ -380,7 +449,7 @@ export default function CreateTripPage() {
             </CardBody>
           </Card>
 
-          {/* Section 3: Route Planning */}
+          {/* Route Planning - Same as create page */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -711,35 +780,27 @@ export default function CreateTripPage() {
             </CardBody>
           </Card>
 
-          {/* Section 4: Actions */}
+          {/* Actions */}
           <Card>
             <CardBody>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-end gap-3">
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={handleDraftSave}
-                  disabled={!isDirty || isSubmitting}
+                  onClick={() => router.back()}
+                  disabled={form.formState.isSubmitting}
                 >
-                  Save as Draft
+                  Cancel
                 </Button>
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => router.back()}
-                    disabled={isSubmitting}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    loading={isSubmitting}
-                  >
-                    {isSubmitting ? "Creating..." : "Create Trip"}
-                  </Button>
-                </div>
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting}
+                  loading={form.formState.isSubmitting}
+                >
+                  {form.formState.isSubmitting
+                    ? "Updating..."
+                    : "Update Template"}
+                </Button>
               </div>
             </CardBody>
           </Card>

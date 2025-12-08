@@ -45,6 +45,7 @@ model Admin {
   createdTrips      ScheduledTrip[]     @relation("CreatedBy")
   company           Company?            @relation("CompanyAccounts", fields: [companyId], references: [id])
   statusChangeHistory TripStatusHistory[] @relation("StatusChangeHistory")
+  createdTemplates  TripTemplate[]      @relation("CreatedTemplates")
 }
 
 model driver {
@@ -74,6 +75,7 @@ model driver {
   emergencyUsages     EmergencyUsage[] @relation("DriverEmergencyUsages")
   scheduledTripLedger ScheduledTripLedger[] @relation("LedgerCaptain")
   companies           DriverCompany[]
+  templateAssignments TripTemplate[]   @relation("TemplateCaptain")
 }
 
 model EmergencyUsage {
@@ -124,6 +126,7 @@ model Company {
   scheduledTrips            ScheduledTrip[]
   drivers                   DriverCompany[]
   companyAccounts           Admin[]         @relation("CompanyAccounts")
+  tripTemplates             TripTemplate[]
 }
 
 model DriverCompany {
@@ -243,6 +246,38 @@ model TripStatusHistory {
 
   @@index([scheduledTripId])
   @@index([changedAt])
+}
+
+model TripTemplate {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  name              String              // Template name
+  description       String?             // Optional description
+  companyId         String?             @db.ObjectId
+  tripType          TripType             @default(DEPARTURE)
+  assignedCaptainId String?             @db.ObjectId
+  createdById       String              @db.ObjectId
+  price             Float?              @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  createdBy         Admin               @relation("CreatedTemplates", fields: [createdById], references: [id])
+  company           Company?            @relation(fields: [companyId], references: [id])
+  assignedCaptain   driver?            @relation("TemplateCaptain", fields: [assignedCaptainId], references: [id])
+  points            TripTemplatePoint[]
+}
+
+model TripTemplatePoint {
+  id              String         @id @default(auto()) @map("_id") @db.ObjectId
+  templateId      String         @db.ObjectId
+  name            String
+  latitude        Float
+  longitude       Float
+  order           Int
+  isFinalPoint    Boolean        @default(false)
+  expectedTime    String?       // Stored as "HH:MM" format (time only, no date)
+  employees       Json?          // Array of { name: string, employeeId?: string }
+  template        TripTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
 
 model rides {

@@ -35,8 +35,17 @@ import {
   deleteCompanyAccount,
   assignDriversToCompany,
   getCompanyDrivers,
+  createTripTemplate,
+  getTripTemplates,
+  getTripTemplateById,
+  updateTripTemplate,
+  deleteTripTemplate,
+  createTripsFromTemplate,
 } from "../controllers/admin.controller";
-import { isAuthenticatedAdmin, isAdminUser } from "../middleware/isAuthenticated";
+import {
+  isAuthenticatedAdmin,
+  isAdminUser,
+} from "../middleware/isAuthenticated";
 
 const adminRouter = express.Router();
 
@@ -54,24 +63,76 @@ adminRouter.put("/users/:id/status", isAuthenticatedAdmin, updateUserStatus);
 // Drivers
 adminRouter.get("/drivers", isAuthenticatedAdmin, getAllDrivers);
 adminRouter.get("/drivers/:id", isAuthenticatedAdmin, getDriverById);
-adminRouter.put("/drivers/:id/status", isAuthenticatedAdmin, updateDriverStatus);
-adminRouter.put("/drivers/:id/verify", isAuthenticatedAdmin, verifyDriverDocuments);
+adminRouter.put(
+  "/drivers/:id/status",
+  isAuthenticatedAdmin,
+  updateDriverStatus
+);
+adminRouter.put(
+  "/drivers/:id/verify",
+  isAuthenticatedAdmin,
+  verifyDriverDocuments
+);
 
 // Companies
 adminRouter.get("/companies", isAuthenticatedAdmin, getCompanies);
-adminRouter.post("/companies", isAuthenticatedAdmin, isAdminUser, createCompany);
-adminRouter.put("/companies/:id", isAuthenticatedAdmin, isAdminUser, updateCompany);
-adminRouter.delete("/companies/:id", isAuthenticatedAdmin, isAdminUser, deleteCompany);
+adminRouter.post(
+  "/companies",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  createCompany
+);
+adminRouter.put(
+  "/companies/:id",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  updateCompany
+);
+adminRouter.delete(
+  "/companies/:id",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  deleteCompany
+);
 
 // Company Accounts
-adminRouter.get("/company-accounts", isAuthenticatedAdmin, isAdminUser, getCompanyAccounts);
-adminRouter.post("/company-accounts", isAuthenticatedAdmin, isAdminUser, createCompanyAccount);
-adminRouter.put("/company-accounts/:id", isAuthenticatedAdmin, isAdminUser, updateCompanyAccount);
-adminRouter.delete("/company-accounts/:id", isAuthenticatedAdmin, isAdminUser, deleteCompanyAccount);
+adminRouter.get(
+  "/company-accounts",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  getCompanyAccounts
+);
+adminRouter.post(
+  "/company-accounts",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  createCompanyAccount
+);
+adminRouter.put(
+  "/company-accounts/:id",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  updateCompanyAccount
+);
+adminRouter.delete(
+  "/company-accounts/:id",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  deleteCompanyAccount
+);
 
 // Company Driver Assignments
-adminRouter.post("/companies/:id/assign-drivers", isAuthenticatedAdmin, isAdminUser, assignDriversToCompany);
-adminRouter.get("/companies/:id/drivers", isAuthenticatedAdmin, getCompanyDrivers);
+adminRouter.post(
+  "/companies/:id/assign-drivers",
+  isAuthenticatedAdmin,
+  isAdminUser,
+  assignDriversToCompany
+);
+adminRouter.get(
+  "/companies/:id/drivers",
+  isAuthenticatedAdmin,
+  getCompanyDrivers
+);
 
 // Rides
 adminRouter.get("/rides", isAuthenticatedAdmin, getAllRides);
@@ -84,22 +145,65 @@ adminRouter.get("/analytics", isAuthenticatedAdmin, getAnalytics);
 adminRouter.post("/notifications/send", isAuthenticatedAdmin, sendNotification);
 
 // Active Rides for Map
-adminRouter.get("/active-rides", isAuthenticatedAdmin, getActiveRidesWithLocations);
+adminRouter.get(
+  "/active-rides",
+  isAuthenticatedAdmin,
+  getActiveRidesWithLocations
+);
 
 // Scheduled Trips
 adminRouter.post("/trips", isAuthenticatedAdmin, createScheduledTrip);
-adminRouter.get("/trips/earnings/summary", isAuthenticatedAdmin, getScheduledTripEarningsSummary);
-adminRouter.get("/trips/earnings/range", isAuthenticatedAdmin, getScheduledTripEarningsRange);
-adminRouter.post("/trips/earnings/invoice", isAuthenticatedAdmin, getScheduledTripInvoice);
+adminRouter.get(
+  "/trips/earnings/summary",
+  isAuthenticatedAdmin,
+  getScheduledTripEarningsSummary
+);
+adminRouter.get(
+  "/trips/earnings/range",
+  isAuthenticatedAdmin,
+  getScheduledTripEarningsRange
+);
+adminRouter.post(
+  "/trips/earnings/invoice",
+  isAuthenticatedAdmin,
+  getScheduledTripInvoice
+);
 adminRouter.get("/trips", isAuthenticatedAdmin, getScheduledTrips);
 adminRouter.get("/trips/:id", isAuthenticatedAdmin, getScheduledTripById);
 adminRouter.put("/trips/:id", isAuthenticatedAdmin, updateScheduledTrip);
 adminRouter.put("/trips/:id/status", isAuthenticatedAdmin, updateTripStatus);
 adminRouter.delete("/trips/:id", isAuthenticatedAdmin, deleteScheduledTrip);
-adminRouter.post("/trips/:id/force-close", isAuthenticatedAdmin, forceCloseTrip);
+adminRouter.post(
+  "/trips/:id/force-close",
+  isAuthenticatedAdmin,
+  forceCloseTrip
+);
 
 // Emergency Logs
 adminRouter.get("/emergency-logs", isAuthenticatedAdmin, getEmergencyLogs);
 
-export default adminRouter;
+// Trip Templates
+adminRouter.post("/trip-templates", isAuthenticatedAdmin, createTripTemplate);
+adminRouter.get("/trip-templates", isAuthenticatedAdmin, getTripTemplates);
+adminRouter.get(
+  "/trip-templates/:id",
+  isAuthenticatedAdmin,
+  getTripTemplateById
+);
+adminRouter.put(
+  "/trip-templates/:id",
+  isAuthenticatedAdmin,
+  updateTripTemplate
+);
+adminRouter.delete(
+  "/trip-templates/:id",
+  isAuthenticatedAdmin,
+  deleteTripTemplate
+);
+adminRouter.post(
+  "/trip-templates/:id/create-trips",
+  isAuthenticatedAdmin,
+  createTripsFromTemplate
+);
 
+export default adminRouter;

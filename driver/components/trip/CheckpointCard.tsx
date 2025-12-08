@@ -112,46 +112,6 @@ export default function CheckpointCard({
             </Text>
           </View>
 
-          {checkpoint.employees && checkpoint.employees.length > 0 && (
-            <View style={styles.employeesContainer}>
-              <Text
-                style={[styles.employeesLabel, { color: color.text.secondary }]}
-              >
-                Employees ({checkpoint.employees.length}):
-              </Text>
-              <View style={styles.employeesList}>
-                {checkpoint.employees.map((emp, empIndex) => (
-                  <View
-                    key={empIndex}
-                    style={[
-                      styles.employeeChip,
-                      {
-                        backgroundColor: isCurrent
-                          ? `${color.primary}15`
-                          : `${color.border}20`,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.employeeName, { color: colors.text }]}>
-                      {emp.name}
-                      {emp.employeeId && (
-                        <Text
-                          style={[
-                            styles.employeeId,
-                            { color: color.text.tertiary },
-                          ]}
-                        >
-                          {" "}
-                          ({emp.employeeId})
-                        </Text>
-                      )}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
           {isCurrent &&
             !isReached &&
             (distance !== undefined || duration !== undefined) && (
@@ -304,34 +264,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: fontSizes.FONT12,
     fontWeight: "bold",
-  },
-  employeesContainer: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  employeesLabel: {
-    fontSize: fontSizes.FONT12,
-    fontFamily: fonts.medium,
-    marginBottom: spacing.xs / 2,
-  },
-  employeesList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs / 2,
-  },
-  employeeChip: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs / 2,
-    borderRadius: 6,
-    marginRight: spacing.xs / 2,
-    marginBottom: spacing.xs / 2,
-  },
-  employeeName: {
-    fontSize: fontSizes.FONT12,
-    fontFamily: fonts.medium,
-  },
-  employeeId: {
-    fontSize: fontSizes.FONT11,
-    fontFamily: fonts.regular,
   },
 });

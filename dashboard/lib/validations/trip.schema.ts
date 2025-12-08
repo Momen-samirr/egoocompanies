@@ -21,8 +21,9 @@ export const locationSchema = z.object({
 const employeeSchema = z.object({
   name: z
     .string()
-    .min(1, "Employee name is required")
-    .max(100, "Employee name must be less than 100 characters"),
+    .max(100, "Employee name must be less than 100 characters")
+    .optional()
+    .or(z.literal("")), // Allow empty string or optional
   employeeId: z
     .string()
     .max(50, "Employee ID must be less than 50 characters")

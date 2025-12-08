@@ -27,30 +27,35 @@ export default function ScheduledTripsOverviewPage() {
   const [recentTripsLoading, setRecentTripsLoading] = useState(true);
 
   // Fetch counts for each view
-  const { pagination: upcomingPagination, isLoading: upcomingLoading } = useTrips({
-    view: "upcoming",
-    pagination: { page: 1, pageSize: 1 },
-  });
+  const { pagination: upcomingPagination, isLoading: upcomingLoading } =
+    useTrips({
+      view: "upcoming",
+      pagination: { page: 1, pageSize: 1 },
+    });
   const { pagination: activePagination, isLoading: activeLoading } = useTrips({
     view: "active",
     pagination: { page: 1, pageSize: 1 },
   });
-  const { pagination: completedPagination, isLoading: completedLoading } = useTrips({
-    view: "completed",
-    pagination: { page: 1, pageSize: 1 },
-  });
-  const { pagination: cancelledPagination, isLoading: cancelledLoading } = useTrips({
-    view: "cancelled",
-    pagination: { page: 1, pageSize: 1 },
-  });
-  const { pagination: emergencyPagination, isLoading: emergencyLoading } = useTrips({
-    view: "emergency",
-    pagination: { page: 1, pageSize: 1 },
-  });
-  const { pagination: forceClosedPagination, isLoading: forceClosedLoading } = useTrips({
-    view: "force-closed",
-    pagination: { page: 1, pageSize: 1 },
-  });
+  const { pagination: completedPagination, isLoading: completedLoading } =
+    useTrips({
+      view: "completed",
+      pagination: { page: 1, pageSize: 1 },
+    });
+  const { pagination: cancelledPagination, isLoading: cancelledLoading } =
+    useTrips({
+      view: "cancelled",
+      pagination: { page: 1, pageSize: 1 },
+    });
+  const { pagination: emergencyPagination, isLoading: emergencyLoading } =
+    useTrips({
+      view: "emergency",
+      pagination: { page: 1, pageSize: 1 },
+    });
+  const { pagination: forceClosedPagination, isLoading: forceClosedLoading } =
+    useTrips({
+      view: "force-closed",
+      pagination: { page: 1, pageSize: 1 },
+    });
 
   useEffect(() => {
     fetchFinanceSummary();
@@ -62,12 +67,12 @@ export default function ScheduledTripsOverviewPage() {
       typeof error === "object" &&
       error !== null &&
       "response" in error &&
-      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message ===
-        "string"
+      typeof (error as { response?: { data?: { message?: string } } }).response
+        ?.data?.message === "string"
     ) {
       return (
-        (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
-        fallback
+        (error as { response?: { data?: { message?: string } } }).response?.data
+          ?.message || fallback
       );
     }
     return fallback;
@@ -89,7 +94,9 @@ export default function ScheduledTripsOverviewPage() {
   const fetchRecentTrips = async () => {
     try {
       setRecentTripsLoading(true);
-      const response = await api.get("/admin/trips?page=1&limit=10&sortField=createdAt&sortDirection=desc");
+      const response = await api.get(
+        "/admin/trips?page=1&limit=10&sortField=createdAt&sortDirection=desc"
+      );
       setRecentTrips(response.data.trips || []);
     } catch (error) {
       console.error("Error fetching recent trips:", error);
@@ -110,12 +117,20 @@ export default function ScheduledTripsOverviewPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Scheduled Trips</h1>
-        <Button
-          onClick={() => router.push("/dashboard/trips/create")}
-          icon={PlusIcon}
-        >
-          Create Trip
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => router.push("/dashboard/trips/templates")}
+          >
+            Templates
+          </Button>
+          <Button
+            onClick={() => router.push("/dashboard/trips/create")}
+            icon={PlusIcon}
+          >
+            Create Trip
+          </Button>
+        </div>
       </div>
 
       {/* Overview Stats */}
@@ -140,9 +155,16 @@ export default function ScheduledTripsOverviewPage() {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Recent Trips</h2>
+            <h2 className="text-xl font-semibold text-gray-900">
+              Recent Trips
+            </h2>
             <Link href="/dashboard/trips/upcoming">
-              <Button variant="ghost" size="sm" icon={ArrowRightIcon} iconPosition="right">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={ArrowRightIcon}
+                iconPosition="right"
+              >
                 View All
               </Button>
             </Link>
@@ -183,7 +205,9 @@ export default function ScheduledTripsOverviewPage() {
                   {recentTrips.map((trip) => (
                     <tr key={trip.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{trip.name}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {trip.name}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
@@ -198,7 +222,9 @@ export default function ScheduledTripsOverviewPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {trip.assignedCaptain?.name || (
-                            <span className="text-gray-400 italic">Not assigned</span>
+                            <span className="text-gray-400 italic">
+                              Not assigned
+                            </span>
                           )}
                         </div>
                       </td>
@@ -229,8 +255,12 @@ export default function ScheduledTripsOverviewPage() {
             <CardBody>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Upcoming Trips</h3>
-                  <p className="text-sm text-gray-500 mt-1">View scheduled trips</p>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Upcoming Trips
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    View scheduled trips
+                  </p>
                 </div>
                 <ArrowRightIcon className="h-6 w-6 text-gray-400" />
               </div>
@@ -242,8 +272,12 @@ export default function ScheduledTripsOverviewPage() {
             <CardBody>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Active Trips</h3>
-                  <p className="text-sm text-gray-500 mt-1">Monitor ongoing trips</p>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Active Trips
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Monitor ongoing trips
+                  </p>
                 </div>
                 <ArrowRightIcon className="h-6 w-6 text-gray-400" />
               </div>
@@ -255,8 +289,12 @@ export default function ScheduledTripsOverviewPage() {
             <CardBody>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Completed Trips</h3>
-                  <p className="text-sm text-gray-500 mt-1">Review completed trips</p>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Completed Trips
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Review completed trips
+                  </p>
                 </div>
                 <ArrowRightIcon className="h-6 w-6 text-gray-400" />
               </div>
