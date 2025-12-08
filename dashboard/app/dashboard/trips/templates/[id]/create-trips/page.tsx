@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
 import Card, { CardBody, CardHeader } from "@/components/common/Card";
@@ -10,6 +10,7 @@ import Button from "@/components/common/Button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import FormField from "@/components/common/FormField";
 import LocationPicker from "@/components/trips/LocationPicker";
+import CaptainSelector from "@/components/trips/CaptainSelector";
 import { TripTemplate, LocationData } from "@/types/trip";
 import {
   PlusIcon,
@@ -461,6 +462,29 @@ export default function CreateTripsFromTemplatePage() {
                           valueAsNumber: true,
                         })}
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                      />
+                    </FormField>
+                  </div>
+
+                  <div className="mt-4">
+                    <FormField
+                      label="Assign Captain"
+                      hint="Optional - can be assigned later. Search by phone number, name, or email."
+                      error={form.formState.errors.trips?.[index]?.assignedCaptainId}
+                    >
+                      <Controller
+                        control={form.control}
+                        name={`trips.${index}.assignedCaptainId`}
+                        render={({ field, fieldState }) => (
+                          <CaptainSelector
+                            value={field.value}
+                            onChange={(captainId) => {
+                              field.onChange(captainId || "");
+                            }}
+                            error={fieldState.error}
+                            disabled={submitting}
+                          />
+                        )}
                       />
                     </FormField>
                   </div>
