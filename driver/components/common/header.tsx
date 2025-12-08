@@ -18,95 +18,98 @@ interface HeaderProps {
   showOnlineStatus?: boolean;
 }
 
-const Header = React.memo(function Header({
-  isOn,
-  toggleSwitch,
-  showBackButton = false,
-  title,
-  onBackPress,
-  notificationCount = 0,
-  loading = false,
-  showOnlineStatus = false,
-}: HeaderProps) {
-  // Note: isOn and toggleSwitch are kept for backward compatibility
-  // but the toggle switch UI has been removed in favor of DriverStatusCard
-  const handleBackPress = () => {
-    if (onBackPress) {
-      onBackPress();
-    } else {
-      router.back();
-    }
-  };
+const Header = React.memo(
+  function Header({
+    isOn,
+    toggleSwitch,
+    showBackButton = false,
+    title,
+    onBackPress,
+    notificationCount = 0,
+    loading = false,
+    showOnlineStatus = false,
+  }: HeaderProps) {
+    // Note: isOn and toggleSwitch are kept for backward compatibility
+    // but the toggle switch UI has been removed in favor of DriverStatusCard
+    const handleBackPress = () => {
+      if (onBackPress) {
+        onBackPress();
+      } else {
+        router.back();
+      }
+    };
 
-  return (
-    <View style={styles.headerMain}>
-      <View style={styles.headerMargin}>
-        <View
-          style={[
-            styles.headerAlign,
-            {
-              alignItems: "center",
-              paddingTop: windowHeight(3),
-              flexDirection: "row",
-            },
-          ]}
-        >
+    return (
+      <View style={styles.headerMain}>
+        <View style={styles.headerMargin}>
           <View
             style={[
-              styles.headerTitle,
-              { flex: 1, flexDirection: "row", alignItems: "center" },
+              styles.headerAlign,
+              {
+                alignItems: "center",
+                paddingTop: windowHeight(3),
+                flexDirection: "row",
+              },
             ]}
           >
-            {showBackButton && (
-              <TouchableOpacity
-                onPress={handleBackPress}
-                style={styles.backButton}
-                activeOpacity={0.7}
-                accessibilityLabel="Go back"
-                accessibilityRole="button"
-              >
-                <BackArrow colors={color.whiteColor} width={20} height={20} />
-              </TouchableOpacity>
-            )}
-            <Text
+            <View
               style={[
-                styles.headerTitleText,
-                { marginLeft: showBackButton ? windowWidth(10) : 0 },
+                styles.headerTitle,
+                { flex: 1, flexDirection: "row", alignItems: "center" },
               ]}
             >
-              {title || "Egoo"}
-            </Text>
+              {showBackButton && (
+                <TouchableOpacity
+                  onPress={handleBackPress}
+                  style={styles.backButton}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Go back"
+                  accessibilityRole="button"
+                >
+                  <BackArrow colors={color.whiteColor} width={20} height={20} />
+                </TouchableOpacity>
+              )}
+              <Text
+                style={[
+                  styles.headerTitleText,
+                  { marginLeft: showBackButton ? windowWidth(10) : 0 },
+                ]}
+              >
+                {title || "Egoo"}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.notificationIcon}
+              activeOpacity={0.5}
+              accessibilityLabel="Notifications"
+              accessibilityRole="button"
+            >
+              <Notification color={color.whiteColor} />
+              {notificationCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {notificationCount > 9 ? "9+" : notificationCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.notificationIcon}
-            activeOpacity={0.5}
-            accessibilityLabel="Notifications"
-            accessibilityRole="button"
-          >
-            <Notification color={color.whiteColor} />
-            {notificationCount > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>
-                  {notificationCount > 9 ? "9+" : notificationCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
         </View>
       </View>
-    </View>
-  );
-}, (prevProps, nextProps) => {
-  // Only re-render if props actually change
-  return (
-    prevProps.isOn === nextProps.isOn &&
-    prevProps.loading === nextProps.loading &&
-    prevProps.title === nextProps.title &&
-    prevProps.notificationCount === nextProps.notificationCount &&
-    prevProps.showBackButton === nextProps.showBackButton &&
-    prevProps.showOnlineStatus === nextProps.showOnlineStatus
-  );
-});
+    );
+  },
+  (prevProps, nextProps) => {
+    // Only re-render if props actually change
+    return (
+      prevProps.isOn === nextProps.isOn &&
+      prevProps.loading === nextProps.loading &&
+      prevProps.title === nextProps.title &&
+      prevProps.notificationCount === nextProps.notificationCount &&
+      prevProps.showBackButton === nextProps.showBackButton &&
+      prevProps.showOnlineStatus === nextProps.showOnlineStatus
+    );
+  }
+);
 
 export default Header;
 
