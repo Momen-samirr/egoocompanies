@@ -76,8 +76,7 @@ export default function TripFilters({
     localFilters.checkpoints?.min !== undefined ||
     localFilters.checkpoints?.max !== undefined ||
     localFilters.dateRange?.start ||
-    localFilters.dateRange?.end ||
-    localFilters.week; // Include week filter
+    localFilters.dateRange?.end;
 
   const handleFilterChange = <K extends keyof TripFiltersType>(
     key: K,
