@@ -3,10 +3,10 @@ import React from "react";
 import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
-import SwitchToggle from "react-native-switch-toggle";
 import { Notification } from "@/utils/icons";
 import { BackArrow } from "@/assets/icons/backArrow";
 import { router } from "expo-router";
+import OnlineStatusButton from "./OnlineStatusButton";
 
 interface HeaderProps {
   isOn: boolean;
@@ -15,15 +15,19 @@ interface HeaderProps {
   title?: string;
   onBackPress?: () => void;
   notificationCount?: number;
+  loading?: boolean;
+  showOnlineStatus?: boolean;
 }
 
-export default function Header({ 
-  isOn, 
-  toggleSwitch, 
+const Header = React.memo(function Header({
+  isOn,
+  toggleSwitch,
   showBackButton = false,
   title,
   onBackPress,
   notificationCount = 0,
+  loading = false,
+  showOnlineStatus = false,
 }: HeaderProps) {
   const handleBackPress = () => {
     if (onBackPress) {
@@ -46,7 +50,12 @@ export default function Header({
             },
           ]}
         >
-          <View style={[styles.headerTitle, { flex: 1, flexDirection: "row", alignItems: "center" }]}>
+          <View
+            style={[
+              styles.headerTitle,
+              { flex: 1, flexDirection: "row", alignItems: "center" },
+            ]}
+          >
             {showBackButton && (
               <TouchableOpacity
                 onPress={handleBackPress}
@@ -61,14 +70,14 @@ export default function Header({
             <Text
               style={[
                 styles.headerTitleText,
-                { marginLeft: showBackButton ? windowWidth(10) : 0 }
+                { marginLeft: showBackButton ? windowWidth(10) : 0 },
               ]}
             >
               {title || "Egoo"}
             </Text>
           </View>
-          <TouchableOpacity 
-            style={styles.notificationIcon} 
+          <TouchableOpacity
+            style={styles.notificationIcon}
             activeOpacity={0.5}
             accessibilityLabel="Notifications"
             accessibilityRole="button"
@@ -83,61 +92,39 @@ export default function Header({
             )}
           </TouchableOpacity>
         </View>
-        <View
-          style={[
-            styles.switchContainer,
-            { backgroundColor: color.whiteColor, flexDirection: "row" },
-          ]}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: windowWidth(2),
-              flex: 1,
-            }}
-          >
-            <View style={[styles.statusIndicator, { backgroundColor: isOn ? "#10b981" : "#9ca3af" }]} />
-            <Text
-              style={[
-                styles.valueTitle, 
-                { 
-                  color: isOn ? "#10b981" : "#6b7280",
-                  fontWeight: "600",
-                }
-              ]}
-            >
-              {isOn ? "Online" : "Offline"}
-            </Text>
-            <Text style={styles.statusSubtext}>
-              {isOn ? "Available for rides" : "Not available"}
-            </Text>
-          </View>
-          <View style={styles.switchBorder}>
-            <SwitchToggle
-              switchOn={isOn}
-              onPress={toggleSwitch}
-              containerStyle={styles.switchView}
-              circleStyle={styles.switchCircle}
-              backgroundColorOff={color.lightGray}
-              backgroundColorOn={color.lightGray}
-              circleColorOn={color.primary}
-              circleColorOff={color.blackColor}
-            />
-          </View>
-        </View>
+        {showOnlineStatus && (
+          <OnlineStatusButton
+            isOn={isOn}
+            onToggle={toggleSwitch}
+            loading={loading}
+            inHeader={true}
+          />
+        )}
       </View>
     </View>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if props actually change
+  return (
+    prevProps.isOn === nextProps.isOn &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.title === nextProps.title &&
+    prevProps.notificationCount === nextProps.notificationCount &&
+    prevProps.showBackButton === nextProps.showBackButton &&
+    prevProps.showOnlineStatus === nextProps.showOnlineStatus
+  );
+});
+
+export default Header;
 
 const styles = StyleSheet.create({
   headerMain: {
     backgroundColor: color.primary,
     paddingHorizontal: windowWidth(10),
     paddingTop: windowHeight(25),
+    paddingBottom: windowWidth(12), // Add bottom padding for proper spacing
     width: "100%",
-    height: windowHeight(115),
+    minHeight: windowHeight(115), // Change from fixed height to minHeight
   },
   logoTitle: {
     fontSize: fontSizes.FONT18,
@@ -198,49 +185,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 10,
     fontWeight: "bold",
-  },
-  switchContainer: {
-    height: windowHeight(28),
-    width: "100%",
-    marginVertical: windowHeight(5),
-    borderRadius: 25,
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: windowWidth(10),
-  },
-  statusIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: windowWidth(3),
-  },
-  valueTitle: {
-    fontFamily: fonts.medium,
-    fontSize: fontSizes.FONT14,
-  },
-  statusSubtext: {
-    fontFamily: fonts.regular,
-    fontSize: fontSizes.FONT12,
-    color: color.secondaryFont,
-    marginLeft: windowWidth(3),
-  },
-  switchBorder: {
-    height: windowHeight(20),
-    width: windowHeight(45),
-    borderWidth: 2,
-    borderRadius: 25,
-    borderColor: color.linearBorder,
-  },
-  switchView: {
-    height: windowHeight(20),
-    width: windowWidth(55),
-    borderRadius: 25,
-    padding: windowWidth(8),
-    borderColor: color.buttonBg,
-  },
-  switchCircle: {
-    height: windowHeight(15),
-    width: windowWidth(25),
-    borderRadius: 20,
   },
 });

@@ -23,41 +23,59 @@ interface InputProps {
   disabled?: boolean;
 }
 
-export default function Input({
-  title,
-  placeholder,
-  keyboardType,
-  value,
-  warning,
-  onChangeText,
-  showWarning,
-  emailFormatWarning,
-  disabled,
-}: InputProps) {
-  const { colors } = useTheme();
+const Input = React.memo(
+  function Input({
+    title,
+    placeholder,
+    keyboardType,
+    value,
+    warning,
+    onChangeText,
+    showWarning,
+    emailFormatWarning,
+    disabled,
+  }: InputProps) {
+    const { colors } = useTheme();
 
-  return (
-    <View>
-      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: color.lightGray,
-            borderColor: colors.border,
-          },
-        ]}
-        placeholder={placeholder}
-        placeholderTextColor={color.secondaryFont}
-        keyboardType={keyboardType}
-        value={value}
-        aria-disabled={disabled}
-        onChangeText={onChangeText}
-      />
-      {showWarning && <Text style={[styles.warning]}>{warning}</Text>}
-    </View>
-  );
-}
+    return (
+      <View>
+        <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+        <TextInput
+          style={[
+            styles.input,
+            {
+              backgroundColor: color.lightGray,
+              borderColor: colors.border,
+              opacity: disabled ? 0.6 : 1,
+            },
+          ]}
+          placeholder={placeholder}
+          placeholderTextColor={color.secondaryFont}
+          keyboardType={keyboardType}
+          value={value}
+          onChangeText={onChangeText}
+          editable={!disabled}
+          accessibilityLabel={title}
+          accessibilityHint={placeholder}
+          accessibilityState={{ disabled: !!disabled }}
+        />
+        {showWarning && <Text style={[styles.warning]}>{warning}</Text>}
+      </View>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Only re-render if props actually change
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.showWarning === nextProps.showWarning &&
+      prevProps.disabled === nextProps.disabled &&
+      prevProps.title === nextProps.title &&
+      prevProps.placeholder === nextProps.placeholder
+    );
+  }
+);
+
+export default Input;
 
 const styles = StyleSheet.create({
   title: {

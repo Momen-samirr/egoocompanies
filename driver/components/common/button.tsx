@@ -5,7 +5,17 @@ import color from "@/themes/app.colors";
 import { windowHeight } from "@/themes/app.constant";
 import { external } from "@/styles/external.style";
 
-const Button: React.FC<ButtonProps> = ({
+interface ButtonProps {
+  title: string;
+  onPress: () => void;
+  width?: string | number;
+  height?: number;
+  backgroundColor?: string;
+  textColor?: string;
+  disabled?: boolean;
+}
+
+const Button: React.FC<ButtonProps> = React.memo(({
   title,
   onPress,
   width,
@@ -43,7 +53,17 @@ const Button: React.FC<ButtonProps> = ({
       </Text>
     </Pressable>
   );
-};
+}, (prevProps, nextProps) => {
+  // Only re-render if props actually change
+  return (
+    prevProps.title === nextProps.title &&
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.width === nextProps.width &&
+    prevProps.height === nextProps.height &&
+    prevProps.backgroundColor === nextProps.backgroundColor &&
+    prevProps.textColor === nextProps.textColor
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

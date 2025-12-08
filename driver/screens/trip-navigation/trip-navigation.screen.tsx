@@ -105,6 +105,7 @@ export default function TripNavigationScreen() {
     longitude: number;
   } | null>(null);
   const hasShownProximityNotification = useRef<number | null>(null);
+  const mapInitializedRef = useRef(false);
 
   // Navigation hook state
   const [navigationOrigin, setNavigationOrigin] = useState<Coordinate | null>(
@@ -206,6 +207,26 @@ export default function TripNavigationScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPointIndex]);
 
+  // Ensure map region is updated when both trip and location are available
+  useEffect(() => {
+    if (
+      trip &&
+      currentLocation &&
+      mapRef.current &&
+      !mapInitializedRef.current
+    ) {
+      const currentPointIndex = trip.progress?.currentPointIndex || 0;
+      const currentPoint = trip.points[currentPointIndex];
+
+      if (currentPoint) {
+        updateMapRegion(trip);
+        updateDistanceAndETA(currentLocation);
+        mapInitializedRef.current = true;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip, currentLocation]);
+
   // Cleanup navigation when mode is disabled
   useEffect(() => {
     if (!isNavigationMode && navigationState.isActive) {
@@ -284,13 +305,6 @@ export default function TripNavigationScreen() {
             hasShownProximityNotification.current = null;
           }
           setTrip(activeTrip);
-          // Wait for location to be available before updating map
-          setTimeout(() => {
-            if (currentLocation) {
-              updateMapRegion(activeTrip);
-              updateDistanceAndETA(currentLocation);
-            }
-          }, 500);
         } else {
           Toast.show("Trip not found or not active", { type: "danger" });
           router.back();
@@ -744,6 +758,41 @@ export default function TripNavigationScreen() {
     };
   };
 
+  // Calculate safe initial region coordinates
+  const getInitialRegion = () => {
+    // Use current point if available
+    if (trip && trip.points && trip.points.length > 0) {
+      const currentPointIndex = trip.progress?.currentPointIndex || 0;
+      const currentPoint = trip.points[currentPointIndex];
+      if (currentPoint) {
+        return {
+          latitude: currentPoint.latitude,
+          longitude: currentPoint.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        };
+      }
+    }
+
+    // Fallback to current location if available
+    if (currentLocation) {
+      return {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      };
+    }
+
+    // Last resort: use a safe default location instead of 0,0
+    return {
+      latitude: 30.0444, // Cairo, Egypt (adjust to your app's primary region)
+      longitude: 31.2357,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    };
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Full-Screen Navigation Modal */}
@@ -773,12 +822,7 @@ export default function TripNavigationScreen() {
         <MapView
           ref={mapRef}
           style={{ flex: 1 }}
-          initialRegion={{
-            latitude: currentPoint?.latitude || 0,
-            longitude: currentPoint?.longitude || 0,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          }}
+          initialRegion={getInitialRegion()}
           showsUserLocation={true}
           followsUserLocation={false}
           rotateEnabled={isNavigationMode && navigationState.isActive}

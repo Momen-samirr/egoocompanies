@@ -6,13 +6,15 @@ import { ToastProvider } from "react-native-toast-notifications";
 import { LogBox } from "react-native";
 import { useFonts } from "expo-font";
 import { DriverProvider } from "@/contexts/DriverContext";
+import OfflineIndicator from "@/components/common/OfflineIndicator";
+import { logger } from "@/lib/logger";
 // Lazy import background location task to avoid initialization errors
 // The task will be registered when the module is actually used
 if (typeof require !== 'undefined') {
   try {
     require("@/services/backgroundLocationTask");
   } catch (error) {
-    console.warn("⚠️ Could not load background location task:", error);
+    logger.warn("Could not load background location task", error);
   }
 }
 
@@ -42,8 +44,8 @@ try {
         errorMessage.includes("Could not put") ||
         errorMessage.includes("WritableMap")
       ) {
-        console.warn("⚠️ Caught UserHandle serialization error - this is a known issue with expo-device on Android");
-        console.warn("⚠️ The app will continue to function, but some device features may be unavailable");
+        logger.warn("Caught UserHandle serialization error - this is a known issue with expo-device on Android");
+        logger.warn("The app will continue to function, but some device features may be unavailable");
         // Don't crash the app - just log the error
         return;
       }
@@ -56,7 +58,7 @@ try {
   }
 } catch (error) {
   // Silently fail if ErrorUtils is not available - the safe wrapper in home.screen.tsx will still work
-  console.warn("⚠️ Could not set up global error handler:", error);
+    logger.warn("Could not set up global error handler", error);
 }
 
 export default function RootLayout() {
@@ -82,6 +84,7 @@ function RootLayoutNav() {
   return (
     <DriverProvider>
       <ToastProvider>
+        <OfflineIndicator />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
         </Stack>

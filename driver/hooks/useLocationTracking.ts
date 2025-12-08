@@ -1,14 +1,28 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as GeoLocation from "expo-location";
-import * as TaskManager from "expo-task-manager";
 import { Toast } from "react-native-toast-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { getServerUri } from "@/configs/constants";
-import { requestAllLocationPermissions, getLocationPermissionStatus } from "@/utils/locationPermissions";
+import {
+  requestAllLocationPermissions,
+  getLocationPermissionStatus,
+} from "@/utils/locationPermissions";
 import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
 import { updateDriverLocation } from "@/services/locationService";
-import { BACKGROUND_LOCATION_TASK, setWebSocketConnection } from "@/services/backgroundLocationTask";
+import {
+  BACKGROUND_LOCATION_TASK,
+  setWebSocketConnection,
+} from "@/services/backgroundLocationTask";
+import { logger } from "@/lib/logger";
+
+// Conditionally import TaskManager to avoid errors if native module isn't ready
+let TaskManager: any = null;
+try {
+  TaskManager = require("expo-task-manager");
+} catch (error) {
+  logger.warn("expo-task-manager not available", error);
+}
 
 export interface Location {
   latitude: number;
@@ -49,7 +63,9 @@ export function useLocationTracking(
   } = options;
 
   const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
-  const [lastSentLocation, setLastSentLocation] = useState<Location | null>(null);
+  const [lastSentLocation, setLastSentLocation] = useState<Location | null>(
+    null
+  );
   const [isTracking, setIsTracking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +73,7 @@ export function useLocationTracking(
   const isActiveRef = useRef(isActive);
   const firstLocationAfterActiveRef = useRef(false);
   const isTrackingRef = useRef(false);
+  const lastSentLocationRef = useRef<Location | null>(null);
 
   // Keep ref in sync with isActive
   useEffect(() => {
@@ -71,14 +88,14 @@ export function useLocationTracking(
     async (location: Location) => {
       const currentIsActive = isActiveRef.current;
       if (!currentIsActive) {
-        console.log("⚠️ Driver is inactive - skipping location update");
+        logger.debug("Driver is inactive - skipping location update");
         return;
       }
 
       try {
         const accessToken = await AsyncStorage.getItem("accessToken");
         if (!accessToken) {
-          console.error("❌ No access token - cannot fetch driver data");
+          logger.error("No access token - cannot fetch driver data");
           return;
         }
 
@@ -107,24 +124,34 @@ export function useLocationTracking(
                   (check: any) => check.canActivate
                 );
                 if (availableTrips.length > 0) {
-                  console.log(`✅ ${availableTrips.length} trip(s) are now available to start`);
+                  logger.info(
+                    `${availableTrips.length} trip(s) are now available to start`
+                  );
                 }
               }
             } catch (error: any) {
-              if (error.response?.status === 400 && error.response?.data?.message?.includes("online")) {
-                console.log("⚠️ Location update skipped - driver is offline");
+              if (
+                error.response?.status === 400 &&
+                error.response?.data?.message?.includes("online")
+              ) {
+                logger.debug("Location update skipped - driver is offline");
               } else {
-                console.log("⚠️ Failed to update location for scheduled trips:", error.message);
+                logger.warn(
+                  "Failed to update location for scheduled trips",
+                  error
+                );
               }
             }
           }
 
-          console.log(
-            `✅ Location update sent: Driver=${driverData.id}, Lat=${location.latitude}, Lng=${location.longitude}`
-          );
+          logger.debug("Location update sent", {
+            driverId: driverData.id,
+            latitude: location.latitude,
+            longitude: location.longitude,
+          });
         }
       } catch (error: any) {
-        console.error("❌ Error sending location update:", error);
+        logger.error("Error sending location update", error);
       }
     },
     [sendToServer, sendToWebSocket]
@@ -132,6 +159,12 @@ export function useLocationTracking(
 
   // Start location tracking
   const startTracking = useCallback(async () => {
+    // Guard: Prevent restarting if already tracking
+    if (isTrackingRef.current) {
+      logger.debug("Location tracking already active, skipping restart");
+      return;
+    }
+
     try {
       // Clean up previous subscription
       if (locationWatchSubscription.current) {
@@ -140,7 +173,7 @@ export function useLocationTracking(
       }
 
       // Request permissions
-      console.log("📍 Requesting location permissions...");
+      logger.info("Requesting location permissions");
       const { foreground, background } = await requestAllLocationPermissions();
 
       if (!foreground) {
@@ -152,39 +185,70 @@ export function useLocationTracking(
       }
 
       if (!background) {
-        console.warn("⚠️ Background location permission not granted");
-        Toast.show("Background location is required for tracking when screen is off. Please enable it in Settings.", {
-          type: "warning",
-          duration: 5000,
-        });
+        logger.warn("Background location permission not granted");
+        Toast.show(
+          "Background location is required for tracking when screen is off. Please enable it in Settings.",
+          {
+            type: "warning",
+            duration: 5000,
+          }
+        );
       }
 
       const permissionStatus = await getLocationPermissionStatus();
-      console.log("📍 Location permission status:", permissionStatus);
+      logger.debug("Location permission status", permissionStatus);
 
       // Reset first location flag
       firstLocationAfterActiveRef.current = isActiveRef.current;
 
       // Check if task is registered
-      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-      if (!isTaskRegistered) {
-        console.warn("⚠️ Background location task not registered - location updates may not work in background");
+      if (TaskManager && TaskManager.isTaskRegisteredAsync) {
+        try {
+          const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
+            BACKGROUND_LOCATION_TASK
+          );
+          if (!isTaskRegistered) {
+            logger.warn(
+              "Background location task not registered - location updates may not work in background"
+            );
+          }
+        } catch (error) {
+          logger.warn("Error checking task registration", error);
+        }
+      } else {
+        logger.warn(
+          "TaskManager not available - cannot check task registration"
+        );
       }
 
       // Start background location updates using task manager
       // This works even when the app is in the background
-      await GeoLocation.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-        accuracy: GeoLocation.Accuracy.High,
-        timeInterval: 5000, // 5 seconds
-        distanceInterval: 10, // 10 meters
-        foregroundService: {
-          notificationTitle: "Location Tracking Active",
-          notificationBody: "Tracking your location for ride requests",
-          notificationColor: "#10B981",
-        },
-        pausesUpdatesAutomatically: false,
-        showsBackgroundLocationIndicator: true,
-      });
+      if (isActive && TaskManager) {
+        try {
+          await GeoLocation.startLocationUpdatesAsync(
+            BACKGROUND_LOCATION_TASK,
+            {
+              accuracy: GeoLocation.Accuracy.High,
+              timeInterval: 5000, // 5 seconds
+              distanceInterval: 10, // 10 meters
+              foregroundService: {
+                notificationTitle: "Location Tracking Active",
+                notificationBody: "Tracking your location for ride requests",
+                notificationColor: "#10B981",
+              },
+              pausesUpdatesAutomatically: false,
+              showsBackgroundLocationIndicator: true,
+            }
+          );
+          logger.info("Background location tracking started");
+        } catch (error: any) {
+          logger.error("Error starting background location tracking", error);
+        }
+      } else if (isActive && !TaskManager) {
+        logger.debug(
+          "TaskManager not available - background location tracking will not work"
+        );
+      }
 
       // Also set up a foreground watcher for immediate UI updates
       // This provides faster updates when the app is in the foreground
@@ -197,10 +261,13 @@ export function useLocationTracking(
         },
         async (position) => {
           const { latitude, longitude, heading } = position.coords;
-          const newLocation: Location = { 
-            latitude, 
+          const newLocation: Location = {
+            latitude,
             longitude,
-            heading: heading !== null && heading !== undefined && heading >= 0 ? heading : undefined
+            heading:
+              heading !== null && heading !== undefined && heading >= 0
+                ? heading
+                : undefined,
           };
 
           // Always update current location for UI
@@ -213,24 +280,35 @@ export function useLocationTracking(
 
           // Check if we should send update
           const currentIsActive = isActiveRef.current;
+          const currentLastSentLocation = lastSentLocationRef.current;
           const shouldSend =
             firstLocationAfterActiveRef.current ||
-            shouldSendLocationUpdate(lastSentLocation, newLocation, distanceThreshold);
+            shouldSendLocationUpdate(
+              currentLastSentLocation,
+              newLocation,
+              distanceThreshold
+            );
 
           if (currentIsActive && shouldSend) {
             const isFirstAfterActive = firstLocationAfterActiveRef.current;
             firstLocationAfterActiveRef.current = false;
 
+            lastSentLocationRef.current = newLocation;
             setLastSentLocation(newLocation);
 
             await sendLocationUpdate(newLocation);
           } else {
             // Update lastSentLocation even if not sending
+            lastSentLocationRef.current = newLocation;
             setLastSentLocation(newLocation);
             if (!currentIsActive) {
-              console.log(`📍 Location received but driver is inactive - not sending`);
+              logger.debug(
+                "Location received but driver is inactive - not sending"
+              );
             } else {
-              console.log(`📍 Location update skipped (change < ${distanceThreshold}m)`);
+              logger.debug(
+                `Location update skipped (change < ${distanceThreshold}m)`
+              );
             }
           }
         }
@@ -240,13 +318,18 @@ export function useLocationTracking(
       isTrackingRef.current = true;
       setIsTracking(true);
       setError(null);
-      console.log("✅ Location tracking started (background + foreground)");
+      logger.info("Location tracking started (background + foreground)");
     } catch (err: any) {
-      console.error("❌ Error starting location tracking:", err);
+      logger.error("Error starting location tracking", err);
       setError(err.message || "Failed to start location tracking");
       setIsTracking(false);
     }
-  }, [onLocationUpdate, sendLocationUpdate, distanceThreshold, lastSentLocation]);
+  }, [
+    onLocationUpdate,
+    sendLocationUpdate,
+    distanceThreshold,
+    // Removed lastSentLocation from dependencies - using ref instead to prevent infinite loop
+  ]);
 
   // Stop location tracking
   const stopTracking = useCallback(async () => {
@@ -257,34 +340,46 @@ export function useLocationTracking(
     }
 
     // Stop background location updates
-    try {
-      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-      if (isTaskRegistered) {
-        const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-        if (hasStarted) {
-          await GeoLocation.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-          console.log("🛑 Background location tracking stopped");
+    if (TaskManager && TaskManager.isTaskRegisteredAsync) {
+      try {
+        const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
+          BACKGROUND_LOCATION_TASK
+        );
+        if (isTaskRegistered) {
+          const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(
+            BACKGROUND_LOCATION_TASK
+          );
+          if (hasStarted) {
+            await GeoLocation.stopLocationUpdatesAsync(
+              BACKGROUND_LOCATION_TASK
+            );
+            logger.info("Background location tracking stopped");
+          }
         }
+      } catch (error: any) {
+        logger.error("Error stopping background location tracking", error);
       }
-    } catch (error: any) {
-      console.error("❌ Error stopping background location tracking:", error);
     }
 
     isTrackingRef.current = false;
     setIsTracking(false);
-    console.log("🛑 Location tracking stopped");
+    logger.info("Location tracking stopped");
   }, []);
 
   // Start/stop tracking based on isActive
   useEffect(() => {
-    if (isActive) {
+    // Only start/stop if state actually changed
+    if (isActive && !isTrackingRef.current) {
       startTracking();
-    } else {
+    } else if (!isActive && isTrackingRef.current) {
       stopTracking();
     }
 
     return () => {
-      stopTracking();
+      // Only cleanup if we're actually tracking
+      if (isTrackingRef.current) {
+        stopTracking();
+      }
     };
   }, [isActive, startTracking, stopTracking]);
 
@@ -297,4 +392,3 @@ export function useLocationTracking(
     stopTracking,
   };
 }
-

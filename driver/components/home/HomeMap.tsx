@@ -93,6 +93,11 @@ export default React.memo(function HomeMap({
         onMapReady={handleMapReady}
         onError={handleError}
         onDidFailLoadingMap={handleError}
+        mapType="standard"
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        loadingEnabled={true}
+        cacheEnabled={true}
       >
         {mapMarkers.destination && (
           <Marker
@@ -115,6 +120,15 @@ export default React.memo(function HomeMap({
             apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
             strokeWidth={4}
             strokeColor={color.primary}
+            optimizeWaypoints={true}
+            onReady={(result) => {
+              // Directions loaded successfully
+            }}
+            onError={(errorMessage) => {
+              if (onError) {
+                onError(new Error(errorMessage));
+              }
+            }}
           />
         )}
       </MapView>

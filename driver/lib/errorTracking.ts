@@ -3,6 +3,8 @@
  * Provides centralized error handling and reporting
  */
 
+import { getUserFriendlyErrorMessage } from "./errorMessages";
+
 interface ErrorContext {
   screen?: string;
   action?: string;
@@ -50,8 +52,10 @@ class ErrorTracker {
 
     // Log to console in development
     if (__DEV__) {
+      const userMessage = getUserFriendlyErrorMessage(errorObj, context);
       console.error("❌ Error tracked:", {
         message: errorObj.message,
+        userMessage,
         stack: errorObj.stack,
         context,
       });
