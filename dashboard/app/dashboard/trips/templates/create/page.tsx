@@ -61,7 +61,7 @@ const templateFormSchema = z.object({
         employees: z
           .array(
             z.object({
-              name: z.string().max(100).default(""),
+              name: z.string().max(100),
               employeeId: z.string().max(50).optional(),
             })
           )

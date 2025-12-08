@@ -204,7 +204,7 @@ export interface TripTemplatePoint {
   order: number;
   isFinalPoint: boolean;
   expectedTime?: string | null; // Stored as "HH:MM" format
-  employees?: Array<{ name: string; employeeId?: string }>;
+  employees?: Array<{ name?: string; employeeId?: string }>;
 }
 
 export interface TripTemplate {

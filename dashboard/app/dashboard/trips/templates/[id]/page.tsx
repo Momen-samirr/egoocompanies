@@ -62,7 +62,7 @@ const templateFormSchema = z.object({
         employees: z
           .array(
             z.object({
-              name: z.string().max(100).default(""),
+              name: z.string().max(100),
               employeeId: z.string().max(50).optional(),
             })
           )
@@ -151,7 +151,7 @@ export default function EditTemplatePage() {
             isFinalPoint: point.isFinalPoint,
             expectedTime: point.expectedTime || undefined,
             employees: (point.employees || []).map((emp) => ({
-              name: emp.name || "",
+              name: (emp.name ?? "") as string,
               employeeId: emp.employeeId,
             })),
           })),
