@@ -11,7 +11,13 @@ import {
   AppStateStatus,
   RefreshControl,
 } from "react-native";
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import Header from "@/components/common/header";
 import { useTheme } from "@react-navigation/native";
 import { external } from "@/styles/external.style";
@@ -37,14 +43,25 @@ import { getWebSocketUrl, getServerUri } from "@/configs/constants";
 import EmptyState from "@/components/common/EmptyState";
 import PassengerCard from "@/components/ride/PassengerCard";
 import ETADisplay from "@/components/common/ETADisplay";
-import { spacing, shadows } from "@/styles/design-system";
+import { spacing, shadows, borderRadius } from "@/styles/design-system";
 import fonts from "@/themes/app.fonts";
 import OverviewSection from "@/components/home/OverviewSection";
+import DriverStatusCard from "@/components/home/DriverStatusCard";
 import { runMapDiagnostics, logMapDiagnostics } from "@/utils/mapDiagnostics";
-import { requestAllLocationPermissions, hasBackgroundLocationPermission, getLocationPermissionStatus } from "@/utils/locationPermissions";
-import { promptDisableBatteryOptimization, showBatteryOptimizationInstructions } from "@/utils/batteryOptimization";
+import {
+  requestAllLocationPermissions,
+  hasBackgroundLocationPermission,
+  getLocationPermissionStatus,
+} from "@/utils/locationPermissions";
+import {
+  promptDisableBatteryOptimization,
+  showBatteryOptimizationInstructions,
+} from "@/utils/batteryOptimization";
 import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
-import { setWebSocketConnection, BACKGROUND_LOCATION_TASK } from "@/services/backgroundLocationTask";
+import {
+  setWebSocketConnection,
+  BACKGROUND_LOCATION_TASK,
+} from "@/services/backgroundLocationTask";
 // Conditionally import TaskManager to avoid errors if native module isn't ready
 let TaskManager: any = null;
 try {
@@ -60,6 +77,7 @@ export default function HomeScreen() {
   const [isOn, setIsOn] = useState<any>();
   const [loading, setloading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [showOfflineConfirmation, setShowOfflineConfirmation] = useState(false);
   const [region, setRegion] = useState<any>({
     latitude: 37.78825,
     longitude: -122.4324,
@@ -81,13 +99,13 @@ export default function HomeScreen() {
   const isOnRef = useRef<any>(undefined); // Track isOn in ref so callbacks always have latest value
   const processedNotificationIds = useRef<Set<string>>(new Set()); // Track processed notification IDs to prevent duplicates
   const isProcessingNotification = useRef<boolean>(false); // Prevent concurrent notification processing
-  
+
   // Push notification registration state tracking
   const isRegisteringToken = useRef<boolean>(false); // Prevent concurrent token registrations
   const tokenRegistrationCompleted = useRef<boolean>(false); // Track if token registration was completed
   const lastSavedToken = useRef<string | null>(null); // Store the last successfully saved token
   const appStateRegistrationTimeout = useRef<NodeJS.Timeout | null>(null); // For debouncing AppState listener
-  
+
   // Map error handling state
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -117,7 +135,7 @@ export default function HomeScreen() {
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     // Trigger refresh in OverviewSection
-    setRefreshTrigger(prev => prev + 1);
+    setRefreshTrigger((prev) => prev + 1);
     setTimeout(() => {
       setRefreshing(false);
     }, 1000);
@@ -134,22 +152,28 @@ export default function HomeScreen() {
       console.log("🔔 Notification ID:", notification.request.identifier);
       console.log("🔔 Notification title:", notification.request.content.title);
       console.log("🔔 Notification body:", notification.request.content.body);
-      console.log("🔔 Notification data:", JSON.stringify(notification.request.content.data, null, 2));
+      console.log(
+        "🔔 Notification data:",
+        JSON.stringify(notification.request.content.data, null, 2)
+      );
       console.log("🔔 Notification trigger:", notification.request.trigger);
-      
+
       // CRITICAL: Return shouldShowAlert: false to allow JavaScript listener to handle it
       // If we return true, Expo shows a system notification and the listener might not fire
       // We want to process the notification in JavaScript to show the modal
       return {
-        shouldShowAlert: false,  // Don't show system alert - let JavaScript handle it
-        shouldPlaySound: true,   // Play sound
-        shouldSetBadge: false,   // Don't set badge
+        shouldShowAlert: false, // Don't show system alert - let JavaScript handle it
+        shouldPlaySound: true, // Play sound
+        shouldSetBadge: false, // Don't set badge
       };
     },
   });
 
   // Helper function to handle notification data
-  const handleNotificationData = (notificationData: any, notificationId?: string) => {
+  const handleNotificationData = (
+    notificationData: any,
+    notificationId?: string
+  ) => {
     try {
       // Prevent concurrent processing of notifications
       if (isProcessingNotification.current) {
@@ -164,17 +188,20 @@ export default function HomeScreen() {
         uniqueId = notificationId;
       } else {
         // Create ID from notification data (user ID + timestamp or user phone)
-        const userPhone = notificationData?.orderData?.user?.phone_number || 
-                         notificationData?.user?.phone_number || 
-                         notificationData?.orderData?.user?.id ||
-                         notificationData?.user?.id ||
-                         Date.now().toString();
+        const userPhone =
+          notificationData?.orderData?.user?.phone_number ||
+          notificationData?.user?.phone_number ||
+          notificationData?.orderData?.user?.id ||
+          notificationData?.user?.id ||
+          Date.now().toString();
         uniqueId = `notification_${userPhone}_${Date.now()}`;
       }
 
       // Check if this notification was already processed
       if (processedNotificationIds.current.has(uniqueId)) {
-        console.log(`⚠️ Notification ${uniqueId} already processed, ignoring duplicate`);
+        console.log(
+          `⚠️ Notification ${uniqueId} already processed, ignoring duplicate`
+        );
         return;
       }
 
@@ -187,21 +214,26 @@ export default function HomeScreen() {
       // Clean up old notification IDs (keep only last 10 to prevent memory leak)
       if (processedNotificationIds.current.size > 10) {
         const firstId = processedNotificationIds.current.values().next().value;
-        processedNotificationIds.current.delete(firstId);
+        if (firstId) {
+          processedNotificationIds.current.delete(firstId);
+        }
       }
 
-      console.log("📬 Processing notification data:", JSON.stringify(notificationData, null, 2));
+      console.log(
+        "📬 Processing notification data:",
+        JSON.stringify(notificationData, null, 2)
+      );
       console.log("📬 Notification ID:", uniqueId);
-      
+
       // The notification data structure from Expo is: notification.request.content.data
       // And we send: { orderData: JSON.stringify(data) }
       // So we need to extract orderData and parse it
       let orderData;
-      
+
       // Check if notificationData has orderData property
       if (notificationData && notificationData.orderData) {
         // orderData might be a stringified JSON or already an object
-        if (typeof notificationData.orderData === 'string') {
+        if (typeof notificationData.orderData === "string") {
           try {
             orderData = JSON.parse(notificationData.orderData);
             console.log("✅ Parsed orderData from string:", orderData);
@@ -215,23 +247,29 @@ export default function HomeScreen() {
           orderData = notificationData.orderData;
           console.log("✅ Using orderData as object:", orderData);
         }
-      } else if (typeof notificationData === 'string') {
+      } else if (typeof notificationData === "string") {
         // Maybe the entire notificationData is a stringified JSON
         try {
           orderData = JSON.parse(notificationData);
           console.log("✅ Parsed entire notificationData as JSON:", orderData);
         } catch (parseError) {
-          console.error("❌ Error parsing notificationData as JSON:", parseError);
+          console.error(
+            "❌ Error parsing notificationData as JSON:",
+            parseError
+          );
           return;
         }
       } else {
         // Maybe notificationData itself is the orderData
         orderData = notificationData;
-        console.log("✅ Using notificationData directly as orderData:", orderData);
+        console.log(
+          "✅ Using notificationData directly as orderData:",
+          orderData
+        );
       }
-      
+
       console.log("📦 Final orderData:", JSON.stringify(orderData, null, 2));
-      
+
       // Check if this is a trip activation notification
       if (orderData && orderData.type === "tripActivation") {
         console.log("📬 Trip activation notification received:", orderData);
@@ -254,7 +292,7 @@ export default function HomeScreen() {
         });
         return;
       }
-      
+
       if (!orderData.currentLocation || !orderData.marker || !orderData.user) {
         console.error("❌ Invalid notification data - missing required fields");
         console.error("Missing fields:", {
@@ -262,80 +300,93 @@ export default function HomeScreen() {
           hasMarker: !!orderData.marker,
           hasUser: !!orderData.user,
         });
-        Toast.show("Invalid ride request data - missing location or user info", {
-          type: "danger",
-        });
+        Toast.show(
+          "Invalid ride request data - missing location or user info",
+          {
+            type: "danger",
+          }
+        );
         return;
       }
-      
+
       // Set location data first
       const pickupLocation = {
         latitude: orderData.currentLocation.latitude,
         longitude: orderData.currentLocation.longitude,
       };
-      
+
       const destinationLocation = {
         latitude: orderData.marker.latitude,
         longitude: orderData.marker.longitude,
       };
-      
+
       setCurrentLocation(pickupLocation);
       setMarker(destinationLocation);
-      
+
       // Calculate region
-      const latDelta = Math.abs(
-        pickupLocation.latitude - destinationLocation.latitude
-      ) * 2;
-      const lonDelta = Math.abs(
-        pickupLocation.longitude - destinationLocation.longitude
-      ) * 2;
-      
+      const latDelta =
+        Math.abs(pickupLocation.latitude - destinationLocation.latitude) * 2;
+      const lonDelta =
+        Math.abs(pickupLocation.longitude - destinationLocation.longitude) * 2;
+
       setRegion({
         latitude: (pickupLocation.latitude + destinationLocation.latitude) / 2,
-        longitude: (pickupLocation.longitude + destinationLocation.longitude) / 2,
+        longitude:
+          (pickupLocation.longitude + destinationLocation.longitude) / 2,
         latitudeDelta: Math.max(latDelta, 0.0922),
         longitudeDelta: Math.max(lonDelta, 0.0421),
       });
-      
+
       setdistance(orderData.distance || "0");
-      setcurrentLocationName(orderData.currentLocationName || orderData.currentLocation?.name || "Pickup Location");
-      setdestinationLocationName(orderData.destinationLocation || orderData.destinationLocationName || orderData.marker?.name || "Destination");
+      setcurrentLocationName(
+        orderData.currentLocationName ||
+          orderData.currentLocation?.name ||
+          "Pickup Location"
+      );
+      setdestinationLocationName(
+        orderData.destinationLocation ||
+          orderData.destinationLocationName ||
+          orderData.marker?.name ||
+          "Destination"
+      );
       setUserData(orderData.user);
-      
+
       console.log("✅ All data set successfully!");
       console.log("✅ User:", orderData.user?.name);
       console.log("✅ Distance:", orderData.distance);
       console.log("✅ Pickup:", orderData.currentLocationName);
       console.log("✅ Destination:", orderData.destinationLocation);
-      
+
       // Set modal visible LAST - this should trigger the modal to show
       console.log("🎯 STEP 9: Setting modal visible to true");
       console.log("🎯 Current modal state:", isModalVisible);
-      
+
       // CRITICAL: Update modal state immediately and forcefully
       // Use functional update to ensure React processes it
       setIsModalVisible(true);
       console.log("✅ STEP 10: Modal state set to true (immediate)");
-      
+
       // Also use functional update as backup
-      setIsModalVisible(prev => {
+      setIsModalVisible((prev) => {
         console.log("🔄 Modal state functional update, prev:", prev);
         return true;
       });
-      
+
       // Force re-render after tiny delay to ensure state change is processed
       setTimeout(() => {
         console.log("🔄 STEP 11: Force updating modal state...");
         setIsModalVisible(true);
         console.log("✅ STEP 12: Modal state force updated");
       }, 10);
-      
+
       console.log("✅ STEP 13: Modal update complete - should be visible now");
-      
     } catch (error: any) {
       console.error("❌ Error processing notification data:", error);
       console.error("Error stack:", error.stack);
-      console.error("Raw notification data:", JSON.stringify(notificationData, null, 2));
+      console.error(
+        "Raw notification data:",
+        JSON.stringify(notificationData, null, 2)
+      );
       Toast.show(`Error processing ride request: ${error.message}`, {
         type: "danger",
         duration: 5000,
@@ -350,138 +401,176 @@ export default function HomeScreen() {
   useEffect(() => {
     console.log("🔔 ===== SETTING UP NOTIFICATION LISTENERS =====");
     console.log("🔔 App state: Setting up listeners...");
-    
+
     // Verify notification permissions first
-    Notifications.getPermissionsAsync().then((permissions) => {
-      console.log("🔔 Notification permissions:", JSON.stringify(permissions, null, 2));
-      if (!permissions.granted) {
-        console.error("❌ Notification permissions not granted!");
-        Toast.show("Notification permissions not granted. Please enable notifications in settings.", {
-          type: "danger",
-          duration: 5000,
-        });
-      } else {
-        console.log("✅ Notification permissions granted");
-      }
-    }).catch((error) => {
-      console.error("❌ Error checking notification permissions:", error);
-    });
-    
+    Notifications.getPermissionsAsync()
+      .then((permissions) => {
+        console.log(
+          "🔔 Notification permissions:",
+          JSON.stringify(permissions, null, 2)
+        );
+        if (!permissions.granted) {
+          console.error("❌ Notification permissions not granted!");
+          Toast.show(
+            "Notification permissions not granted. Please enable notifications in settings.",
+            {
+              type: "danger",
+              duration: 5000,
+            }
+          );
+        } else {
+          console.log("✅ Notification permissions granted");
+        }
+      })
+      .catch((error) => {
+        console.error("❌ Error checking notification permissions:", error);
+      });
+
     // CRITICAL: Handle notifications received while app is in FOREGROUND
     // This listener will ONLY fire if shouldShowAlert: false in the notification handler
     // With shouldShowAlert: false, Expo won't show a system notification, and our listener will process it
-    const foregroundSubscription = Notifications.addNotificationReceivedListener((notification) => {
-      console.log("📱 ===== NOTIFICATION RECEIVED - LISTENER FIRED =====");
-      console.log("📱 Listener timestamp:", new Date().toISOString());
-      console.log("📱 Notification ID:", notification.request.identifier);
-      console.log("📱 Notification title:", notification.request.content.title);
-      console.log("📱 Notification body:", notification.request.content.body);
-      console.log("📱 Notification trigger type:", notification.request.trigger?.type);
-      console.log("📱 Notification structure check:", {
-        hasRequest: !!notification.request,
-        hasContent: !!notification.request?.content,
-        hasData: !!notification.request?.content?.data,
-        contentKeys: notification.request?.content ? Object.keys(notification.request.content) : [],
-      });
-      
-      // Prevent processing if already processing or modal is visible
-      if (isProcessingNotification.current || isModalVisible) {
-        console.log("⚠️ Already processing notification or modal visible, ignoring");
-        return;
-      }
-      
-      // Show toast immediately to confirm notification was received
-      Toast.show("📱 New ride request received!", {
-        type: "success",
-        duration: 3000,
-      });
-      
-      // Process notification IMMEDIATELY - no delays
-      try {
-        const data = notification.request.content.data;
-        
-        console.log("📦 STEP 1: Extracted data:", data);
-        console.log("📦 STEP 2: Data type:", typeof data);
-        console.log("📦 STEP 3: Data value:", data);
-        console.log("📦 STEP 4: Data is null?", data === null);
-        console.log("📦 STEP 5: Data is undefined?", data === undefined);
-        console.log("📦 STEP 6: Data keys:", data ? Object.keys(data) : "No keys");
-        console.log("📦 STEP 7: Full data JSON:", JSON.stringify(data, null, 2));
-        
-        if (!data) {
-          console.error("❌ ERROR: No data in notification.request.content.data");
-          console.error("❌ Full notification content:", JSON.stringify(notification.request.content, null, 2));
-          Toast.show("Notification received but no data found", {
-            type: "warning",
-            duration: 3000,
-          });
+    const foregroundSubscription =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log("📱 ===== NOTIFICATION RECEIVED - LISTENER FIRED =====");
+        console.log("📱 Listener timestamp:", new Date().toISOString());
+        console.log("📱 Notification ID:", notification.request.identifier);
+        console.log(
+          "📱 Notification title:",
+          notification.request.content.title
+        );
+        console.log("📱 Notification body:", notification.request.content.body);
+        console.log(
+          "📱 Notification trigger type:",
+          notification.request.trigger?.type
+        );
+        console.log("📱 Notification structure check:", {
+          hasRequest: !!notification.request,
+          hasContent: !!notification.request?.content,
+          hasData: !!notification.request?.content?.data,
+          contentKeys: notification.request?.content
+            ? Object.keys(notification.request.content)
+            : [],
+        });
+
+        // Prevent processing if already processing or modal is visible
+        if (isProcessingNotification.current || isModalVisible) {
+          console.log(
+            "⚠️ Already processing notification or modal visible, ignoring"
+          );
           return;
         }
-        
-        // CRITICAL: Process notification data immediately with notification ID
-        console.log("🔄 STEP 8: Calling handleNotificationData...");
-        handleNotificationData(data, notification.request.identifier);
-        console.log("✅ STEP 9: handleNotificationData called - modal should appear");
-      } catch (error: any) {
-        console.error("❌ ERROR: Exception in notification listener");
-        console.error("❌ Error message:", error.message);
-        console.error("❌ Error stack:", error.stack);
-        console.error("❌ Error details:", JSON.stringify(error, null, 2));
-        Toast.show(`Error: ${error.message}`, {
-          type: "danger",
-          duration: 5000,
+
+        // Show toast immediately to confirm notification was received
+        Toast.show("📱 New ride request received!", {
+          type: "success",
+          duration: 3000,
         });
-      }
-    });
+
+        // Process notification IMMEDIATELY - no delays
+        try {
+          const data = notification.request.content.data;
+
+          console.log("📦 STEP 1: Extracted data:", data);
+          console.log("📦 STEP 2: Data type:", typeof data);
+          console.log("📦 STEP 3: Data value:", data);
+          console.log("📦 STEP 4: Data is null?", data === null);
+          console.log("📦 STEP 5: Data is undefined?", data === undefined);
+          console.log(
+            "📦 STEP 6: Data keys:",
+            data ? Object.keys(data) : "No keys"
+          );
+          console.log(
+            "📦 STEP 7: Full data JSON:",
+            JSON.stringify(data, null, 2)
+          );
+
+          if (!data) {
+            console.error(
+              "❌ ERROR: No data in notification.request.content.data"
+            );
+            console.error(
+              "❌ Full notification content:",
+              JSON.stringify(notification.request.content, null, 2)
+            );
+            Toast.show("Notification received but no data found", {
+              type: "warning",
+              duration: 3000,
+            });
+            return;
+          }
+
+          // CRITICAL: Process notification data immediately with notification ID
+          console.log("🔄 STEP 8: Calling handleNotificationData...");
+          handleNotificationData(data, notification.request.identifier);
+          console.log(
+            "✅ STEP 9: handleNotificationData called - modal should appear"
+          );
+        } catch (error: any) {
+          console.error("❌ ERROR: Exception in notification listener");
+          console.error("❌ Error message:", error.message);
+          console.error("❌ Error stack:", error.stack);
+          console.error("❌ Error details:", JSON.stringify(error, null, 2));
+          Toast.show(`Error: ${error.message}`, {
+            type: "danger",
+            duration: 5000,
+          });
+        }
+      });
 
     // Handle notifications that open the app (when user TAPS on notification)
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log("👆 ===== NOTIFICATION TAPPED - APP OPENED =====");
-      console.log("👆 Timestamp:", new Date().toISOString());
-      console.log("👆 Action identifier:", response.actionIdentifier);
-      console.log("👆 Full response:", JSON.stringify(response, null, 2));
-      
-      // Prevent processing if already processing or modal is visible
-      if (isProcessingNotification.current || isModalVisible) {
-        console.log("⚠️ Already processing notification or modal visible, ignoring tapped notification");
-        return;
-      }
-      
-      // Show a toast to indicate notification was tapped
-      Toast.show("👆 Notification tapped - opening app...", {
-        type: "info",
-        duration: 3000,
-      });
-      
-      try {
-        const data = response.notification.request.content.data;
-        console.log("📦 Raw data from tapped notification:", data);
-        console.log("📦 Data type:", typeof data);
-        console.log("📦 Extracted data:", JSON.stringify(data, null, 2));
-        
-        if (!data) {
-          console.error("❌ No data found in tapped notification");
-          Toast.show("Notification tapped but no data found", {
-            type: "warning",
-            duration: 3000,
-          });
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        console.log("👆 ===== NOTIFICATION TAPPED - APP OPENED =====");
+        console.log("👆 Timestamp:", new Date().toISOString());
+        console.log("👆 Action identifier:", response.actionIdentifier);
+        console.log("👆 Full response:", JSON.stringify(response, null, 2));
+
+        // Prevent processing if already processing or modal is visible
+        if (isProcessingNotification.current || isModalVisible) {
+          console.log(
+            "⚠️ Already processing notification or modal visible, ignoring tapped notification"
+          );
           return;
         }
-        
-        // Delay slightly to ensure app is fully loaded
-        console.log("🔄 Processing tapped notification data...");
-        setTimeout(() => {
-          handleNotificationData(data, response.notification.request.identifier);
-        }, 500);
-      } catch (error: any) {
-        console.error("❌ Error handling tapped notification:", error);
-        console.error("❌ Error stack:", error.stack);
-        Toast.show(`Error processing tapped notification: ${error.message}`, {
-          type: "danger",
-          duration: 5000,
+
+        // Show a toast to indicate notification was tapped
+        Toast.show("👆 Notification tapped - opening app...", {
+          type: "info",
+          duration: 3000,
         });
-      }
-    });
+
+        try {
+          const data = response.notification.request.content.data;
+          console.log("📦 Raw data from tapped notification:", data);
+          console.log("📦 Data type:", typeof data);
+          console.log("📦 Extracted data:", JSON.stringify(data, null, 2));
+
+          if (!data) {
+            console.error("❌ No data found in tapped notification");
+            Toast.show("Notification tapped but no data found", {
+              type: "warning",
+              duration: 3000,
+            });
+            return;
+          }
+
+          // Delay slightly to ensure app is fully loaded
+          console.log("🔄 Processing tapped notification data...");
+          setTimeout(() => {
+            handleNotificationData(
+              data,
+              response.notification.request.identifier
+            );
+          }, 500);
+        } catch (error: any) {
+          console.error("❌ Error handling tapped notification:", error);
+          console.error("❌ Error stack:", error.stack);
+          Toast.show(`Error processing tapped notification: ${error.message}`, {
+            type: "danger",
+            duration: 5000,
+          });
+        }
+      });
 
     // Check if app was opened from a notification (when app was CLOSED)
     Notifications.getLastNotificationResponseAsync()
@@ -489,31 +578,39 @@ export default function HomeScreen() {
         if (response) {
           console.log("🚀 ===== APP WAS OPENED FROM NOTIFICATION =====");
           console.log("🚀 Timestamp:", new Date().toISOString());
-          console.log("🚀 Last notification response:", JSON.stringify(response, null, 2));
-          
+          console.log(
+            "🚀 Last notification response:",
+            JSON.stringify(response, null, 2)
+          );
+
           // Prevent processing if already processing or modal is visible
           if (isProcessingNotification.current || isModalVisible) {
-            console.log("⚠️ Already processing notification or modal visible, ignoring last notification");
+            console.log(
+              "⚠️ Already processing notification or modal visible, ignoring last notification"
+            );
             return;
           }
-          
+
           // Show a toast to indicate app was opened from notification
           Toast.show("🚀 App opened from notification", {
             type: "info",
             duration: 3000,
           });
-          
+
           try {
             const data = response.notification.request.content.data;
             console.log("📦 Raw data from last notification:", data);
             console.log("📦 Data type:", typeof data);
             console.log("📦 Extracted data:", JSON.stringify(data, null, 2));
-            
+
             if (data) {
               // Delay to ensure app is fully loaded before showing modal
               console.log("🔄 Processing last notification data...");
               setTimeout(() => {
-                handleNotificationData(data, response.notification.request.identifier);
+                handleNotificationData(
+                  data,
+                  response.notification.request.identifier
+                );
               }, 1000);
             } else {
               console.error("❌ No data found in last notification");
@@ -540,8 +637,14 @@ export default function HomeScreen() {
       });
 
     console.log("✅ Notification listeners set up successfully");
-    console.log("✅ Foreground listener:", foregroundSubscription ? "✅ Active" : "❌ Failed");
-    console.log("✅ Response listener:", responseSubscription ? "✅ Active" : "❌ Failed");
+    console.log(
+      "✅ Foreground listener:",
+      foregroundSubscription ? "✅ Active" : "❌ Failed"
+    );
+    console.log(
+      "✅ Response listener:",
+      responseSubscription ? "✅ Active" : "❌ Failed"
+    );
 
     return () => {
       console.log("🧹 Cleaning up notification listeners");
@@ -558,13 +661,15 @@ export default function HomeScreen() {
     const fetchStatus = async () => {
       const status: any = await AsyncStorage.getItem("status");
       const newIsOn = status === "active" ? true : false;
-      console.log(`📋 Driver status loaded from storage: "${status}" -> isOn=${newIsOn}`);
+      console.log(
+        `📋 Driver status loaded from storage: "${status}" -> isOn=${newIsOn}`
+      );
       setIsOn(newIsOn);
       isOnRef.current = newIsOn; // Keep ref in sync with state
     };
     fetchStatus();
   }, []);
-  
+
   // Keep ref in sync whenever isOn changes
   useEffect(() => {
     isOnRef.current = isOn;
@@ -573,37 +678,54 @@ export default function HomeScreen() {
 
   // Monitor AppState to handle foreground/background transitions
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", async (nextAppState: AppStateStatus) => {
-      console.log(`📱 App state changed: ${nextAppState}`);
-      
-      if (nextAppState === "background" || nextAppState === "inactive") {
-        console.log("📱 App moved to background - location tracking should continue if permissions are granted");
-        
-        // Check if we have background permission
-        const hasBackground = await hasBackgroundLocationPermission();
-        if (!hasBackground && isOnRef.current === true) {
-          console.warn("⚠️ App in background but background location permission not granted");
-          Toast.show("Background location permission required for tracking when screen is off", {
-            type: "warning",
-            duration: 3000,
-          });
-        } else if (hasBackground && isOnRef.current === true) {
-          console.log("✅ Background location permission granted - tracking will continue");
-        }
-      } else if (nextAppState === "active") {
-        console.log("📱 App moved to foreground");
-        
-        // When app comes to foreground, verify permissions are still granted
-        if (isOnRef.current === true) {
-          const permissionStatus = await getLocationPermissionStatus();
-          console.log("📍 Permission status on foreground:", permissionStatus);
-          
-          if (!permissionStatus.background && Platform.OS === "android") {
-            console.warn("⚠️ Background location permission may have been revoked");
+    const subscription = AppState.addEventListener(
+      "change",
+      async (nextAppState: AppStateStatus) => {
+        console.log(`📱 App state changed: ${nextAppState}`);
+
+        if (nextAppState === "background" || nextAppState === "inactive") {
+          console.log(
+            "📱 App moved to background - location tracking should continue if permissions are granted"
+          );
+
+          // Check if we have background permission
+          const hasBackground = await hasBackgroundLocationPermission();
+          if (!hasBackground && isOnRef.current === true) {
+            console.warn(
+              "⚠️ App in background but background location permission not granted"
+            );
+            Toast.show(
+              "Background location permission required for tracking when screen is off",
+              {
+                type: "warning",
+                duration: 3000,
+              }
+            );
+          } else if (hasBackground && isOnRef.current === true) {
+            console.log(
+              "✅ Background location permission granted - tracking will continue"
+            );
+          }
+        } else if (nextAppState === "active") {
+          console.log("📱 App moved to foreground");
+
+          // When app comes to foreground, verify permissions are still granted
+          if (isOnRef.current === true) {
+            const permissionStatus = await getLocationPermissionStatus();
+            console.log(
+              "📍 Permission status on foreground:",
+              permissionStatus
+            );
+
+            if (!permissionStatus.background && Platform.OS === "android") {
+              console.warn(
+                "⚠️ Background location permission may have been revoked"
+              );
+            }
           }
         }
       }
-    });
+    );
 
     return () => {
       subscription.remove();
@@ -628,56 +750,63 @@ export default function HomeScreen() {
   useEffect(() => {
     let isMounted = true;
     let appStateSubscription: any = null;
-    
+
     // Only register if driver is logged in (has accessToken)
     const checkAndRegister = async () => {
       if (!isMounted) return;
-      
+
       // Guard: Prevent concurrent registrations
       if (isRegisteringToken.current) {
         console.log("⚠️ Token registration already in progress, skipping...");
         return;
       }
-      
+
       try {
         const accessToken = await AsyncStorage.getItem("accessToken");
         if (accessToken) {
-          console.log("🔑 Driver is logged in - registering for push notifications...");
+          console.log(
+            "🔑 Driver is logged in - registering for push notifications..."
+          );
           await registerForPushNotificationsAsync();
         } else {
-          console.warn("⚠️ Driver not logged in - skipping push notification registration");
+          console.warn(
+            "⚠️ Driver not logged in - skipping push notification registration"
+          );
         }
       } catch (error) {
         console.error("❌ Error checking access token:", error);
       }
     };
-    
+
     // Only register if driver ID exists (not just when driver object changes)
     if (driver?.id) {
       // Register immediately when driver data is loaded
       // The token comparison inside registerForPushNotificationsAsync will prevent duplicate saves
       checkAndRegister();
     }
-    
+
     // Also register when app comes to foreground to ensure token is fresh and valid
     // Add debouncing to prevent rapid successive calls
-    appStateSubscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
-      if (nextAppState === "active" && isMounted) {
-        // Clear any pending timeout
-        if (appStateRegistrationTimeout.current) {
-          clearTimeout(appStateRegistrationTimeout.current);
-        }
-        
-        // Debounce: Wait 1 second before checking (prevents rapid triggers)
-        appStateRegistrationTimeout.current = setTimeout(() => {
-          if (isMounted && !isRegisteringToken.current) {
-            console.log("📱 App came to foreground - checking push token...");
-            checkAndRegister();
+    appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (nextAppState === "active" && isMounted) {
+          // Clear any pending timeout
+          if (appStateRegistrationTimeout.current) {
+            clearTimeout(appStateRegistrationTimeout.current);
           }
-        }, 1000);
+
+          // Debounce: Wait 1 second before checking (prevents rapid triggers)
+          appStateRegistrationTimeout.current = setTimeout(() => {
+            if (isMounted && !isRegisteringToken.current) {
+              console.log("📱 App came to foreground - checking push token...");
+              checkAndRegister();
+            }
+          }, 1000);
+        }
       }
-    });
-    
+    );
+
     return () => {
       isMounted = false;
       if (appStateSubscription) {
@@ -695,37 +824,42 @@ export default function HomeScreen() {
   async function registerForPushNotificationsAsync() {
     // Early return guard: Prevent concurrent registrations
     if (isRegisteringToken.current) {
-      console.log("⚠️ Token registration already in progress, skipping duplicate call...");
+      console.log(
+        "⚠️ Token registration already in progress, skipping duplicate call..."
+      );
       return;
     }
-    
+
     // Set registration in progress flag
     isRegisteringToken.current = true;
-    
+
     try {
       console.log("🔔 ===== STARTING PUSH NOTIFICATION REGISTRATION =====");
       console.log("🔔 Timestamp:", new Date().toISOString());
-      
+
       if (!isPhysicalDevice()) {
-        console.warn("⚠️ Not a physical device - push notifications not available");
+        console.warn(
+          "⚠️ Not a physical device - push notifications not available"
+        );
         Toast.show("Must use physical device for Push Notifications", {
           type: "danger",
         });
         isRegisteringToken.current = false;
         return;
       }
-    
+
       // Step 1: Request/check notification permissions
       console.log("📋 Step 1: Checking notification permissions...");
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
-      
+
       if (existingStatus !== "granted") {
         console.log("📋 Requesting notification permissions...");
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      
+
       if (finalStatus !== "granted") {
         console.error("❌ Notification permissions not granted:", finalStatus);
         Toast.show("Failed to get push token for push notification!", {
@@ -734,15 +868,15 @@ export default function HomeScreen() {
         isRegisteringToken.current = false;
         return;
       }
-      
+
       console.log("✅ Notification permissions granted");
-      
+
       // Step 2: Get project ID
       console.log("📋 Step 2: Getting project ID...");
       const projectId =
         Constants?.expoConfig?.extra?.eas?.projectId ??
         Constants?.easConfig?.projectId;
-      
+
       if (!projectId) {
         console.error("❌ Project ID not found for push notifications");
         console.error("❌ expoConfig:", Constants?.expoConfig);
@@ -753,19 +887,19 @@ export default function HomeScreen() {
         isRegisteringToken.current = false;
         return;
       }
-      
+
       console.log("✅ Project ID found:", projectId);
-      
+
       // Step 3: Get Expo push token (this generates a fresh token)
       console.log("📋 Step 3: Getting Expo push token...");
       console.log("📋 This will generate a NEW token if needed...");
-      
+
       const pushTokenString = (
         await Notifications.getExpoPushTokenAsync({
           projectId,
         })
       ).data;
-      
+
       if (!pushTokenString) {
         console.error("❌ Failed to get push token - token is null/undefined");
         Toast.show("Failed to get push token", {
@@ -774,7 +908,7 @@ export default function HomeScreen() {
         isRegisteringToken.current = false;
         return;
       }
-      
+
       // Validate token format
       if (!pushTokenString.startsWith("ExponentPushToken[")) {
         console.error("❌ Invalid push token format:", pushTokenString);
@@ -784,7 +918,7 @@ export default function HomeScreen() {
         isRegisteringToken.current = false;
         return;
       }
-      
+
       console.log("✅ ===== PUSH TOKEN OBTAINED SUCCESSFULLY =====");
       console.log("✅ Token:", pushTokenString);
       console.log("✅ Token format: Valid");
@@ -792,175 +926,227 @@ export default function HomeScreen() {
       console.log("✅ Device is device:", isPhysicalDevice());
       console.log("✅ Platform:", Platform.OS);
       console.log("✅ Timestamp:", new Date().toISOString());
-      
+
       // Early return guard: Check if this token was already saved
       if (lastSavedToken.current === pushTokenString) {
-        console.log("✅ Token already saved previously, skipping save operation...");
+        console.log(
+          "✅ Token already saved previously, skipping save operation..."
+        );
         console.log("✅ Token:", pushTokenString);
         tokenRegistrationCompleted.current = true;
         isRegisteringToken.current = false;
         return;
       }
-        
-        // CRITICAL: Save notification token to database
-        // This token must match what's in the database for notifications to work
-        // We need to wait for accessToken to be available
-        const saveTokenToDatabase = async (retries = 10) => {
-          console.log("💾 Starting token save process...");
-          
-          for (let i = 0; i < retries; i++) {
-            try {
-              console.log(`🔄 Attempting to save token (attempt ${i + 1}/${retries})...`);
-              
-              // Wait a bit longer on first few attempts to ensure driver is logged in
-              if (i > 0) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              }
-              
-              const accessToken = await AsyncStorage.getItem("accessToken");
-              
-              if (!accessToken) {
-                console.warn(`⚠️ Access token not available (attempt ${i + 1})`);
-                console.warn(`⚠️ Driver may not be logged in yet - will retry...`);
-                if (i < retries - 1) {
-                  continue;
-                } else {
-                  console.error("❌ Failed to save token: No access token after all retries");
-                  console.error("❌ Driver must be logged in to save notification token");
-                  console.error("❌ Token will be saved automatically when driver logs in");
-                  Toast.show("Please log in to enable push notifications", {
-                    type: "warning",
-                    duration: 3000,
-                  });
-                  return;
-                }
-              }
-              
-              if (!pushTokenString) {
-                console.error("❌ Failed to save token: No push token");
-                return;
-              }
-              
-              console.log("📤 Sending token to server...");
-              console.log("📤 Token:", pushTokenString);
-              console.log("📤 Server URL:", `${getServerUri()}/driver/update-notification-token`);
-              
-              const response = await axios.put(
-                `${getServerUri()}/driver/update-notification-token`,
-                {
-                  notificationToken: pushTokenString,
-                },
-                {
-                  headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                  },
-                  timeout: 10000, // 10 second timeout
-                }
+
+      // CRITICAL: Save notification token to database
+      // This token must match what's in the database for notifications to work
+      // We need to wait for accessToken to be available
+      const saveTokenToDatabase = async (retries = 10) => {
+        console.log("💾 Starting token save process...");
+
+        for (let i = 0; i < retries; i++) {
+          try {
+            console.log(
+              `🔄 Attempting to save token (attempt ${i + 1}/${retries})...`
+            );
+
+            // Wait a bit longer on first few attempts to ensure driver is logged in
+            if (i > 0) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+
+            const accessToken = await AsyncStorage.getItem("accessToken");
+
+            if (!accessToken) {
+              console.warn(`⚠️ Access token not available (attempt ${i + 1})`);
+              console.warn(
+                `⚠️ Driver may not be logged in yet - will retry...`
               );
-              
-              console.log("✅ ===== NOTIFICATION TOKEN SAVED SUCCESSFULLY =====");
-              console.log("✅ Saved token:", pushTokenString);
-              console.log("✅ Server response:", JSON.stringify(response.data, null, 2));
-              console.log("✅ Token in database:", response.data?.driver?.notificationToken);
-              
-              // Verify token matches
-              if (response.data?.driver?.notificationToken === pushTokenString) {
-                console.log("✅ Token verification: MATCH - notifications should work!");
-                
-                // Only show toast if this is a new token (not already saved)
-                const isNewToken = lastSavedToken.current !== pushTokenString;
-                if (isNewToken) {
-                  Toast.show("Push notifications enabled!", {
-                    type: "success",
-                    duration: 2000,
-                  });
-                }
-                
-                // Update tracking refs
-                lastSavedToken.current = pushTokenString;
-                tokenRegistrationCompleted.current = true;
+              if (i < retries - 1) {
+                continue;
               } else {
-                console.error("❌ Token verification: MISMATCH!");
-                console.error("❌ Expected:", pushTokenString);
-                console.error("❌ Got:", response.data?.driver?.notificationToken);
-                console.error("❌ This will cause notifications to fail!");
-              }
-              
-              return; // Success, exit function
-            } catch (error: any) {
-              console.error(`❌ Error saving notification token (attempt ${i + 1}):`, error.message);
-              console.error("❌ Error response:", error.response?.data);
-              console.error("❌ Error status:", error.response?.status);
-              console.error("❌ Error code:", error.code);
-              
-              // Check if it's a network error
-              if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-                console.warn("⚠️ Request timeout - network may be slow");
-              } else if (error.response?.status === 401) {
-                console.error("❌ Unauthorized - access token may be invalid");
-                console.error("❌ Driver may need to log in again");
-                Toast.show("Please log in again to enable notifications", {
+                console.error(
+                  "❌ Failed to save token: No access token after all retries"
+                );
+                console.error(
+                  "❌ Driver must be logged in to save notification token"
+                );
+                console.error(
+                  "❌ Token will be saved automatically when driver logs in"
+                );
+                Toast.show("Please log in to enable push notifications", {
                   type: "warning",
                   duration: 3000,
                 });
-                return; // Don't retry if unauthorized
-              } else if (error.response?.status >= 500) {
-                console.warn("⚠️ Server error - will retry");
-              }
-              
-              if (i < retries - 1) {
-                console.log(`⏳ Waiting ${2 * (i + 1)} seconds before retry...`);
-                await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
-              } else {
-                console.error("❌ Failed to save notification token after all retries");
-                console.error("❌ Notifications will NOT work until token is saved!");
-                console.error("❌ Possible causes:");
-                console.error("   1. Driver is not logged in");
-                console.error("   2. Network connection issue");
-                console.error("   3. Server is down");
-                console.error("   4. Access token is invalid");
-                Toast.show("Failed to save notification token. Please check your connection and try again.", {
-                  type: "warning",
-                  duration: 5000,
-                });
+                return;
               }
             }
+
+            if (!pushTokenString) {
+              console.error("❌ Failed to save token: No push token");
+              return;
+            }
+
+            console.log("📤 Sending token to server...");
+            console.log("📤 Token:", pushTokenString);
+            console.log(
+              "📤 Server URL:",
+              `${getServerUri()}/driver/update-notification-token`
+            );
+
+            const response = await axios.put(
+              `${getServerUri()}/driver/update-notification-token`,
+              {
+                notificationToken: pushTokenString,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                timeout: 10000, // 10 second timeout
+              }
+            );
+
+            console.log("✅ ===== NOTIFICATION TOKEN SAVED SUCCESSFULLY =====");
+            console.log("✅ Saved token:", pushTokenString);
+            console.log(
+              "✅ Server response:",
+              JSON.stringify(response.data, null, 2)
+            );
+            console.log(
+              "✅ Token in database:",
+              response.data?.driver?.notificationToken
+            );
+
+            // Verify token matches
+            if (response.data?.driver?.notificationToken === pushTokenString) {
+              console.log(
+                "✅ Token verification: MATCH - notifications should work!"
+              );
+
+              // Only show toast if this is a new token (not already saved)
+              const isNewToken = lastSavedToken.current !== pushTokenString;
+              if (isNewToken) {
+                Toast.show("Push notifications enabled!", {
+                  type: "success",
+                  duration: 2000,
+                });
+              }
+
+              // Update tracking refs
+              lastSavedToken.current = pushTokenString;
+              tokenRegistrationCompleted.current = true;
+            } else {
+              console.error("❌ Token verification: MISMATCH!");
+              console.error("❌ Expected:", pushTokenString);
+              console.error(
+                "❌ Got:",
+                response.data?.driver?.notificationToken
+              );
+              console.error("❌ This will cause notifications to fail!");
+            }
+
+            return; // Success, exit function
+          } catch (error: any) {
+            console.error(
+              `❌ Error saving notification token (attempt ${i + 1}):`,
+              error.message
+            );
+            console.error("❌ Error response:", error.response?.data);
+            console.error("❌ Error status:", error.response?.status);
+            console.error("❌ Error code:", error.code);
+
+            // Check if it's a network error
+            if (
+              error.code === "ECONNABORTED" ||
+              error.message.includes("timeout")
+            ) {
+              console.warn("⚠️ Request timeout - network may be slow");
+            } else if (error.response?.status === 401) {
+              console.error("❌ Unauthorized - access token may be invalid");
+              console.error("❌ Driver may need to log in again");
+              Toast.show("Please log in again to enable notifications", {
+                type: "warning",
+                duration: 3000,
+              });
+              return; // Don't retry if unauthorized
+            } else if (error.response?.status >= 500) {
+              console.warn("⚠️ Server error - will retry");
+            }
+
+            if (i < retries - 1) {
+              console.log(`⏳ Waiting ${2 * (i + 1)} seconds before retry...`);
+              await new Promise((resolve) =>
+                setTimeout(resolve, 2000 * (i + 1))
+              );
+            } else {
+              console.error(
+                "❌ Failed to save notification token after all retries"
+              );
+              console.error(
+                "❌ Notifications will NOT work until token is saved!"
+              );
+              console.error("❌ Possible causes:");
+              console.error("   1. Driver is not logged in");
+              console.error("   2. Network connection issue");
+              console.error("   3. Server is down");
+              console.error("   4. Access token is invalid");
+              Toast.show(
+                "Failed to save notification token. Please check your connection and try again.",
+                {
+                  type: "warning",
+                  duration: 5000,
+                }
+              );
+            }
           }
-        };
-        
-        // Save token to database and wait for completion
-        // This ensures the registration flag is only reset after save completes
-        await saveTokenToDatabase().catch(err => {
-          console.error("❌ Unexpected error in token save process:", err);
-          console.error("❌ Error stack:", err.stack);
-        });
-      } catch (e: any) {
-        console.error("Error getting push token:", e);
-        
-        // Check if it's a Firebase initialization error
-        const errorMessage = e?.message || String(e);
-        const isFirebaseError = errorMessage.includes("FirebaseApp") || errorMessage.includes("Firebase");
-        
-        if (isFirebaseError) {
-          console.warn("Firebase not initialized. This usually happens when:");
-          console.warn("1. The app needs to be rebuilt with expo-notifications plugin");
-          console.warn("2. Run: npx expo prebuild --clean (if using bare workflow)");
-          console.warn("3. Or rebuild the app with: npx expo run:android");
-          console.warn("4. Push notifications will work after rebuilding the app");
-          
-          // Don't show error to user - this is a configuration issue that needs a rebuild
-          // The app can still function without push notifications
-        } else if (isPhysicalDevice()) {
-          // Only show other errors on real devices
-          Toast.show("Push notifications may not be available. Please rebuild the app.", {
+        }
+      };
+
+      // Save token to database and wait for completion
+      // This ensures the registration flag is only reset after save completes
+      await saveTokenToDatabase().catch((err) => {
+        console.error("❌ Unexpected error in token save process:", err);
+        console.error("❌ Error stack:", err.stack);
+      });
+    } catch (e: any) {
+      console.error("Error getting push token:", e);
+
+      // Check if it's a Firebase initialization error
+      const errorMessage = e?.message || String(e);
+      const isFirebaseError =
+        errorMessage.includes("FirebaseApp") ||
+        errorMessage.includes("Firebase");
+
+      if (isFirebaseError) {
+        console.warn("Firebase not initialized. This usually happens when:");
+        console.warn(
+          "1. The app needs to be rebuilt with expo-notifications plugin"
+        );
+        console.warn(
+          "2. Run: npx expo prebuild --clean (if using bare workflow)"
+        );
+        console.warn("3. Or rebuild the app with: npx expo run:android");
+        console.warn(
+          "4. Push notifications will work after rebuilding the app"
+        );
+
+        // Don't show error to user - this is a configuration issue that needs a rebuild
+        // The app can still function without push notifications
+      } else if (isPhysicalDevice()) {
+        // Only show other errors on real devices
+        Toast.show(
+          "Push notifications may not be available. Please rebuild the app.",
+          {
             type: "warning",
             duration: 3000,
-          });
-        }
-      } finally {
-        // Always reset the registration flag, even if there was an error
-        isRegisteringToken.current = false;
+          }
+        );
       }
+    } finally {
+      // Always reset the registration flag, even if there was an error
+      isRegisteringToken.current = false;
+    }
 
     if (Platform.OS === "android") {
       Notifications.setNotificationChannelAsync("default", {
@@ -981,26 +1167,36 @@ export default function HomeScreen() {
 
     const connectWebSocket = () => {
       const wsUrl = getWebSocketUrl();
-      console.log(`🔌 Attempting to connect to WebSocket: ${wsUrl} (Attempt ${reconnectAttempts + 1})`);
-      
+      console.log(
+        `🔌 Attempting to connect to WebSocket: ${wsUrl} (Attempt ${
+          reconnectAttempts + 1
+        })`
+      );
+
       try {
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
-          console.log("✅ [WebSocket] Connected to WebSocket server successfully");
+          console.log(
+            "✅ [WebSocket] Connected to WebSocket server successfully"
+          );
           console.log("✅ [WebSocket] URL:", wsUrl);
           console.log("✅ [WebSocket] Driver status (isOn):", isOnRef.current);
           setWsConnected(true);
           reconnectAttempts = 0; // Reset reconnect attempts on successful connection
           // Set WebSocket connection for background task
           setWebSocketConnection(ws.current);
-          
+
           // If driver is already active and we have a location, send it immediately
           if (isOnRef.current && currentLocation) {
-            console.log("✅ [WebSocket] Driver is active and has location - sending immediately");
+            console.log(
+              "✅ [WebSocket] Driver is active and has location - sending immediately"
+            );
             sendLocationUpdateWithRetry(currentLocation).then((success) => {
               if (success) {
-                console.log("✅ [WebSocket] Initial location sent after connection");
+                console.log(
+                  "✅ [WebSocket] Initial location sent after connection"
+                );
               }
             });
           }
@@ -1009,7 +1205,7 @@ export default function HomeScreen() {
         ws.current.onmessage = (e) => {
           try {
             // Check if this is a binary message (ping/pong)
-            if (typeof e.data === 'string') {
+            if (typeof e.data === "string") {
               const message = JSON.parse(e.data);
               console.log("📨 Received WebSocket message:", message);
               // Handle received location updates here
@@ -1028,43 +1224,60 @@ export default function HomeScreen() {
           console.error(`❌ WebSocket error: ${errorMsg}`);
           console.error("❌ Error details:", JSON.stringify(e, null, 2));
           setWsConnected(false);
-          
+
           // Don't immediately reconnect on error - wait for close event
           // The close event will handle reconnection logic
         };
 
         ws.current.onclose = (e) => {
           const wasClean = e.wasClean !== undefined ? e.wasClean : false;
-          console.log(`🔌 WebSocket closed: code=${e.code}, reason="${e.reason || 'No reason provided'}", wasClean=${wasClean}`);
+          console.log(
+            `🔌 WebSocket closed: code=${e.code}, reason="${
+              e.reason || "No reason provided"
+            }", wasClean=${wasClean}`
+          );
           setWsConnected(false);
-          
+
           // Attempt to reconnect if we haven't exceeded max attempts
           // Code 1006 (abnormal closure) or other non-clean closures should reconnect
           // Code 1000 (normal closure) or 1001 (going away) typically shouldn't reconnect
-          const shouldReconnect = !wasClean && 
-                                  e.code !== 1000 && 
-                                  e.code !== 1001 && 
-                                  reconnectAttempts < maxReconnectAttempts;
-          
+          const shouldReconnect =
+            !wasClean &&
+            e.code !== 1000 &&
+            e.code !== 1001 &&
+            reconnectAttempts < maxReconnectAttempts;
+
           if (shouldReconnect) {
             reconnectAttempts++;
-            console.log(`🔄 Will attempt to reconnect in ${reconnectDelay/1000} seconds... (${reconnectAttempts}/${maxReconnectAttempts})`);
-            
+            console.log(
+              `🔄 Will attempt to reconnect in ${
+                reconnectDelay / 1000
+              } seconds... (${reconnectAttempts}/${maxReconnectAttempts})`
+            );
+
             reconnectTimeout = setTimeout(() => {
-              console.log(`🔄 Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts}...`);
+              console.log(
+                `🔄 Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts}...`
+              );
               connectWebSocket();
             }, reconnectDelay);
           } else if (reconnectAttempts >= maxReconnectAttempts) {
-            console.error(`❌ Max reconnection attempts (${maxReconnectAttempts}) reached. Please check WebSocket server.`);
-            console.error(`   Last close code: ${e.code}, wasClean: ${wasClean}`);
+            console.error(
+              `❌ Max reconnection attempts (${maxReconnectAttempts}) reached. Please check WebSocket server.`
+            );
+            console.error(
+              `   Last close code: ${e.code}, wasClean: ${wasClean}`
+            );
           } else if (wasClean) {
-            console.log(`ℹ️ Connection closed cleanly (code ${e.code}). Not reconnecting.`);
+            console.log(
+              `ℹ️ Connection closed cleanly (code ${e.code}). Not reconnecting.`
+            );
           }
         };
       } catch (error: any) {
         console.error("❌ Failed to create WebSocket:", error);
         setWsConnected(false);
-        
+
         // Retry connection
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
@@ -1093,34 +1306,48 @@ export default function HomeScreen() {
 
   // Track previous isOn value to detect when driver becomes active
   const prevIsOnRef = useRef<any>(undefined);
-  
+
   // Send initial location when WebSocket connects and driver is active
   useEffect(() => {
-    console.log(`🔄 Location send effect triggered: wsConnected=${wsConnected}, isOn=${isOn}, hasLocation=${!!currentLocation}`);
-    
-    const driverJustBecameActive = prevIsOnRef.current !== true && isOn === true;
+    console.log(
+      `🔄 Location send effect triggered: wsConnected=${wsConnected}, isOn=${isOn}, hasLocation=${!!currentLocation}`
+    );
+
+    const driverJustBecameActive =
+      prevIsOnRef.current !== true && isOn === true;
     prevIsOnRef.current = isOn;
-    
+
     if (driverJustBecameActive) {
       console.log("🔄 [Location Send Effect] Driver just became active!");
     }
-    
+
     if (wsConnected && isOn === true && currentLocation) {
       // Send immediately if driver just became active or this is initial connection
       if (driverJustBecameActive || !lastLocation) {
-        console.log("✅ [Location Send Effect] All conditions met - sending location with retry");
+        console.log(
+          "✅ [Location Send Effect] All conditions met - sending location with retry"
+        );
         sendLocationUpdateWithRetry(currentLocation).then((success) => {
           if (success) {
-            console.log("✅ [Location Send Effect] Location update sent successfully");
+            console.log(
+              "✅ [Location Send Effect] Location update sent successfully"
+            );
           } else {
-            console.log("⚠️ [Location Send Effect] Location update will be retried automatically");
+            console.log(
+              "⚠️ [Location Send Effect] Location update will be retried automatically"
+            );
           }
         });
       }
     } else {
-      if (!wsConnected) console.log("⚠️ [Location Send Effect] WebSocket not connected");
-      if (isOn !== true) console.log(`⚠️ [Location Send Effect] Driver not active (isOn=${isOn})`);
-      if (!currentLocation) console.log("⚠️ [Location Send Effect] No current location yet");
+      if (!wsConnected)
+        console.log("⚠️ [Location Send Effect] WebSocket not connected");
+      if (isOn !== true)
+        console.log(
+          `⚠️ [Location Send Effect] Driver not active (isOn=${isOn})`
+        );
+      if (!currentLocation)
+        console.log("⚠️ [Location Send Effect] No current location yet");
     }
   }, [wsConnected, isOn, currentLocation]);
 
@@ -1147,22 +1374,34 @@ export default function HomeScreen() {
   }, []);
 
   // Retry mechanism for sending location updates
-  const sendLocationUpdateWithRetry = async (location: any, retryCount = 0, maxRetries = 3) => {
+  const sendLocationUpdateWithRetry = async (
+    location: any,
+    retryCount = 0,
+    maxRetries = 3
+  ) => {
     const currentIsOn = isOnRef.current;
     if (!currentIsOn) {
-      console.log(`⚠️ [sendLocationUpdateWithRetry] Driver is inactive - skipping location update`);
+      console.log(
+        `⚠️ [sendLocationUpdateWithRetry] Driver is inactive - skipping location update`
+      );
       return false;
     }
 
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
       if (retryCount < maxRetries) {
-        console.log(`⚠️ [sendLocationUpdateWithRetry] WebSocket not ready, retrying in 1 second... (${retryCount + 1}/${maxRetries})`);
+        console.log(
+          `⚠️ [sendLocationUpdateWithRetry] WebSocket not ready, retrying in 1 second... (${
+            retryCount + 1
+          }/${maxRetries})`
+        );
         setTimeout(() => {
           sendLocationUpdateWithRetry(location, retryCount + 1, maxRetries);
         }, 1000);
         return false;
       } else {
-        console.log("⚠️ [sendLocationUpdateWithRetry] WebSocket not connected after max retries - cannot send location update");
+        console.log(
+          "⚠️ [sendLocationUpdateWithRetry] WebSocket not connected after max retries - cannot send location update"
+        );
         return false;
       }
     }
@@ -1172,31 +1411,50 @@ export default function HomeScreen() {
 
   const sendLocationUpdate = async (location: any) => {
     console.log("📍 [sendLocationUpdate] Starting location update process");
-    console.log("📍 [sendLocationUpdate] Location:", { lat: location.latitude, lng: location.longitude, heading: location.heading });
-    
+    console.log("📍 [sendLocationUpdate] Location:", {
+      lat: location.latitude,
+      lng: location.longitude,
+      heading: location.heading,
+    });
+
     // Only send location updates if driver is active (use ref to get latest value)
     const currentIsOn = isOnRef.current;
-    console.log("📍 [sendLocationUpdate] Driver status check - isOn:", currentIsOn);
+    console.log(
+      "📍 [sendLocationUpdate] Driver status check - isOn:",
+      currentIsOn
+    );
     if (!currentIsOn) {
-      console.log(`⚠️ [sendLocationUpdate] Driver is inactive (isOn=${currentIsOn}) - skipping location update`);
+      console.log(
+        `⚠️ [sendLocationUpdate] Driver is inactive (isOn=${currentIsOn}) - skipping location update`
+      );
       return false;
     }
 
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      console.log("⚠️ [sendLocationUpdate] WebSocket not connected - cannot send location update");
-      console.log("⚠️ [sendLocationUpdate] WebSocket state:", ws.current ? ws.current.readyState : "null");
+      console.log(
+        "⚠️ [sendLocationUpdate] WebSocket not connected - cannot send location update"
+      );
+      console.log(
+        "⚠️ [sendLocationUpdate] WebSocket state:",
+        ws.current ? ws.current.readyState : "null"
+      );
       return false;
     }
     console.log("✅ [sendLocationUpdate] WebSocket is connected and ready");
 
     const accessToken = await AsyncStorage.getItem("accessToken");
     if (!accessToken) {
-      console.error("❌ [sendLocationUpdate] No access token - cannot fetch driver data");
+      console.error(
+        "❌ [sendLocationUpdate] No access token - cannot fetch driver data"
+      );
       return;
     }
     console.log("✅ [sendLocationUpdate] Access token found");
 
-    console.log("📡 [sendLocationUpdate] Fetching driver data from:", `${getServerUri()}/driver/me`);
+    console.log(
+      "📡 [sendLocationUpdate] Fetching driver data from:",
+      `${getServerUri()}/driver/me`
+    );
     await axios
       .get(`${getServerUri()}/driver/me`, {
         headers: {
@@ -1213,7 +1471,7 @@ export default function HomeScreen() {
             status: driverStatus,
             vehicleType: driverData.vehicle_type,
           });
-          
+
           const message = JSON.stringify({
             type: "locationUpdate",
             data: {
@@ -1227,50 +1485,70 @@ export default function HomeScreen() {
             role: "driver",
             driver: driverData.id,
           });
-          
-          console.log("📤 [sendLocationUpdate] Sending location update via WebSocket:", {
-            type: "locationUpdate",
-            driverId: driverData.id,
-            location: { lat: location.latitude, lng: location.longitude },
-            status: driverStatus,
-          });
-          
-          ws.current.send(message);
-          console.log("✅ [sendLocationUpdate] Location update sent successfully via WebSocket");
-          
+
+          console.log(
+            "📤 [sendLocationUpdate] Sending location update via WebSocket:",
+            {
+              type: "locationUpdate",
+              driverId: driverData.id,
+              location: { lat: location.latitude, lng: location.longitude },
+              status: driverStatus,
+            }
+          );
+
+          if (ws.current) {
+            ws.current.send(message);
+            console.log(
+              "✅ [sendLocationUpdate] Location update sent successfully via WebSocket"
+            );
+          }
+
           // Also update location for scheduled trips (only if driver is online)
           // The backend will check if driver is online, so we can safely call this
-          axios.post(
-            `${getServerUri()}/driver/update-location`,
-            {
-              latitude: location.latitude,
-              longitude: location.longitude,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
+          axios
+            .post(
+              `${getServerUri()}/driver/update-location`,
+              {
+                latitude: location.latitude,
+                longitude: location.longitude,
               },
-            }
-          ).then((res) => {
-            if (res.data.success && res.data.activationChecks) {
-              // Check if any trips became available
-              const availableTrips = res.data.activationChecks.filter(
-                (check: any) => check.canActivate
-              );
-              if (availableTrips.length > 0) {
-                console.log(`✅ [sendLocationUpdate] ${availableTrips.length} trip(s) are now available to start`);
-                // Notification will be sent by the backend
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
               }
-            }
-          }).catch((error: any) => {
-            // Non-critical error - might be because driver is offline
-            if (error.response?.status === 400 && error.response?.data?.message?.includes("online")) {
-              console.log("⚠️ [sendLocationUpdate] Location update skipped - driver is offline");
-            } else {
-              console.log("⚠️ [sendLocationUpdate] Failed to update location for scheduled trips:", error.message);
-            }
-          });
-          
+            )
+            .then((res) => {
+              if (res.data.success && res.data.activationChecks) {
+                // Check if any trips became available
+                const availableTrips = res.data.activationChecks.filter(
+                  (check: any) => check.canActivate
+                );
+                if (availableTrips.length > 0) {
+                  console.log(
+                    `✅ [sendLocationUpdate] ${availableTrips.length} trip(s) are now available to start`
+                  );
+                  // Notification will be sent by the backend
+                }
+              }
+            })
+            .catch((error: any) => {
+              // Non-critical error - might be because driver is offline
+              if (
+                error.response?.status === 400 &&
+                error.response?.data?.message?.includes("online")
+              ) {
+                console.log(
+                  "⚠️ [sendLocationUpdate] Location update skipped - driver is offline"
+                );
+              } else {
+                console.log(
+                  "⚠️ [sendLocationUpdate] Failed to update location for scheduled trips:",
+                  error.message
+                );
+              }
+            });
+
           return true;
         } else {
           console.error("❌ [sendLocationUpdate] No driver data in response");
@@ -1278,10 +1556,13 @@ export default function HomeScreen() {
         }
       })
       .catch((error) => {
-        console.error("❌ [sendLocationUpdate] Error fetching driver data:", error);
+        console.error(
+          "❌ [sendLocationUpdate] Error fetching driver data:",
+          error
+        );
         return false;
       });
-    
+
     return false;
   };
 
@@ -1296,7 +1577,7 @@ export default function HomeScreen() {
       // Request all location permissions (foreground + background)
       console.log("📍 Requesting location permissions...");
       const { foreground, background } = await requestAllLocationPermissions();
-      
+
       if (!foreground) {
         Toast.show("Please grant location permission to use this app!", {
           type: "danger",
@@ -1306,10 +1587,13 @@ export default function HomeScreen() {
 
       if (!background) {
         console.warn("⚠️ Background location permission not granted");
-        Toast.show("Background location is required for tracking when screen is off. Please enable it in Settings.", {
-          type: "warning",
-          duration: 5000,
-        });
+        Toast.show(
+          "Background location is required for tracking when screen is off. Please enable it in Settings.",
+          {
+            type: "warning",
+            duration: 5000,
+          }
+        );
       } else {
         console.log("✅ Background location permission granted");
       }
@@ -1325,33 +1609,45 @@ export default function HomeScreen() {
 
       // Check if background task is registered
       if (TaskManager && TaskManager.isTaskRegisteredAsync) {
-        const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+        const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
+          BACKGROUND_LOCATION_TASK
+        );
         if (!isTaskRegistered) {
-          console.warn("⚠️ Background location task not registered - location updates may not work in background");
+          console.warn(
+            "⚠️ Background location task not registered - location updates may not work in background"
+          );
         }
       } else {
-        console.warn("⚠️ TaskManager not available - cannot check task registration");
+        console.warn(
+          "⚠️ TaskManager not available - cannot check task registration"
+        );
       }
 
       // Start background location updates using task manager
       // This works even when the app is in the background
       if (isOn) {
         try {
-          await GeoLocation.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-            accuracy: GeoLocation.Accuracy.High,
-            timeInterval: 5000, // 5 seconds
-            distanceInterval: 10, // 10 meters
-            foregroundService: {
-              notificationTitle: "Location Tracking Active",
-              notificationBody: "Tracking your location for ride requests",
-              notificationColor: "#10B981",
-            },
-            pausesUpdatesAutomatically: false,
-            showsBackgroundLocationIndicator: true,
-          });
+          await GeoLocation.startLocationUpdatesAsync(
+            BACKGROUND_LOCATION_TASK,
+            {
+              accuracy: GeoLocation.Accuracy.High,
+              timeInterval: 5000, // 5 seconds
+              distanceInterval: 10, // 10 meters
+              foregroundService: {
+                notificationTitle: "Location Tracking Active",
+                notificationBody: "Tracking your location for ride requests",
+                notificationColor: "#10B981",
+              },
+              pausesUpdatesAutomatically: false,
+              showsBackgroundLocationIndicator: true,
+            }
+          );
           console.log("✅ Background location tracking started");
         } catch (error: any) {
-          console.error("❌ Error starting background location tracking:", error);
+          console.error(
+            "❌ Error starting background location tracking:",
+            error
+          );
         }
       }
 
@@ -1366,26 +1662,34 @@ export default function HomeScreen() {
         },
         async (position) => {
           const { latitude, longitude, heading } = position.coords;
-          const newLocation = { 
-            latitude, 
+          const newLocation = {
+            latitude,
             longitude,
-            heading: heading !== null && heading !== undefined && heading >= 0 ? heading : undefined
+            heading:
+              heading !== null && heading !== undefined && heading >= 0
+                ? heading
+                : undefined,
           };
-          
+
           // Always update current location
           setCurrentLocation(newLocation);
-          
+
           // Use ref to get latest isOn value (avoid stale closure)
           const currentIsOn = isOnRef.current;
           const currentWs = ws.current;
-          
+
           // Only send location update if driver is active and WebSocket is connected
-          if (currentIsOn === true && currentWs && currentWs.readyState === WebSocket.OPEN) {
+          if (
+            currentIsOn === true &&
+            currentWs &&
+            currentWs.readyState === WebSocket.OPEN
+          ) {
             // Use optimized location update check
             const currentLastLocation = lastLocation;
-            const shouldSend = firstLocationAfterActive || 
-                              shouldSendLocationUpdate(currentLastLocation, newLocation, 200);
-            
+            const shouldSend =
+              firstLocationAfterActive ||
+              shouldSendLocationUpdate(currentLastLocation, newLocation, 200);
+
             if (shouldSend) {
               const isFirstAfterActive = firstLocationAfterActive;
               firstLocationAfterActive = false; // Reset flag after first send
@@ -1400,41 +1704,58 @@ export default function HomeScreen() {
             // Update lastLocation even if not sending update
             setLastLocation(newLocation);
             if (currentIsOn !== true) {
-              console.log(`📍 Location received but driver is inactive (isOn=${currentIsOn}) - not sending`);
+              console.log(
+                `📍 Location received but driver is inactive (isOn=${currentIsOn}) - not sending`
+              );
             } else if (!currentWs || currentWs.readyState !== WebSocket.OPEN) {
-              console.log(`📍 Location received but WebSocket not connected (readyState=${currentWs?.readyState}) - not sending`);
+              console.log(
+                `📍 Location received but WebSocket not connected (readyState=${currentWs?.readyState}) - not sending`
+              );
             }
           }
         }
       );
-      
+
       locationWatchSubscription.current = subscription;
-      
+
       return () => {
         // Stop foreground watcher
         if (locationWatchSubscription.current) {
           locationWatchSubscription.current.remove();
           locationWatchSubscription.current = null;
         }
-        
+
         // Stop background location updates if driver is inactive
         if (!isOn) {
           (async () => {
             try {
               if (TaskManager && TaskManager.isTaskRegisteredAsync) {
-                const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+                const isTaskRegistered =
+                  await TaskManager.isTaskRegisteredAsync(
+                    BACKGROUND_LOCATION_TASK
+                  );
                 if (isTaskRegistered) {
-                  const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+                  const hasStarted =
+                    await GeoLocation.hasStartedLocationUpdatesAsync(
+                      BACKGROUND_LOCATION_TASK
+                    );
                   if (hasStarted) {
-                    await GeoLocation.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+                    await GeoLocation.stopLocationUpdatesAsync(
+                      BACKGROUND_LOCATION_TASK
+                    );
                     console.log("🛑 Background location tracking stopped");
                   }
                 }
               } else {
-                console.warn("⚠️ TaskManager not available - cannot stop background location tracking");
+                console.warn(
+                  "⚠️ TaskManager not available - cannot stop background location tracking"
+                );
               }
             } catch (error: any) {
-              console.error("❌ Error stopping background location tracking:", error);
+              console.error(
+                "❌ Error stopping background location tracking:",
+                error
+              );
             }
           })();
         }
@@ -1444,14 +1765,11 @@ export default function HomeScreen() {
 
   const getRecentRides = async () => {
     const accessToken = await AsyncStorage.getItem("accessToken");
-    const res = await axios.get(
-      `${getServerUri()}/driver/get-rides`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    const res = await axios.get(`${getServerUri()}/driver/get-rides`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
     setrecentRides(res.data.rides);
   };
 
@@ -1467,110 +1785,221 @@ export default function HomeScreen() {
     isProcessingNotification.current = false;
   }, []);
 
-  // Memoize handleStatusChange to prevent unnecessary re-renders
+  // Enhanced status change handler with retry logic and confirmation
   const handleStatusChange = useCallback(async () => {
-    if (!loading) {
-      console.log("🔄 [handleStatusChange] Starting status change");
-      console.log("🔄 [handleStatusChange] Current status:", isOn ? "active" : "inactive");
-      setloading(true);
-      const accessToken = await AsyncStorage.getItem("accessToken");
-      const newStatus = !isOn ? "active" : "inactive";
-      console.log("🔄 [handleStatusChange] Changing status to:", newStatus);
-      
-      const changeStatus = await axios.put(
-        `${getServerUri()}/driver/update-status`,
-        {
-          status: newStatus,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-      if (changeStatus.data) {
-        console.log("✅ [handleStatusChange] Status updated successfully:", changeStatus.data.driver.status);
-        const newIsOn = !isOn;
-        setIsOn(newIsOn);
-        isOnRef.current = newIsOn; // Update ref immediately
-        await AsyncStorage.setItem("status", changeStatus.data.driver.status);
-        console.log("✅ [handleStatusChange] Local state updated - isOn:", newIsOn);
-        
-        // Start/stop foreground service and handle location tracking
-        if (newStatus === "active") {
-          // Driver going active - start foreground service and prompt for battery optimization
-          try {
-            // Check if we have background permission
-            const hasBackground = await hasBackgroundLocationPermission();
-            if (!hasBackground) {
-              console.warn("⚠️ Background location permission not granted");
-              Toast.show("Background location is required for tracking when screen is off", {
-                type: "warning",
-                duration: 4000,
-              });
-            }
-
-            // Start foreground service for background location tracking
-            // expo-location handles this automatically when watching position with background permission
-            console.log("✅ Starting location tracking with foreground service");
-            
-            // Prompt user to disable battery optimization (only once, can be skipped)
-            // We'll show this as a one-time prompt
-            const batteryOptPromptShown = await AsyncStorage.getItem("batteryOptPromptShown");
-            if (!batteryOptPromptShown && Platform.OS === "android") {
-              setTimeout(() => {
-                promptDisableBatteryOptimization();
-                AsyncStorage.setItem("batteryOptPromptShown", "true");
-              }, 2000); // Show after 2 seconds to not interrupt the status change
-            }
-
-            // If driver goes active, send current location immediately with retry logic
-            console.log("🔄 [handleStatusChange] Driver went active - checking if we can send location");
-            console.log("🔄 [handleStatusChange] Current location:", currentLocation);
-            console.log("🔄 [handleStatusChange] WebSocket state:", ws.current ? ws.current.readyState : "null");
-            console.log("🔄 [handleStatusChange] WebSocket connected state:", wsConnected);
-            
-            if (currentLocation) {
-              // Use retry mechanism to ensure location is sent even if WebSocket isn't immediately ready
-              console.log("✅ [handleStatusChange] Attempting to send location update with retry");
-              sendLocationUpdateWithRetry(currentLocation).then((success) => {
-                if (success) {
-                  console.log("✅ [handleStatusChange] Location update sent successfully");
-                } else {
-                  console.log("⚠️ [handleStatusChange] Location update will be retried automatically");
-                }
-              });
-            } else {
-              console.log("⚠️ [handleStatusChange] No current location available yet");
-            }
-          } catch (error) {
-            console.error("Error starting location tracking:", error);
-          }
-        } else {
-          // Driver going inactive - stop foreground service
-          console.log("🛑 Stopping location tracking");
-          // expo-location will handle stopping the foreground service automatically
-          // when we stop watching position or when the app goes to background
-          
-          // Notify socket server when driver goes inactive
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            // Send a message to remove driver from available drivers
-            const message = JSON.stringify({
-              type: "driverStatusChange",
-              role: "driver",
-              driver: changeStatus.data.driver.id,
-              status: "inactive",
-            });
-            ws.current.send(message);
-          }
-        }
-        
-        setloading(false);
-      } else {
-        setloading(false);
-      }
+    if (loading) {
+      return; // Prevent concurrent status changes
     }
-  }, [loading, isOn, currentLocation]);
+
+    // Show confirmation modal when going offline
+    if (isOn) {
+      setShowOfflineConfirmation(true);
+      return;
+    }
+
+    // Proceed with going online
+    await performStatusChange("active");
+  }, [loading, isOn, performStatusChange]);
+
+  // Actual status change implementation with retry logic
+  const performStatusChange = useCallback(
+    async (targetStatus: "active" | "inactive", retryCount = 0) => {
+      const maxRetries = 3;
+      const retryDelay = 1000 * Math.pow(2, retryCount); // Exponential backoff
+
+      if (loading && retryCount === 0) {
+        return; // Prevent concurrent status changes
+      }
+
+      console.log(
+        `🔄 [performStatusChange] Attempting status change to: ${targetStatus} (attempt ${
+          retryCount + 1
+        }/${maxRetries + 1})`
+      );
+
+      // Optimistic UI update
+      const previousIsOn = isOn;
+      const optimisticIsOn = targetStatus === "active";
+      if (retryCount === 0) {
+        setIsOn(optimisticIsOn);
+        isOnRef.current = optimisticIsOn;
+        setloading(true);
+      }
+
+      try {
+        const accessToken = await AsyncStorage.getItem("accessToken");
+        if (!accessToken) {
+          throw new Error("No access token available");
+        }
+
+        // Check WebSocket connection when going online
+        if (targetStatus === "active" && !wsConnected) {
+          console.warn(
+            "⚠️ WebSocket not connected - status may not sync properly"
+          );
+          Toast.show("Connection issue detected. Please check your internet.", {
+            type: "warning",
+            duration: 3000,
+          });
+        }
+
+        const response = await axios.put(
+          `${getServerUri()}/driver/update-status`,
+          {
+            status: targetStatus,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            timeout: 10000, // 10 second timeout
+          }
+        );
+
+        if (response.data && response.data.driver) {
+          console.log(
+            "✅ [performStatusChange] Status updated successfully:",
+            response.data.driver.status
+          );
+          const newIsOn = response.data.driver.status === "active";
+          setIsOn(newIsOn);
+          isOnRef.current = newIsOn;
+          await AsyncStorage.setItem("status", response.data.driver.status);
+
+          Toast.show(
+            `You are now ${targetStatus === "active" ? "online" : "offline"}`,
+            {
+              type: "success",
+              duration: 2000,
+            }
+          );
+
+          // Handle location tracking based on status
+          if (targetStatus === "active") {
+            // Driver going active - start foreground service and prompt for battery optimization
+            try {
+              // Check if we have background permission
+              const hasBackground = await hasBackgroundLocationPermission();
+              if (!hasBackground) {
+                console.warn("⚠️ Background location permission not granted");
+                Toast.show(
+                  "Background location is required for tracking when screen is off",
+                  {
+                    type: "warning",
+                    duration: 4000,
+                  }
+                );
+              }
+
+              // Start foreground service for background location tracking
+              console.log(
+                "✅ Starting location tracking with foreground service"
+              );
+
+              // Prompt user to disable battery optimization (only once, can be skipped)
+              const batteryOptPromptShown = await AsyncStorage.getItem(
+                "batteryOptPromptShown"
+              );
+              if (!batteryOptPromptShown && Platform.OS === "android") {
+                setTimeout(() => {
+                  promptDisableBatteryOptimization();
+                  AsyncStorage.setItem("batteryOptPromptShown", "true");
+                }, 2000);
+              }
+
+              // Send current location immediately with retry logic
+              if (currentLocation) {
+                console.log("✅ Attempting to send location update with retry");
+                sendLocationUpdateWithRetry(currentLocation).then((success) => {
+                  if (success) {
+                    console.log("✅ Location update sent successfully");
+                  } else {
+                    console.log(
+                      "⚠️ Location update will be retried automatically"
+                    );
+                  }
+                });
+              } else {
+                console.log("⚠️ No current location available yet");
+              }
+            } catch (error) {
+              console.error("Error starting location tracking:", error);
+            }
+          } else {
+            // Driver going inactive - stop foreground service
+            console.log("🛑 Stopping location tracking");
+
+            // Notify socket server when driver goes inactive
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              const message = JSON.stringify({
+                type: "driverStatusChange",
+                role: "driver",
+                driver: response.data.driver.id,
+                status: "inactive",
+              });
+              ws.current.send(message);
+            }
+          }
+
+          setloading(false);
+        } else {
+          throw new Error("Invalid response from server");
+        }
+      } catch (error: any) {
+        console.error(
+          `❌ [performStatusChange] Error (attempt ${retryCount + 1}):`,
+          error
+        );
+
+        // Rollback optimistic update on first failure
+        if (retryCount === 0) {
+          setIsOn(previousIsOn);
+          isOnRef.current = previousIsOn;
+        }
+
+        // Retry logic
+        if (retryCount < maxRetries) {
+          const isNetworkError =
+            error.code === "ECONNABORTED" ||
+            error.code === "ERR_NETWORK" ||
+            error.message?.includes("timeout") ||
+            error.message?.includes("Network");
+
+          if (isNetworkError || error.response?.status >= 500) {
+            console.log(`⏳ Retrying in ${retryDelay / 1000} seconds...`);
+            setTimeout(() => {
+              performStatusChange(targetStatus, retryCount + 1);
+            }, retryDelay);
+            return;
+          }
+        }
+
+        // All retries failed or non-retryable error
+        setloading(false);
+        const errorMessage =
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to update status. Please check your connection and try again.";
+
+        Toast.show(errorMessage, {
+          type: "danger",
+          duration: 4000,
+        });
+      }
+    },
+    [loading, isOn, currentLocation, wsConnected]
+  );
+
+  // Confirm going offline
+  const confirmGoOffline = useCallback(() => {
+    setShowOfflineConfirmation(false);
+    performStatusChange("inactive");
+  }, [performStatusChange]);
+
+  // Cancel going offline
+  const cancelGoOffline = useCallback(() => {
+    setShowOfflineConfirmation(false);
+  }, []);
 
   const sendPushNotification = async (expoPushToken: string, data: any) => {
     const message = {
@@ -1597,7 +2026,7 @@ export default function HomeScreen() {
 
     setloading(true);
     const accessToken = await AsyncStorage.getItem("accessToken");
-    
+
     try {
       const res = await axios.post(
         `${getServerUri()}/driver/new-ride`,
@@ -1656,11 +2085,22 @@ export default function HomeScreen() {
     } finally {
       setloading(false);
     }
-  }, [loading, userData, distance, driver, currentLocationName, destinationLocationName, currentLocation, marker]);
+  }, [
+    loading,
+    userData,
+    distance,
+    driver,
+    currentLocationName,
+    destinationLocationName,
+    currentLocation,
+    marker,
+  ]);
 
   // Memoize expensive calculations to avoid recalculating on every render
   const estimatedFare = useMemo(() => {
-    return distance ? (distance * parseInt(driver?.rate || "0")).toFixed(2) : "0.00";
+    return distance
+      ? (distance * parseInt(driver?.rate || "0")).toFixed(2)
+      : "0.00";
   }, [distance, driver?.rate]);
 
   const estimatedDistance = useMemo(() => {
@@ -1670,7 +2110,12 @@ export default function HomeScreen() {
   // Memoize map region to prevent unnecessary re-renders
   const memoizedRegion = useMemo(() => {
     return region;
-  }, [region.latitude, region.longitude, region.latitudeDelta, region.longitudeDelta]);
+  }, [
+    region.latitude,
+    region.longitude,
+    region.latitudeDelta,
+    region.longitudeDelta,
+  ]);
 
   // Memoize map markers to prevent unnecessary re-renders
   const mapMarkers = useMemo(() => {
@@ -1678,11 +2123,24 @@ export default function HomeScreen() {
       destination: marker,
       pickup: currentLocation,
     };
-  }, [marker?.latitude, marker?.longitude, currentLocation?.latitude, currentLocation?.longitude]);
+  }, [
+    marker?.latitude,
+    marker?.longitude,
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+  ]);
 
   return (
     <View style={[external.fx_1, { backgroundColor: colors.background }]}>
-      <Header isOn={isOn} toggleSwitch={() => handleStatusChange()} />
+      <Header isOn={isOn} />
+      {/* Driver Status Card */}
+      <DriverStatusCard
+        isOnline={isOn === true}
+        isLoading={loading}
+        onToggle={handleStatusChange}
+        wsConnected={wsConnected}
+        showConnectionStatus={true}
+      />
       <ScrollView
         style={styles.spaceBelow}
         refreshControl={
@@ -1721,7 +2179,7 @@ export default function HomeScreen() {
                 marginRight: spacing.md,
               }}
             >
-              <Calender colors={color.primary} width={24} height={24} />
+              <Calender colors={color.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text
@@ -1783,28 +2241,28 @@ export default function HomeScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Map View - Larger */}
-              <View style={{ height: windowHeight(300), borderRadius: 12, overflow: "hidden", marginBottom: spacing.lg, position: "relative" }}>
+              <View
+                style={{
+                  height: windowHeight(300),
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  marginBottom: spacing.lg,
+                  position: "relative",
+                }}
+              >
                 <MapView
                   style={{ flex: 1 }}
                   region={memoizedRegion}
-                  onRegionChangeComplete={useCallback((newRegion) => {
+                  onRegionChangeComplete={useCallback((newRegion: any) => {
                     setRegion(newRegion);
                   }, [])}
                   onMapReady={useCallback(() => {
-                    console.log("✅ Home screen map ready and loaded successfully");
+                    console.log(
+                      "✅ Home screen map ready and loaded successfully"
+                    );
                     setMapReady(true);
                     setMapLoading(false);
                     setMapError(null);
-                  }, [])}
-                  onError={useCallback((error) => {
-                    console.error("❌ Home screen map error:", error);
-                    setMapError(`Map error: ${error.message || "Unknown error"}`);
-                    setMapLoading(false);
-                  }, [])}
-                  onDidFailLoadingMap={useCallback((error) => {
-                    console.error("❌ Home screen map failed to load:", error);
-                    setMapError(`Failed to load map: ${error.message || "Unknown error"}`);
-                    setMapLoading(false);
                   }, [])}
                 >
                   {mapMarkers.destination && (
@@ -1831,7 +2289,7 @@ export default function HomeScreen() {
                     />
                   )}
                 </MapView>
-                
+
                 {/* Map Error Display */}
                 {mapError && (
                   <View
@@ -1846,12 +2304,18 @@ export default function HomeScreen() {
                       zIndex: 1000,
                     }}
                   >
-                    <Text style={{ color: "white", fontSize: 12, fontWeight: "bold" }}>
+                    <Text
+                      style={{
+                        color: "white",
+                        fontSize: 12,
+                        fontWeight: "bold",
+                      }}
+                    >
                       Map Error: {mapError}
                     </Text>
                   </View>
                 )}
-                
+
                 {/* Map Loading Indicator */}
                 {mapLoading && !mapError && (
                   <View
@@ -1867,7 +2331,9 @@ export default function HomeScreen() {
                       zIndex: 999,
                     }}
                   >
-                    <Text style={{ color: "white", fontSize: 14 }}>Loading map...</Text>
+                    <Text style={{ color: "white", fontSize: 14 }}>
+                      Loading map...
+                    </Text>
                   </View>
                 )}
               </View>
@@ -1888,7 +2354,9 @@ export default function HomeScreen() {
                   marginBottom: spacing.lg,
                 }}
               >
-                <View style={{ flexDirection: "row", marginBottom: spacing.md }}>
+                <View
+                  style={{ flexDirection: "row", marginBottom: spacing.md }}
+                >
                   <View style={styles.leftView}>
                     <Location color={color.status.completed} />
                     <View
@@ -1979,6 +2447,81 @@ export default function HomeScreen() {
                 />
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Offline Confirmation Modal */}
+      <Modal
+        visible={showOfflineConfirmation}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={cancelGoOffline}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: spacing.lg,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.background,
+              borderRadius: borderRadius.lg,
+              padding: spacing.xl,
+              width: "100%",
+              maxWidth: 400,
+              ...shadows.lg,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: fontSizes.FONT20,
+                fontFamily: fonts.bold,
+                color: colors.text,
+                marginBottom: spacing.md,
+                textAlign: "center",
+              }}
+            >
+              Go Offline?
+            </Text>
+            <Text
+              style={{
+                fontSize: fontSizes.FONT14,
+                fontFamily: fonts.regular,
+                color: color.text.secondary,
+                marginBottom: spacing.xl,
+                textAlign: "center",
+                lineHeight: 20,
+              }}
+            >
+              You will stop receiving ride requests. You can go online again
+              anytime.
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                gap: spacing.md,
+              }}
+            >
+              <Button
+                title="Cancel"
+                onPress={cancelGoOffline}
+                width="48%"
+                height={windowHeight(50)}
+                backgroundColor={color.text.secondary}
+              />
+              <Button
+                title="Go Offline"
+                onPress={confirmGoOffline}
+                width="48%"
+                height={windowHeight(50)}
+                backgroundColor={color.semantic.error}
+              />
+            </View>
           </View>
         </View>
       </Modal>
