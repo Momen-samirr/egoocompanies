@@ -3,6 +3,7 @@ import * as GeoLocation from "expo-location";
 import { Toast } from "react-native-toast-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import { AppState, AppStateStatus, Platform } from "react-native";
 import { getServerUri } from "@/configs/constants";
 import {
   requestAllLocationPermissions,
@@ -12,7 +13,7 @@ import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
 import { updateDriverLocation } from "@/services/locationService";
 import {
   BACKGROUND_LOCATION_TASK,
-  setWebSocketConnection,
+  isBackgroundLocationTaskRegistered,
 } from "@/services/backgroundLocationTask";
 import { logger } from "@/lib/logger";
 
@@ -74,6 +75,9 @@ export function useLocationTracking(
   const firstLocationAfterActiveRef = useRef(false);
   const isTrackingRef = useRef(false);
   const lastSentLocationRef = useRef<Location | null>(null);
+  const backgroundLocationStartedRef = useRef(false);
+  const monitoringIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const appStateSubscriptionRef = useRef<any>(null);
 
   // Keep ref in sync with isActive
   useEffect(() => {
@@ -201,52 +205,95 @@ export function useLocationTracking(
       // Reset first location flag
       firstLocationAfterActiveRef.current = isActiveRef.current;
 
-      // Check if task is registered
-      if (TaskManager && TaskManager.isTaskRegisteredAsync) {
-        try {
-          const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
-            BACKGROUND_LOCATION_TASK
-          );
-          if (!isTaskRegistered) {
-            logger.warn(
-              "Background location task not registered - location updates may not work in background"
-            );
-          }
-        } catch (error) {
-          logger.warn("Error checking task registration", error);
-        }
-      } else {
-        logger.warn(
-          "TaskManager not available - cannot check task registration"
-        );
-      }
-
-      // Start background location updates using task manager
-      // This works even when the app is in the background
+      // CRITICAL: Ensure task is registered BEFORE starting location updates
       if (isActive && TaskManager) {
         try {
-          await GeoLocation.startLocationUpdatesAsync(
-            BACKGROUND_LOCATION_TASK,
-            {
-              accuracy: GeoLocation.Accuracy.High,
-              timeInterval: 5000, // 5 seconds
-              distanceInterval: 10, // 10 meters
-              foregroundService: {
-                notificationTitle: "Location Tracking Active",
-                notificationBody: "Tracking your location for ride requests",
-                notificationColor: "#10B981",
-              },
-              pausesUpdatesAutomatically: false,
-              showsBackgroundLocationIndicator: true,
+          // Wait for task registration with timeout
+          let taskRegistered = false;
+          let attempts = 0;
+          const maxAttempts = 10;
+
+          while (!taskRegistered && attempts < maxAttempts) {
+            taskRegistered = await isBackgroundLocationTaskRegistered();
+            if (!taskRegistered) {
+              logger.debug(
+                `Waiting for background location task registration (attempt ${
+                  attempts + 1
+                }/${maxAttempts})...`
+              );
+              await new Promise((resolve) => setTimeout(resolve, 500));
+              attempts++;
             }
-          );
-          logger.info("Background location tracking started");
+          }
+
+          if (!taskRegistered) {
+            logger.error(
+              "Background location task not registered after waiting - location tracking may not work in background"
+            );
+            Toast.show(
+              "Background location tracking may not work. Please restart the app.",
+              {
+                type: "warning",
+                duration: 5000,
+              }
+            );
+          } else {
+            logger.info("Background location task is registered and ready");
+          }
+
+          // Start background location updates using task manager
+          // This works even when the app is in the background
+          try {
+            await GeoLocation.startLocationUpdatesAsync(
+              BACKGROUND_LOCATION_TASK,
+              {
+                accuracy: GeoLocation.Accuracy.High,
+                timeInterval: 5000, // 5 seconds
+                distanceInterval: 10, // 10 meters
+                // Foreground service configuration for Android
+                foregroundService: {
+                  notificationTitle: "Location Tracking Active",
+                  notificationBody: "Tracking your location for ride requests",
+                  notificationColor: "#10B981",
+                  notificationChannel: "location-tracking",
+                },
+                // Prevent automatic pausing when app is in background
+                pausesUpdatesAutomatically: false,
+                // Show location indicator in iOS status bar
+                showsBackgroundLocationIndicator: true,
+                // Android-specific configuration
+                ...(Platform.OS === "android" && {
+                  deferredUpdatesInterval: 10000, // 10 seconds when stationary
+                  deferredUpdatesDistance: 50, // 50 meters when stationary
+                }),
+              }
+            );
+            backgroundLocationStartedRef.current = true;
+            logger.info("Background location tracking started successfully");
+          } catch (error: any) {
+            logger.error("Error starting background location tracking", error);
+            backgroundLocationStartedRef.current = false;
+            Toast.show(
+              `Failed to start background tracking: ${error.message}`,
+              {
+                type: "danger",
+                duration: 5000,
+              }
+            );
+          }
         } catch (error: any) {
-          logger.error("Error starting background location tracking", error);
+          logger.error("Error verifying task registration", error);
         }
       } else if (isActive && !TaskManager) {
-        logger.debug(
+        logger.warn(
           "TaskManager not available - background location tracking will not work"
+        );
+        Toast.show(
+          "Background location tracking unavailable. Please update the app.",
+          {
+            type: "warning",
+            duration: 5000,
+          }
         );
       }
 
@@ -333,6 +380,12 @@ export function useLocationTracking(
 
   // Stop location tracking
   const stopTracking = useCallback(async () => {
+    // Stop monitoring
+    if (monitoringIntervalRef.current) {
+      clearInterval(monitoringIntervalRef.current);
+      monitoringIntervalRef.current = null;
+    }
+
     // Stop foreground watcher
     if (locationWatchSubscription.current) {
       locationWatchSubscription.current.remove();
@@ -361,10 +414,123 @@ export function useLocationTracking(
       }
     }
 
+    backgroundLocationStartedRef.current = false;
     isTrackingRef.current = false;
     setIsTracking(false);
     logger.info("Location tracking stopped");
   }, []);
+
+  // Monitor background location tracking and recover if it stops
+  const monitorBackgroundTracking = useCallback(async () => {
+    if (!isActiveRef.current || !isTrackingRef.current) {
+      return;
+    }
+
+    try {
+      const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(
+        BACKGROUND_LOCATION_TASK
+      );
+
+      if (!hasStarted && backgroundLocationStartedRef.current) {
+        logger.warn(
+          "Background location tracking stopped unexpectedly - attempting to restart"
+        );
+
+        // Try to restart background tracking
+        try {
+          const taskRegistered = await isBackgroundLocationTaskRegistered();
+          if (taskRegistered && isActiveRef.current) {
+            await GeoLocation.startLocationUpdatesAsync(
+              BACKGROUND_LOCATION_TASK,
+              {
+                accuracy: GeoLocation.Accuracy.High,
+                timeInterval: 5000,
+                distanceInterval: 10,
+                foregroundService: {
+                  notificationTitle: "Location Tracking Active",
+                  notificationBody: "Tracking your location for ride requests",
+                  notificationColor: "#10B981",
+                  notificationChannel: "location-tracking",
+                },
+                pausesUpdatesAutomatically: false,
+                showsBackgroundLocationIndicator: true,
+                ...(Platform.OS === "android" && {
+                  deferredUpdatesInterval: 10000,
+                  deferredUpdatesDistance: 50,
+                }),
+              }
+            );
+            logger.info("Background location tracking recovered successfully");
+            backgroundLocationStartedRef.current = true;
+          }
+        } catch (error: any) {
+          logger.error("Failed to recover background location tracking", error);
+        }
+      }
+    } catch (error: any) {
+      logger.error("Error monitoring background location tracking", error);
+    }
+  }, []);
+
+  // Setup AppState listener to handle app backgrounding/foregrounding
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      logger.debug(`App state changed to: ${nextAppState}`);
+
+      if (nextAppState === "background" || nextAppState === "inactive") {
+        // App went to background - ensure background tracking is running
+        if (isTrackingRef.current && !backgroundLocationStartedRef.current) {
+          logger.info(
+            "App went to background - ensuring background location tracking is active"
+          );
+          await monitorBackgroundTracking();
+        }
+      } else if (nextAppState === "active") {
+        // App came to foreground - verify tracking is still running
+        if (isTrackingRef.current) {
+          logger.debug(
+            "App came to foreground - verifying location tracking status"
+          );
+          await monitorBackgroundTracking();
+        }
+      }
+    };
+
+    appStateSubscriptionRef.current = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
+    return () => {
+      if (appStateSubscriptionRef.current) {
+        appStateSubscriptionRef.current.remove();
+        appStateSubscriptionRef.current = null;
+      }
+    };
+  }, [isActive, monitorBackgroundTracking]);
+
+  // Setup periodic monitoring of background location tracking
+  useEffect(() => {
+    if (!isActive || !isTrackingRef.current) {
+      return;
+    }
+
+    // Check every 30 seconds if background tracking is still running
+    monitoringIntervalRef.current = setInterval(() => {
+      monitorBackgroundTracking();
+    }, 30000);
+
+    return () => {
+      if (monitoringIntervalRef.current) {
+        clearInterval(monitoringIntervalRef.current);
+        monitoringIntervalRef.current = null;
+      }
+    };
+  }, [isActive, monitorBackgroundTracking]);
 
   // Start/stop tracking based on isActive
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity } from "react-native";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import SignInText from "@/components/login/signin.text";
 import Button from "@/components/common/button";
 import { external } from "@/styles/external.style";
@@ -18,19 +18,59 @@ import { getServerUri } from "@/configs/constants";
 export default function PhoneNumberVerificationScreen() {
   const driver = useLocalSearchParams();
   const [otp, setOtp] = useState("");
+  const otpRef = useRef(otp);
   const [loader, setLoader] = useState(false);
 
+  // Keep ref in sync with state
+  useEffect(() => {
+    otpRef.current = otp;
+    console.log("PhoneNumberVerificationScreen - otpRef updated to:", otp);
+  }, [otp]);
+
+  // Debug: Track OTP state changes
+  useEffect(() => {
+    console.log("PhoneNumberVerificationScreen - otp state changed to:", otp);
+    console.log(
+      "PhoneNumberVerificationScreen - otp length:",
+      otp?.length || 0
+    );
+    console.log("PhoneNumberVerificationScreen - otp type:", typeof otp);
+  }, [otp]);
+
+  // Debug: Log when component renders
+  useEffect(() => {
+    console.log("PhoneNumberVerificationScreen - Component rendered/mounted");
+    return () => {
+      console.log("PhoneNumberVerificationScreen - Component unmounting");
+    };
+  }, []);
+
   const handleSubmit = async () => {
-    if (otp === "") {
+    // Debug logging - capture current state
+    console.log("handleSubmit - START");
+    console.log("handleSubmit - otp state:", otp);
+    console.log("handleSubmit - otpRef.current:", otpRef.current);
+    console.log("handleSubmit - otp type:", typeof otp);
+    console.log("handleSubmit - otp length:", otp?.length || 0);
+    console.log("handleSubmit - otp === '':", otp === "");
+
+    // Use ref value if state is empty (fallback)
+    const otpToUse = otp || otpRef.current || "";
+
+    if (otpToUse === "") {
+      console.log("Validation failed - OTP is empty");
       Toast.show("Please fill the fields!", {
         placement: "bottom",
       });
       return;
     }
-    
+
     // Trim and clean the OTP to remove any whitespace
-    const otpNumbers = otp.trim().replace(/\s+/g, "");
-    
+    const otpNumbers = otpToUse.trim().replace(/\s+/g, "");
+
+    console.log("handleSubmit - otpNumbers:", otpNumbers);
+    console.log("handleSubmit - otpNumbers length:", otpNumbers?.length || 0);
+
     if (otpNumbers.length !== 4) {
       Toast.show("Please enter a valid 4-digit OTP!", {
         placement: "bottom",
@@ -38,7 +78,7 @@ export default function PhoneNumberVerificationScreen() {
       });
       return;
     }
-    
+
     if (driver.name) {
       setLoader(true);
       await axios
@@ -60,8 +100,10 @@ export default function PhoneNumberVerificationScreen() {
         })
         .catch((error) => {
           setLoader(false);
-          console.error('OTP verification error:', error);
-          const errorMessage = error.response?.data?.message || "Your OTP is incorrect or expired!";
+          console.error("OTP verification error:", error);
+          const errorMessage =
+            error.response?.data?.message ||
+            "Your OTP is incorrect or expired!";
           Toast.show(errorMessage, {
             placement: "bottom",
             type: "danger",
@@ -82,8 +124,10 @@ export default function PhoneNumberVerificationScreen() {
         })
         .catch((error) => {
           setLoader(false);
-          console.error('Login OTP verification error:', error);
-          const errorMessage = error.response?.data?.message || "Your OTP is incorrect or expired!";
+          console.error("Login OTP verification error:", error);
+          const errorMessage =
+            error.response?.data?.message ||
+            "Your OTP is incorrect or expired!";
           Toast.show(errorMessage, {
             placement: "bottom",
             type: "danger",
@@ -103,7 +147,18 @@ export default function PhoneNumberVerificationScreen() {
             subtitle={"Check your phone number for the otp!"}
           />
           <OTPTextInput
-            handleTextChange={(code) => setOtp(code)}
+            handleTextChange={(code) => {
+              console.log(
+                "PhoneNumberVerificationScreen - handleTextChange called with:",
+                code
+              );
+              otpRef.current = code;
+              setOtp(code);
+              console.log(
+                "PhoneNumberVerificationScreen - After setOtp, state is:",
+                otp
+              );
+            }}
             inputCount={4}
             textInputStyle={style.otpTextInput}
             tintColor={color.subtitle}

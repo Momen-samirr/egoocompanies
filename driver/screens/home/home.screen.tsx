@@ -47,7 +47,11 @@ import {
   hasBackgroundLocationPermission,
   getLocationPermissionStatus,
 } from "@/utils/locationPermissions";
-import { promptDisableBatteryOptimization } from "@/utils/batteryOptimization";
+import {
+  ensureBatteryOptimizationDisabled,
+  setupPeriodicBatteryOptimizationCheck,
+  cleanupPeriodicBatteryOptimizationCheck,
+} from "@/utils/batteryOptimization";
 import { logger } from "@/lib/logger";
 import { AppState, AppStateStatus } from "react-native";
 
@@ -444,6 +448,15 @@ export default function HomeScreen() {
     });
   }, []);
 
+  // Cleanup battery optimization checks on unmount
+  useEffect(() => {
+    return () => {
+      if (Platform.OS === "android") {
+        cleanupPeriodicBatteryOptimizationCheck();
+      }
+    };
+  }, []);
+
   // Refresh handler
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -505,20 +518,29 @@ export default function HomeScreen() {
             );
           }
 
-          // Prompt for battery optimization (one-time)
-          const batteryOptPromptShown = await AsyncStorage.getItem(
-            "batteryOptPromptShown"
-          );
-          if (!batteryOptPromptShown && Platform.OS === "android") {
-            setTimeout(() => {
-              promptDisableBatteryOptimization();
-              AsyncStorage.setItem("batteryOptPromptShown", "true");
+          // Check and prompt for battery optimization when driver activates
+          // This ensures location tracking works when screen is off
+          if (Platform.OS === "android") {
+            setTimeout(async () => {
+              await ensureBatteryOptimizationDisabled();
             }, 2000);
+          }
+
+          // Setup periodic battery optimization checks
+          if (Platform.OS === "android") {
+            setupPeriodicBatteryOptimizationCheck(
+              () => isOnRef.current,
+              60 // Check every hour
+            );
           }
 
           // Location will be sent automatically by useLocationTracking hook
           logger.debug("Driver went active - location tracking will start");
         } else {
+          // Clean up periodic battery optimization checks when driver goes inactive
+          if (Platform.OS === "android") {
+            cleanupPeriodicBatteryOptimizationCheck();
+          }
           // Driver going inactive - notify WebSocket
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             const message = JSON.stringify({
