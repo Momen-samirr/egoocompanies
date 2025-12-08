@@ -709,11 +709,11 @@ export default function EditTripPage() {
                             <h4 className="text-sm font-semibold text-gray-900">
                               Employees at this checkpoint
                             </h4>
-                            {form.watch(`points.${index}.employees`)?.length >
-                              0 && (
+                            {(form.watch(`points.${index}.employees`)?.length ??
+                              0) > 0 && (
                               <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
                                 {form.watch(`points.${index}.employees`)
-                                  ?.length || 0}
+                                  ?.length ?? 0}
                               </span>
                             )}
                           </div>
@@ -736,8 +736,8 @@ export default function EditTripPage() {
                           </Button>
                         </div>
 
-                        {form.watch(`points.${index}.employees`)?.length >
-                          0 && (
+                        {(form.watch(`points.${index}.employees`)?.length ??
+                          0) > 0 && (
                           <div className="space-y-2">
                             {form
                               .watch(`points.${index}.employees`)
@@ -822,8 +822,8 @@ export default function EditTripPage() {
                         )}
 
                         {(!form.watch(`points.${index}.employees`) ||
-                          form.watch(`points.${index}.employees`)?.length ===
-                            0) && (
+                          (form.watch(`points.${index}.employees`)?.length ??
+                            0) === 0) && (
                           <p className="text-sm text-gray-500 italic">
                             No employees added. Click "Add Employee" to add
                             employees who should be picked up at this
