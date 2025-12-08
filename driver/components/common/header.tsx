@@ -14,15 +14,19 @@ interface HeaderProps {
   title?: string;
   onBackPress?: () => void;
   notificationCount?: number;
+  loading?: boolean;
+  showOnlineStatus?: boolean;
 }
 
-export default function Header({
+const Header = React.memo(function Header({
   isOn,
   toggleSwitch,
   showBackButton = false,
   title,
   onBackPress,
   notificationCount = 0,
+  loading = false,
+  showOnlineStatus = false,
 }: HeaderProps) {
   // Note: isOn and toggleSwitch are kept for backward compatibility
   // but the toggle switch UI has been removed in favor of DriverStatusCard
@@ -92,15 +96,28 @@ export default function Header({
       </View>
     </View>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if props actually change
+  return (
+    prevProps.isOn === nextProps.isOn &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.title === nextProps.title &&
+    prevProps.notificationCount === nextProps.notificationCount &&
+    prevProps.showBackButton === nextProps.showBackButton &&
+    prevProps.showOnlineStatus === nextProps.showOnlineStatus
+  );
+});
+
+export default Header;
 
 const styles = StyleSheet.create({
   headerMain: {
     backgroundColor: color.primary,
     paddingHorizontal: windowWidth(10),
     paddingTop: windowHeight(25),
+    paddingBottom: windowWidth(12), // Add bottom padding for proper spacing
     width: "100%",
-    height: windowHeight(115),
+    minHeight: windowHeight(115), // Change from fixed height to minHeight
   },
   logoTitle: {
     fontSize: fontSizes.FONT18,

@@ -1,7 +1,17 @@
 import * as Location from "expo-location";
-import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 import { Coordinate } from "@/services/navigationService";
+
+// Conditionally import TaskManager to avoid errors if native module isn't ready
+let TaskManager: any = null;
+try {
+  const taskManagerModule = require("expo-task-manager");
+  if (taskManagerModule && typeof taskManagerModule.defineTask === "function") {
+    TaskManager = taskManagerModule;
+  }
+} catch (error) {
+  // TaskManager not available - this is expected in some environments
+}
 
 // Task name for navigation background location tracking
 const NAVIGATION_LOCATION_TASK = "navigation-location-tracking";
@@ -47,20 +57,31 @@ class BackgroundLocationServiceImpl implements BackgroundLocationService {
 
     try {
       // Request permissions
-      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+      const { status: foregroundStatus } =
+        await Location.requestForegroundPermissionsAsync();
       if (foregroundStatus !== "granted") {
         throw new Error("Foreground location permission denied");
       }
 
-      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+      const { status: backgroundStatus } =
+        await Location.requestBackgroundPermissionsAsync();
       if (backgroundStatus !== "granted") {
-        console.warn("⚠️ Background location permission not granted. Navigation may not work when screen is off.");
+        console.warn(
+          "⚠️ Background location permission not granted. Navigation may not work when screen is off."
+        );
       }
 
       // Register task if not already registered
-      if (!this.taskRegistered) {
+      if (
+        !this.taskRegistered &&
+        TaskManager &&
+        TaskManager.defineTask &&
+        TaskManager.isTaskRegisteredAsync
+      ) {
         try {
-          const isRegistered = await TaskManager.isTaskRegisteredAsync(this.taskName);
+          const isRegistered = await TaskManager.isTaskRegisteredAsync(
+            this.taskName
+          );
           if (!isRegistered) {
             TaskManager.defineTask(this.taskName, ({ data, error }) => {
               if (error) {
@@ -68,7 +89,9 @@ class BackgroundLocationServiceImpl implements BackgroundLocationService {
                 return;
               }
               if (data) {
-                const { locations } = data as { locations: Location.LocationObject[] };
+                const { locations } = data as {
+                  locations: Location.LocationObject[];
+                };
                 for (const location of locations) {
                   const coordinate: Coordinate = {
                     latitude: location.coords.latitude,
@@ -81,23 +104,41 @@ class BackgroundLocationServiceImpl implements BackgroundLocationService {
             this.taskRegistered = true;
           }
         } catch (error) {
-          console.error("❌ Error registering navigation location task:", error);
+          console.error(
+            "❌ Error registering navigation location task:",
+            error
+          );
         }
+      } else if (!TaskManager) {
+        console.warn(
+          "⚠️ TaskManager not available - navigation background location will not work"
+        );
       }
 
       // Start background location updates using task manager
-      await Location.startLocationUpdatesAsync(this.taskName, {
-        accuracy: this.options.accuracy || Location.Accuracy.High,
-        timeInterval: this.options.timeInterval || 5000,
-        distanceInterval: this.options.distanceInterval || 10,
-        foregroundService: {
-          notificationTitle: "Navigation Active",
-          notificationBody: "Tracking your location for navigation",
-          notificationColor: "#10B981",
-        },
-        pausesUpdatesAutomatically: false,
-        showsBackgroundLocationIndicator: true,
-      });
+      // Only if TaskManager is available and task is registered
+      if (TaskManager && this.taskRegistered) {
+        try {
+          await Location.startLocationUpdatesAsync(this.taskName, {
+            accuracy: this.options.accuracy || Location.Accuracy.High,
+            timeInterval: this.options.timeInterval || 5000,
+            distanceInterval: this.options.distanceInterval || 10,
+            foregroundService: {
+              notificationTitle: "Navigation Active",
+              notificationBody: "Tracking your location for navigation",
+              notificationColor: "#10B981",
+            },
+            pausesUpdatesAutomatically: false,
+            showsBackgroundLocationIndicator: true,
+          });
+        } catch (error: any) {
+          console.error(
+            "❌ Error starting background location updates:",
+            error
+          );
+          // Continue with foreground tracking only
+        }
+      }
 
       // Also set up a foreground watcher for immediate UI updates
       this.subscription = await Location.watchPositionAsync(
@@ -132,17 +173,26 @@ class BackgroundLocationServiceImpl implements BackgroundLocationService {
     }
 
     // Stop background location updates
-    try {
-      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(this.taskName);
-      if (isTaskRegistered) {
-        const hasStarted = await Location.hasStartedLocationUpdatesAsync(this.taskName);
-        if (hasStarted) {
-          await Location.stopLocationUpdatesAsync(this.taskName);
-          console.log("🛑 Navigation background location tracking stopped");
+    if (TaskManager && TaskManager.isTaskRegisteredAsync) {
+      try {
+        const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
+          this.taskName
+        );
+        if (isTaskRegistered) {
+          const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+            this.taskName
+          );
+          if (hasStarted) {
+            await Location.stopLocationUpdatesAsync(this.taskName);
+            console.log("🛑 Navigation background location tracking stopped");
+          }
         }
+      } catch (error: any) {
+        console.error(
+          "❌ Error stopping navigation background location tracking:",
+          error
+        );
       }
-    } catch (error: any) {
-      console.error("❌ Error stopping navigation background location tracking:", error);
     }
 
     this.isActive = false;
@@ -194,4 +244,3 @@ export async function checkLocationPermissions(): Promise<{
     background: background.status,
   };
 }
-

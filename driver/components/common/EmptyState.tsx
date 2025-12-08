@@ -14,7 +14,7 @@ interface EmptyStateProps {
   onAction?: () => void;
 }
 
-export default function EmptyState({
+const EmptyState = React.memo(function EmptyState({
   title,
   message,
   icon,
@@ -24,11 +24,31 @@ export default function EmptyState({
   const { colors } = useTheme();
 
   return (
-    <View style={styles.container}>
-      {icon && <View style={styles.iconContainer}>{icon}</View>}
-      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+    <View 
+      style={styles.container}
+      accessibilityRole="text"
+      accessibilityLabel={`${title}. ${message || ""}`}
+    >
+      {icon && (
+        <View 
+          style={styles.iconContainer}
+          accessibilityRole="image"
+          accessibilityLabel="Empty state icon"
+        >
+          {icon}
+        </View>
+      )}
+      <Text 
+        style={[styles.title, { color: colors.text }]}
+        accessibilityRole="header"
+      >
+        {title}
+      </Text>
       {message && (
-        <Text style={[styles.message, { color: color.text.secondary }]}>
+        <Text 
+          style={[styles.message, { color: color.text.secondary }]}
+          accessibilityRole="text"
+        >
           {message}
         </Text>
       )}
@@ -37,13 +57,24 @@ export default function EmptyState({
           style={[styles.actionButton, { backgroundColor: color.primary }]}
           onPress={onAction}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          accessibilityHint="Tap to perform action"
         >
           <Text style={styles.actionButtonText}>{actionLabel}</Text>
         </TouchableOpacity>
       )}
     </View>
   );
-}
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.title === nextProps.title &&
+    prevProps.message === nextProps.message &&
+    prevProps.actionLabel === nextProps.actionLabel
+  );
+});
+
+export default EmptyState;
 
 const styles = StyleSheet.create({
   container: {

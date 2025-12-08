@@ -7,7 +7,7 @@ import color from "@/themes/app.colors";
 import Images from "@/utils/images";
 import { Gps, Location, Star } from "@/utils/icons";
 
-export default function RideCard({ item }: { item: any }) {
+const RideCard = React.memo(function RideCard({ item }: { item: any }) {
   const { colors } = useTheme();
 
   return (
@@ -67,7 +67,19 @@ export default function RideCard({ item }: { item: any }) {
       </View>
     </View>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if item data changes
+  return (
+    prevProps.item?.id === nextProps.item?.id &&
+    prevProps.item?.distance === nextProps.item?.distance &&
+    prevProps.item?.cratedAt === nextProps.item?.cratedAt &&
+    prevProps.item?.currentLocationName === nextProps.item?.currentLocationName &&
+    prevProps.item?.destinationLocationName === nextProps.item?.destinationLocationName &&
+    prevProps.item?.user?.name === nextProps.item?.user?.name
+  );
+});
+
+export default RideCard;
 
 const styles = StyleSheet.create({
   main: {

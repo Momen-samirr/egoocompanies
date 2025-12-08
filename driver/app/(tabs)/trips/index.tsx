@@ -39,7 +39,8 @@ export default function ScheduledTripsHistory() {
         setTrips(response.data.trips);
       }
     } catch (error: any) {
-      console.error("Error fetching scheduled trips:", error);
+      const { logger } = require("@/lib/logger");
+      logger.error("Error fetching scheduled trips", error);
     } finally {
       setLoading(false);
     }

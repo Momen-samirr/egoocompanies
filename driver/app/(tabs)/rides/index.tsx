@@ -31,7 +31,8 @@ export default function Rides() {
       );
       setrecentRides(res.data.rides || []);
     } catch (error) {
-      console.error("Error fetching rides:", error);
+      const { logger } = require("@/lib/logger");
+      logger.error("Error fetching rides", error);
     } finally {
       setLoading(false);
     }
@@ -86,8 +87,8 @@ export default function Rides() {
             message="You haven't completed any rides yet. Your ride history will appear here."
           />
         ) : (
-          recentRides.map((item: any, index: number) => (
-            <RideCard item={item} key={index} />
+          recentRides.map((item: any) => (
+            <RideCard item={item} key={item.id || item._id || `ride-${item.cratedAt}`} />
           ))
         )}
       </ScrollView>

@@ -37,8 +37,11 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
         "INTERNET",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
       ],
       "privacy": "https://egoobus.com/privacy-policy"
     },
@@ -57,7 +60,11 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow egoo to use your location to find nearby rides and navigate."
+          "locationAlwaysAndWhenInUsePermission": "Allow egoo to use your location to find nearby rides and navigate.",
+          "locationAlwaysPermission": "Allow egoo to use your location to find nearby rides and navigate even when the app is in the background.",
+          "locationWhenInUsePermission": "Allow egoo to use your location to find nearby rides and navigate.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       [
