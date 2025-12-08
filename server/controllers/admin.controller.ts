@@ -3391,7 +3391,8 @@ export const deleteTripTemplate = async (req: any, res: Response) => {
 // Create Multiple Trips From Template
 export const createTripsFromTemplate = async (req: any, res: Response) => {
   try {
-    const { templateId, trips } = req.body;
+    const templateId = req.params.id; // Get templateId from URL params
+    const { trips } = req.body;
 
     if (!templateId || !trips || !Array.isArray(trips) || trips.length === 0) {
       return res.status(400).json({
