@@ -3464,56 +3464,71 @@ export const createTripsFromTemplate = async (req: any, res: Response) => {
             companyId: template.companyId,
             price: resolvedPrice,
             points: {
-              create: template.points.map((point, index) => {
-                // Parse expectedTime if provided (from template or tripData override)
-                let expectedTimeValue = null;
-                const expectedTime =
-                  tripData.pointOverrides?.[index]?.expectedTime ||
-                  point.expectedTime;
-                if (expectedTime) {
-                  const [hours, minutes] = expectedTime.split(":");
-                  const dateTimeString = `${tripDate}T${hours.padStart(
-                    2,
-                    "0"
-                  )}:${minutes.padStart(2, "0")}:00`;
-                  expectedTimeValue = new Date(dateTimeString);
-                }
+              create: template.points
+                .map((point, index) => {
+                  // Skip removed checkpoints
+                  if (tripData.pointOverrides?.[index]?.removed === true) {
+                    return null;
+                  }
 
-                // Use employees from template or override from tripData
-                let employeesValue = null;
-                const employees =
-                  tripData.pointOverrides?.[index]?.employees ||
-                  point.employees;
-                if (
-                  employees &&
-                  Array.isArray(employees) &&
-                  employees.length > 0
-                ) {
-                  employeesValue = employees
-                    .map((emp: any) => ({
-                      name: emp.name || "",
-                      ...(emp.employeeId && { employeeId: emp.employeeId }),
-                    }))
-                    .filter((emp: any) => emp.name.trim() !== "");
-                }
+                  // Parse expectedTime if provided (from template or tripData override)
+                  let expectedTimeValue = null;
+                  const expectedTime =
+                    tripData.pointOverrides?.[index]?.expectedTime ||
+                    point.expectedTime;
+                  if (expectedTime) {
+                    const [hours, minutes] = expectedTime.split(":");
+                    const dateTimeString = `${tripDate}T${hours.padStart(
+                      2,
+                      "0"
+                    )}:${minutes.padStart(2, "0")}:00`;
+                    expectedTimeValue = new Date(dateTimeString);
+                  }
 
-                return {
-                  name: tripData.pointOverrides?.[index]?.name || point.name,
-                  latitude:
-                    tripData.pointOverrides?.[index]?.latitude !== undefined
-                      ? parseFloat(tripData.pointOverrides[index].latitude)
-                      : point.latitude,
-                  longitude:
-                    tripData.pointOverrides?.[index]?.longitude !== undefined
-                      ? parseFloat(tripData.pointOverrides[index].longitude)
-                      : point.longitude,
-                  order: point.order,
-                  isFinalPoint: point.isFinalPoint,
-                  ...(expectedTimeValue && { expectedTime: expectedTimeValue }),
-                  ...(employeesValue &&
-                    employeesValue.length > 0 && { employees: employeesValue }),
-                };
-              }),
+                  // Use employees from template or override from tripData
+                  let employeesValue = null;
+                  const employees =
+                    tripData.pointOverrides?.[index]?.employees ||
+                    point.employees;
+                  if (
+                    employees &&
+                    Array.isArray(employees) &&
+                    employees.length > 0
+                  ) {
+                    employeesValue = employees
+                      .map((emp: any) => ({
+                        name: emp.name || "",
+                        ...(emp.employeeId && { employeeId: emp.employeeId }),
+                      }))
+                      .filter((emp: any) => emp.name.trim() !== "");
+                  }
+
+                  return {
+                    name: tripData.pointOverrides?.[index]?.name || point.name,
+                    latitude:
+                      tripData.pointOverrides?.[index]?.latitude !== undefined
+                        ? parseFloat(tripData.pointOverrides[index].latitude)
+                        : point.latitude,
+                    longitude:
+                      tripData.pointOverrides?.[index]?.longitude !== undefined
+                        ? parseFloat(tripData.pointOverrides[index].longitude)
+                        : point.longitude,
+                    order: point.order,
+                    isFinalPoint: point.isFinalPoint,
+                    ...(expectedTimeValue && {
+                      expectedTime: expectedTimeValue,
+                    }),
+                    ...(employeesValue &&
+                      employeesValue.length > 0 && {
+                        employees: employeesValue,
+                      }),
+                  };
+                })
+                .filter((point) => point !== null)
+                .map((point, newIndex) => ({
+                  ...point,
+                  order: newIndex, // Reorder after filtering
+                })),
             },
           },
           include: {

@@ -9,8 +9,26 @@ import Card, { CardBody, CardHeader } from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import FormField from "@/components/common/FormField";
-import { TripTemplate } from "@/types/trip";
-import { PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import LocationPicker from "@/components/trips/LocationPicker";
+import { TripTemplate, LocationData } from "@/types/trip";
+import {
+  PlusIcon,
+  TrashIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  MapPinIcon,
+  UserIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
+
+interface CheckpointOverride {
+  name?: string;
+  latitude?: number;
+  longitude?: number;
+  expectedTime?: string;
+  employees?: Array<{ name?: string; employeeId?: string }>;
+  removed?: boolean;
+}
 
 interface TripData {
   name: string;
@@ -18,6 +36,7 @@ interface TripData {
   scheduledTime: string;
   assignedCaptainId?: string;
   price?: number;
+  pointOverrides?: CheckpointOverride[];
 }
 
 export default function CreateTripsFromTemplatePage() {
@@ -27,6 +46,10 @@ export default function CreateTripsFromTemplatePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [template, setTemplate] = useState<TripTemplate | null>(null);
+  const [expandedTrips, setExpandedTrips] = useState<Set<number>>(new Set());
+  const [checkpointLocations, setCheckpointLocations] = useState<
+    Map<string, LocationData | null>
+  >(new Map());
 
   const form = useForm<{ trips: TripData[] }>({
     defaultValues: {
@@ -37,6 +60,7 @@ export default function CreateTripsFromTemplatePage() {
           scheduledTime: "",
           assignedCaptainId: "",
           price: undefined,
+          pointOverrides: [],
         },
       ],
     },
@@ -52,11 +76,27 @@ export default function CreateTripsFromTemplatePage() {
       try {
         setLoading(true);
         const response = await api.get(`/admin/trip-templates/${templateId}`);
-        setTemplate(response.data.template);
+        const fetchedTemplate = response.data.template;
+        setTemplate(fetchedTemplate);
 
         // Set default name based on template
-        const defaultName = response.data.template.name;
+        const defaultName = fetchedTemplate.name;
         form.setValue("trips.0.name", defaultName);
+        
+        // Initialize checkpoint locations for first trip
+        if (fetchedTemplate.points) {
+          fetchedTemplate.points.forEach((point: any, index: number) => {
+            const key = `0-${index}`;
+            setCheckpointLocations((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(key, {
+                latitude: point.latitude,
+                longitude: point.longitude,
+              });
+              return newMap;
+            });
+          });
+        }
       } catch (error) {
         console.error("Error fetching template:", error);
         toast.error("Failed to load template");
@@ -72,13 +112,154 @@ export default function CreateTripsFromTemplatePage() {
   }, [templateId, router, form]);
 
   const addTrip = () => {
+    const tripIndex = fields.length;
     append({
       name: template?.name || "",
       tripDate: "",
       scheduledTime: "",
       assignedCaptainId: "",
       price: undefined,
+      pointOverrides: [],
     });
+    
+    // Initialize checkpoint locations for new trip
+    if (template?.points) {
+      template.points.forEach((point: any, index: number) => {
+        const key = `${tripIndex}-${index}`;
+        setCheckpointLocations((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(key, {
+            latitude: point.latitude,
+            longitude: point.longitude,
+          });
+          return newMap;
+        });
+      });
+    }
+  };
+
+  const toggleTripExpanded = (tripIndex: number) => {
+    setExpandedTrips((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(tripIndex)) {
+        newSet.delete(tripIndex);
+      } else {
+        newSet.add(tripIndex);
+      }
+      return newSet;
+    });
+  };
+
+  const getCheckpointValue = (
+    tripIndex: number,
+    checkpointIndex: number,
+    field: keyof CheckpointOverride
+  ) => {
+    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[checkpointIndex];
+    if (override && override[field] !== undefined) {
+      return override[field];
+    }
+    const templatePoint = template?.points[checkpointIndex];
+    if (!templatePoint) return undefined;
+    
+    switch (field) {
+      case "name":
+        return templatePoint.name;
+      case "latitude":
+        return templatePoint.latitude;
+      case "longitude":
+        return templatePoint.longitude;
+      case "expectedTime":
+        return templatePoint.expectedTime || undefined;
+      case "employees":
+        return templatePoint.employees || [];
+      default:
+        return undefined;
+    }
+  };
+
+  const isCheckpointModified = (tripIndex: number, checkpointIndex: number) => {
+    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[checkpointIndex];
+    return override && Object.keys(override).length > 0 && !override.removed;
+  };
+
+  const isCheckpointRemoved = (tripIndex: number, checkpointIndex: number) => {
+    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[checkpointIndex];
+    return override?.removed === true;
+  };
+
+  const updateCheckpointOverride = (
+    tripIndex: number,
+    checkpointIndex: number,
+    updates: Partial<CheckpointOverride>
+  ) => {
+    const currentOverrides = form.getValues(`trips.${tripIndex}.pointOverrides`) || [];
+    const newOverrides = [...currentOverrides];
+    
+    // Ensure array is long enough
+    while (newOverrides.length <= checkpointIndex) {
+      newOverrides.push(undefined as any);
+    }
+    
+    // Merge updates with existing override
+    const existingOverride = newOverrides[checkpointIndex] || {};
+    newOverrides[checkpointIndex] = {
+      ...existingOverride,
+      ...updates,
+    };
+    
+    form.setValue(`trips.${tripIndex}.pointOverrides`, newOverrides);
+  };
+
+  const resetCheckpointToTemplate = (tripIndex: number, checkpointIndex: number) => {
+    const currentOverrides = form.getValues(`trips.${tripIndex}.pointOverrides`) || [];
+    const newOverrides = [...currentOverrides];
+    
+    // Remove the override at this index to use template defaults
+    // Keep array aligned with template points by index
+    if (newOverrides[checkpointIndex]) {
+      delete newOverrides[checkpointIndex];
+    }
+    
+    // Clean up trailing undefined entries but keep array aligned
+    while (newOverrides.length > 0 && !newOverrides[newOverrides.length - 1]) {
+      newOverrides.pop();
+    }
+    
+    form.setValue(`trips.${tripIndex}.pointOverrides`, newOverrides.length > 0 ? newOverrides : []);
+    
+    // Reset location
+    if (template?.points[checkpointIndex]) {
+      const point = template.points[checkpointIndex];
+      const key = `${tripIndex}-${checkpointIndex}`;
+      setCheckpointLocations((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(key, {
+          latitude: point.latitude,
+          longitude: point.longitude,
+        });
+        return newMap;
+      });
+    }
+  };
+
+  const handleLocationChange = (
+    tripIndex: number,
+    checkpointIndex: number,
+    location: LocationData | null
+  ) => {
+    if (location) {
+      updateCheckpointOverride(tripIndex, checkpointIndex, {
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
+      const key = `${tripIndex}-${checkpointIndex}`;
+      setCheckpointLocations((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(key, location);
+        return newMap;
+      });
+    }
   };
 
   const onSubmit = async (data: { trips: TripData[] }) => {
@@ -98,13 +279,24 @@ export default function CreateTripsFromTemplatePage() {
       const response = await api.post(
         `/admin/trip-templates/${templateId}/create-trips`,
         {
-          trips: data.trips.map((trip) => ({
-            name: trip.name,
-            tripDate: trip.tripDate,
-            scheduledTime: trip.scheduledTime,
-            assignedCaptainId: trip.assignedCaptainId || undefined,
-            price: trip.price || undefined,
-          })),
+          trips: data.trips.map((trip) => {
+            // Filter out undefined entries from pointOverrides but keep array aligned
+            const cleanedOverrides = (trip.pointOverrides || []).map((override, index) => {
+              if (!override || Object.keys(override).length === 0) {
+                return undefined;
+              }
+              return override;
+            });
+            
+            return {
+              name: trip.name,
+              tripDate: trip.tripDate,
+              scheduledTime: trip.scheduledTime,
+              assignedCaptainId: trip.assignedCaptainId || undefined,
+              price: trip.price || undefined,
+              pointOverrides: cleanedOverrides.length > 0 ? cleanedOverrides : [],
+            };
+          }),
         }
       );
 
@@ -273,20 +465,502 @@ export default function CreateTripsFromTemplatePage() {
                     </FormField>
                   </div>
 
-                  <div className="mt-4 text-sm text-gray-600">
-                    <p>
-                      <strong>Template:</strong> {template.name} (
-                      {template.tripType})
-                    </p>
-                    {template.company && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
                       <p>
-                        <strong>Company:</strong> {template.company.name}
+                        <strong>Template:</strong> {template.name} (
+                        {template.tripType})
                       </p>
-                    )}
-                    <p>
-                      <strong>Checkpoints:</strong> {template.points.length}
-                    </p>
+                      {template.company && (
+                        <p>
+                          <strong>Company:</strong> {template.company.name}
+                        </p>
+                      )}
+                      <p>
+                        <strong>Checkpoints:</strong> {template.points.length}
+                        {(() => {
+                          const modifiedCount = template.points.filter((_, cpIndex) =>
+                            isCheckpointModified(index, cpIndex)
+                          ).length;
+                          const removedCount = template.points.filter((_, cpIndex) =>
+                            isCheckpointRemoved(index, cpIndex)
+                          ).length;
+                          if (modifiedCount > 0 || removedCount > 0) {
+                            return (
+                              <span className="ml-2 text-indigo-600">
+                                ({modifiedCount} modified, {removedCount} removed)
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      icon={expandedTrips.has(index) ? ChevronUpIcon : ChevronDownIcon}
+                      onClick={() => toggleTripExpanded(index)}
+                    >
+                      {expandedTrips.has(index) ? "Hide" : "Edit"} Checkpoints
+                    </Button>
                   </div>
+
+                  {expandedTrips.has(index) && template && (
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-lg font-semibold text-gray-900">
+                          Checkpoints
+                        </h4>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            // Reset all checkpoints to template
+                            template.points.forEach((_, cpIndex) => {
+                              resetCheckpointToTemplate(index, cpIndex);
+                            });
+                            toast.success("Checkpoints reset to template");
+                          }}
+                        >
+                          Reset to Template
+                        </Button>
+                      </div>
+
+                      <div className="space-y-4">
+                        {template.points.map((templatePoint, cpIndex) => {
+                          const isRemoved = isCheckpointRemoved(index, cpIndex);
+                          const isModified = isCheckpointModified(index, cpIndex);
+                          const locationKey = `${index}-${cpIndex}`;
+                          const location = checkpointLocations.get(locationKey);
+
+                          return (
+                            <div
+                              key={cpIndex}
+                              className={`border rounded-lg p-4 ${
+                                isRemoved
+                                  ? "bg-red-50 border-red-200 opacity-60"
+                                  : isModified
+                                  ? "bg-yellow-50 border-yellow-200"
+                                  : "bg-white border-gray-200"
+                              }`}
+                            >
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-2">
+                                  <MapPinIcon className="h-5 w-5 text-indigo-600" />
+                                  <h5 className="font-medium text-gray-900">
+                                    Checkpoint {cpIndex + 1}
+                                  </h5>
+                                  {templatePoint.isFinalPoint && (
+                                    <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-700 rounded-full">
+                                      Final Point
+                                    </span>
+                                  )}
+                                  {isModified && !isRemoved && (
+                                    <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full">
+                                      Modified
+                                    </span>
+                                  )}
+                                  {isRemoved && (
+                                    <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                      Removed
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  {!isRemoved && (
+                                    <Button
+                                      type="button"
+                                      variant="danger"
+                                      size="sm"
+                                      onClick={() => {
+                                        // Check if this would be the last checkpoint
+                                        const remainingCount = template.points.filter(
+                                          (_, idx) =>
+                                            idx === cpIndex ||
+                                            !isCheckpointRemoved(index, idx)
+                                        ).length;
+                                        
+                                        if (remainingCount <= 1) {
+                                          toast.error(
+                                            "Cannot remove the last checkpoint. At least one checkpoint is required."
+                                          );
+                                          return;
+                                        }
+                                        
+                                        updateCheckpointOverride(index, cpIndex, {
+                                          removed: true,
+                                        });
+                                      }}
+                                    >
+                                      Remove
+                                    </Button>
+                                  )}
+                                  {isRemoved && (
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => {
+                                        updateCheckpointOverride(index, cpIndex, {
+                                          removed: false,
+                                        });
+                                      }}
+                                    >
+                                      Restore
+                                    </Button>
+                                  )}
+                                  {isModified && !isRemoved && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        resetCheckpointToTemplate(index, cpIndex);
+                                      }}
+                                    >
+                                      Reset
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {!isRemoved && (
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField label="Checkpoint Name">
+                                      <input
+                                        type="text"
+                                        value={
+                                          (getCheckpointValue(
+                                            index,
+                                            cpIndex,
+                                            "name"
+                                          ) as string) || ""
+                                        }
+                                        onChange={(e) => {
+                                          const templateName = templatePoint.name;
+                                          if (e.target.value !== templateName) {
+                                            updateCheckpointOverride(
+                                              index,
+                                              cpIndex,
+                                              { name: e.target.value }
+                                            );
+                                          } else {
+                                            const overrides =
+                                              form.getValues(
+                                                `trips.${index}.pointOverrides`
+                                              ) || [];
+                                            const newOverrides = [...overrides];
+                                            if (newOverrides[cpIndex]) {
+                                              const { name, ...rest } =
+                                                newOverrides[cpIndex];
+                                              newOverrides[cpIndex] = rest;
+                                            }
+                                            form.setValue(
+                                              `trips.${index}.pointOverrides`,
+                                              newOverrides
+                                            );
+                                          }
+                                        }}
+                                        placeholder={templatePoint.name}
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                                      />
+                                    </FormField>
+
+                                    {template.tripType === "ARRIVAL" && (
+                                      <FormField label="Expected Time" required>
+                                        <input
+                                          type="time"
+                                          value={
+                                            (getCheckpointValue(
+                                              index,
+                                              cpIndex,
+                                              "expectedTime"
+                                            ) as string) || ""
+                                          }
+                                          onChange={(e) => {
+                                            const templateTime =
+                                              templatePoint.expectedTime || "";
+                                            if (e.target.value !== templateTime) {
+                                              updateCheckpointOverride(
+                                                index,
+                                                cpIndex,
+                                                { expectedTime: e.target.value }
+                                              );
+                                            } else {
+                                              const overrides =
+                                                form.getValues(
+                                                  `trips.${index}.pointOverrides`
+                                                ) || [];
+                                              const newOverrides = [...overrides];
+                                              if (newOverrides[cpIndex]) {
+                                                const { expectedTime, ...rest } =
+                                                  newOverrides[cpIndex];
+                                                newOverrides[cpIndex] = rest;
+                                              }
+                                              form.setValue(
+                                                `trips.${index}.pointOverrides`,
+                                                newOverrides
+                                              );
+                                            }
+                                          }}
+                                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                                        />
+                                      </FormField>
+                                    )}
+
+                                    {template.tripType === "DEPARTURE" && (
+                                      <FormField label="Expected Time (Optional)">
+                                        <input
+                                          type="time"
+                                          value={
+                                            (getCheckpointValue(
+                                              index,
+                                              cpIndex,
+                                              "expectedTime"
+                                            ) as string) || ""
+                                          }
+                                          onChange={(e) => {
+                                            const templateTime =
+                                              templatePoint.expectedTime || "";
+                                            if (e.target.value !== templateTime) {
+                                              updateCheckpointOverride(
+                                                index,
+                                                cpIndex,
+                                                { expectedTime: e.target.value }
+                                              );
+                                            } else {
+                                              const overrides =
+                                                form.getValues(
+                                                  `trips.${index}.pointOverrides`
+                                                ) || [];
+                                              const newOverrides = [...overrides];
+                                              if (newOverrides[cpIndex]) {
+                                                const { expectedTime, ...rest } =
+                                                  newOverrides[cpIndex];
+                                                newOverrides[cpIndex] = rest;
+                                              }
+                                              form.setValue(
+                                                `trips.${index}.pointOverrides`,
+                                                newOverrides
+                                              );
+                                            }
+                                          }}
+                                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                                        />
+                                      </FormField>
+                                    )}
+                                  </div>
+
+                                  <LocationPicker
+                                    value={location || undefined}
+                                    onChange={(loc) =>
+                                      handleLocationChange(index, cpIndex, loc)
+                                    }
+                                    label="Location"
+                                    placeholder="Search for a location or pick on map..."
+                                    mapCenter={
+                                      location
+                                        ? {
+                                            lat: location.latitude,
+                                            lng: location.longitude,
+                                          }
+                                        : {
+                                            lat: templatePoint.latitude,
+                                            lng: templatePoint.longitude,
+                                          }
+                                    }
+                                  />
+
+                                  {/* Employees Section */}
+                                  <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <UserIcon className="h-5 w-5 text-indigo-600" />
+                                        <h6 className="text-sm font-semibold text-gray-900">
+                                          Employees at this checkpoint
+                                        </h6>
+                                        {(() => {
+                                          const employees =
+                                            (getCheckpointValue(
+                                              index,
+                                              cpIndex,
+                                              "employees"
+                                            ) as Array<{
+                                              name?: string;
+                                              employeeId?: string;
+                                            }>) || [];
+                                          return employees.length > 0 ? (
+                                            <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
+                                              {employees.length}
+                                            </span>
+                                          ) : null;
+                                        })()}
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        icon={PlusIcon}
+                                        onClick={() => {
+                                          const currentEmployees =
+                                            (getCheckpointValue(
+                                              index,
+                                              cpIndex,
+                                              "employees"
+                                            ) as Array<{
+                                              name?: string;
+                                              employeeId?: string;
+                                            }>) || [];
+                                          updateCheckpointOverride(index, cpIndex, {
+                                            employees: [
+                                              ...currentEmployees,
+                                              { name: "", employeeId: "" },
+                                            ],
+                                          });
+                                        }}
+                                      >
+                                        Add Employee
+                                      </Button>
+                                    </div>
+
+                                    {(() => {
+                                      const employees =
+                                        (getCheckpointValue(
+                                          index,
+                                          cpIndex,
+                                          "employees"
+                                        ) as Array<{
+                                          name?: string;
+                                          employeeId?: string;
+                                        }>) || [];
+                                      return employees.length > 0 ? (
+                                        <div className="space-y-2">
+                                          {employees.map((employee, empIndex) => (
+                                            <div
+                                              key={empIndex}
+                                              className="flex gap-2 items-start p-3 bg-white border border-gray-200 rounded-lg"
+                                            >
+                                              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                <div>
+                                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                    Employee Name (Optional)
+                                                  </label>
+                                                  <input
+                                                    type="text"
+                                                    value={employee.name || ""}
+                                                    onChange={(e) => {
+                                                      const currentEmployees =
+                                                        (getCheckpointValue(
+                                                          index,
+                                                          cpIndex,
+                                                          "employees"
+                                                        ) as Array<{
+                                                          name?: string;
+                                                          employeeId?: string;
+                                                        }>) || [];
+                                                      const newEmployees = [
+                                                        ...currentEmployees,
+                                                      ];
+                                                      newEmployees[empIndex] = {
+                                                        ...newEmployees[empIndex],
+                                                        name: e.target.value,
+                                                      };
+                                                      updateCheckpointOverride(
+                                                        index,
+                                                        cpIndex,
+                                                        { employees: newEmployees }
+                                                      );
+                                                    }}
+                                                    placeholder="e.g., John Doe"
+                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                                  />
+                                                </div>
+                                                <div>
+                                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                    Employee ID (Optional)
+                                                  </label>
+                                                  <input
+                                                    type="text"
+                                                    value={employee.employeeId || ""}
+                                                    onChange={(e) => {
+                                                      const currentEmployees =
+                                                        (getCheckpointValue(
+                                                          index,
+                                                          cpIndex,
+                                                          "employees"
+                                                        ) as Array<{
+                                                          name?: string;
+                                                          employeeId?: string;
+                                                        }>) || [];
+                                                      const newEmployees = [
+                                                        ...currentEmployees,
+                                                      ];
+                                                      newEmployees[empIndex] = {
+                                                        ...newEmployees[empIndex],
+                                                        employeeId: e.target.value,
+                                                      };
+                                                      updateCheckpointOverride(
+                                                        index,
+                                                        cpIndex,
+                                                        { employees: newEmployees }
+                                                      );
+                                                    }}
+                                                    placeholder="e.g., EMP001"
+                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                                  />
+                                                </div>
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentEmployees =
+                                                    (getCheckpointValue(
+                                                      index,
+                                                      cpIndex,
+                                                      "employees"
+                                                    ) as Array<{
+                                                      name?: string;
+                                                      employeeId?: string;
+                                                    }>) || [];
+                                                  const newEmployees = [
+                                                    ...currentEmployees,
+                                                  ];
+                                                  newEmployees.splice(empIndex, 1);
+                                                  updateCheckpointOverride(
+                                                    index,
+                                                    cpIndex,
+                                                    { employees: newEmployees }
+                                                  );
+                                                }}
+                                                className="mt-6 p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                                                title="Remove employee"
+                                              >
+                                                <XMarkIcon className="h-5 w-5" />
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm text-gray-500 italic">
+                                          No employees added. Click "Add Employee"
+                                          to add employees who should be picked
+                                          up at this checkpoint.
+                                        </p>
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
