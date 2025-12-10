@@ -17,7 +17,7 @@ const allowedOrigins = [
 // CORS middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  
+
   // In development, allow all origins
   if (process.env.NODE_ENV !== "production") {
     if (origin) {
@@ -35,17 +35,20 @@ app.use((req, res, next) => {
     }
     // If origin is provided but not in allowed list, don't set the header (will be blocked)
   }
-  
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS"
+  );
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  
+
   // Handle preflight requests
   if (req.method === "OPTIONS") {
     res.sendStatus(200);
     return;
   }
-  
+
   next();
 });
 
@@ -73,70 +76,84 @@ const allowedWebSocketOrigins = [
 
 // Create WebSocket server attached to the HTTP server
 // This allows both HTTP and WebSocket to work on the same port (required for Render)
-const wss = new WebSocketServer({ 
+const wss = new WebSocketServer({
   server,
   verifyClient: (info) => {
     const origin = info.origin;
     const req = info.req;
-    
-    console.log(`🔍 WebSocket connection attempt from origin: ${origin || 'none'}`);
+
+    console.log(
+      `🔍 WebSocket connection attempt from origin: ${origin || "none"}`
+    );
     console.log(`🔍 Request URL: ${req.url}`);
     console.log(`🔍 Request headers:`, JSON.stringify(req.headers, null, 2));
-    
+
     // Allow connections with no origin (like mobile apps, Postman, etc.)
     if (!origin) {
-      console.log(`✅ Allowing connection with no origin (mobile app or direct connection)`);
+      console.log(
+        `✅ Allowing connection with no origin (mobile app or direct connection)`
+      );
       return true;
     }
-    
+
     // In development, allow all origins
     if (process.env.NODE_ENV !== "production") {
       console.log(`✅ Allowing connection in development mode`);
       return true;
     }
-    
+
     // In production, verify origin
     // Check for exact match or if origin contains the allowed domain
-    const isAllowed = allowedWebSocketOrigins.some(allowedOrigin => {
+    const isAllowed = allowedWebSocketOrigins.some((allowedOrigin) => {
       // Exact match
       if (origin === allowedOrigin) {
-        console.log(`✅ Origin ${origin} exactly matches allowed origin ${allowedOrigin}`);
+        console.log(
+          `✅ Origin ${origin} exactly matches allowed origin ${allowedOrigin}`
+        );
         return true;
       }
       // Starts with match (for subdomains)
       if (origin.startsWith(allowedOrigin)) {
-        console.log(`✅ Origin ${origin} starts with allowed origin ${allowedOrigin}`);
+        console.log(
+          `✅ Origin ${origin} starts with allowed origin ${allowedOrigin}`
+        );
         return true;
       }
       // Check if origin contains the domain (more lenient for debugging)
-      const allowedDomain = allowedOrigin.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const allowedDomain = allowedOrigin
+        .replace(/^https?:\/\//, "")
+        .replace(/\/$/, "");
       if (origin.includes(allowedDomain)) {
-        console.log(`✅ Origin ${origin} contains allowed domain ${allowedDomain}`);
+        console.log(
+          `✅ Origin ${origin} contains allowed domain ${allowedDomain}`
+        );
         return true;
       }
       return false;
     });
-    
+
     if (!isAllowed) {
       console.log(`❌ WebSocket connection rejected from origin: ${origin}`);
       console.log(`❌ Allowed origins:`, allowedWebSocketOrigins);
       // For now, log but allow to help debug - review logs to see actual origins
-      console.log(`⚠️ Allowing connection for now - review logs to update allowed origins if needed`);
+      console.log(
+        `⚠️ Allowing connection for now - review logs to update allowed origins if needed`
+      );
       return true;
     } else {
       console.log(`✅ WebSocket connection allowed from origin: ${origin}`);
     }
-    
+
     return isAllowed;
-  }
+  },
 });
 
-wss.on('listening', () => {
+wss.on("listening", () => {
   console.log(`✅ WebSocket server ready on port ${PORT}`);
 });
 
-wss.on('error', (error) => {
-  console.error('WebSocket server error:', error);
+wss.on("error", (error) => {
+  console.error("WebSocket server error:", error);
 });
 
 // Store company driver mappings (companyId -> array of driverIds)
@@ -146,22 +163,25 @@ let companyDriversMap = {};
 // Function to fetch company driver IDs from the API
 const fetchCompanyDrivers = async (companyId) => {
   if (!companyId) return [];
-  
+
   // If we have cached data, use it
   if (companyDriversMap[companyId]) {
     return companyDriversMap[companyId];
   }
-  
+
   try {
     // Make HTTP request to get company drivers
     // We'll use the server's API endpoint
     const serverUrl = process.env.SERVER_URL || "http://localhost:8000";
-    const response = await fetch(`${serverUrl}/admin/companies/${companyId}/drivers`, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    
+    const response = await fetch(
+      `${serverUrl}/admin/companies/${companyId}/drivers`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.drivers) {
@@ -173,7 +193,7 @@ const fetchCompanyDrivers = async (companyId) => {
   } catch (error) {
     console.error(`❌ Error fetching company drivers for ${companyId}:`, error);
   }
-  
+
   return [];
 };
 
@@ -182,7 +202,7 @@ const filterDriversByCompany = (driversObj, companyDriverIds) => {
   if (!companyDriverIds || companyDriverIds.length === 0) {
     return {};
   }
-  
+
   const filtered = {};
   for (const driverId of companyDriverIds) {
     if (driversObj[driverId]) {
@@ -197,7 +217,7 @@ const filterRidesByCompany = (ridesObj, companyDriverIds) => {
   if (!companyDriverIds || companyDriverIds.length === 0) {
     return {};
   }
-  
+
   const filtered = {};
   for (const [rideId, ride] of Object.entries(ridesObj)) {
     if (ride.driverId && companyDriverIds.includes(ride.driverId)) {
@@ -211,9 +231,11 @@ const filterRidesByCompany = (ridesObj, companyDriverIds) => {
 const broadcastToAdmins = (data) => {
   let adminCount = 0;
   let sentCount = 0;
-  
-  console.log(`📡 [broadcastToAdmins] Broadcasting ${data.type} to admin clients`);
-  
+
+  console.log(
+    `📡 [broadcastToAdmins] Broadcasting ${data.type} to admin clients`
+  );
+
   wss.clients.forEach((client) => {
     if (client.isAdmin) {
       adminCount++;
@@ -221,49 +243,82 @@ const broadcastToAdmins = (data) => {
         // 1 = OPEN
         try {
           let dataToSend = data;
-          
+
           // Filter by company if this is a COMPANY user
           if (client.companyId && client.companyDriverIds) {
-            console.log(`🔍 [broadcastToAdmins] Filtering for company ${client.companyId} with ${client.companyDriverIds.length} drivers`);
-            if (data.type === "driverLocations" || data.type === "driverLocationUpdate") {
+            console.log(
+              `🔍 [broadcastToAdmins] Filtering for company ${client.companyId} with ${client.companyDriverIds.length} drivers`
+            );
+            if (
+              data.type === "driverLocations" ||
+              data.type === "driverLocationUpdate"
+            ) {
               if (data.type === "driverLocations") {
                 dataToSend = {
                   ...data,
-                  drivers: filterDriversByCompany(data.drivers || {}, client.companyDriverIds),
+                  drivers: filterDriversByCompany(
+                    data.drivers || {},
+                    client.companyDriverIds
+                  ),
                 };
-                console.log(`🔍 [broadcastToAdmins] Filtered drivers: ${Object.keys(dataToSend.drivers).length} drivers`);
+                console.log(
+                  `🔍 [broadcastToAdmins] Filtered drivers: ${
+                    Object.keys(dataToSend.drivers).length
+                  } drivers`
+                );
               } else if (data.type === "driverLocationUpdate") {
                 // Only send if driver belongs to company
                 if (!client.companyDriverIds.includes(data.driver?.id)) {
-                  console.log(`⏭️ [broadcastToAdmins] Skipping driver ${data.driver?.id} - not in company ${client.companyId}`);
+                  console.log(
+                    `⏭️ [broadcastToAdmins] Skipping driver ${data.driver?.id} - not in company ${client.companyId}`
+                  );
                   return; // Skip this update
                 }
-                console.log(`✅ [broadcastToAdmins] Driver ${data.driver?.id} belongs to company ${client.companyId}`);
+                console.log(
+                  `✅ [broadcastToAdmins] Driver ${data.driver?.id} belongs to company ${client.companyId}`
+                );
               }
-            } else if (data.type === "activeRides" || data.type === "activeRidesUpdate") {
+            } else if (
+              data.type === "activeRides" ||
+              data.type === "activeRidesUpdate"
+            ) {
               dataToSend = {
                 ...data,
-                rides: filterRidesByCompany(data.rides || {}, client.companyDriverIds),
+                rides: filterRidesByCompany(
+                  data.rides || {},
+                  client.companyDriverIds
+                ),
               };
             }
           }
-          
+
           client.send(JSON.stringify(dataToSend));
           sentCount++;
-          console.log(`✅ [broadcastToAdmins] Sent ${data.type} to admin client`);
+          console.log(
+            `✅ [broadcastToAdmins] Sent ${data.type} to admin client`
+          );
         } catch (error) {
-          console.error(`❌ [broadcastToAdmins] Error sending to admin client:`, error);
+          console.error(
+            `❌ [broadcastToAdmins] Error sending to admin client:`,
+            error
+          );
         }
       } else {
-        console.log(`⚠️ [broadcastToAdmins] Admin client not ready (state: ${client.readyState})`);
+        console.log(
+          `⚠️ [broadcastToAdmins] Admin client not ready (state: ${client.readyState})`
+        );
       }
     }
   });
-  
+
   if (adminCount > 0) {
-    console.log(`📡 [broadcastToAdmins] Broadcasted ${data.type} to ${sentCount}/${adminCount} admin clients`);
+    console.log(
+      `📡 [broadcastToAdmins] Broadcasted ${data.type} to ${sentCount}/${adminCount} admin clients`
+    );
   } else {
-    console.log(`⚠️ [broadcastToAdmins] No admin clients connected to receive ${data.type}`);
+    console.log(
+      `⚠️ [broadcastToAdmins] No admin clients connected to receive ${data.type}`
+    );
   }
 };
 
@@ -281,59 +336,110 @@ const sendToUser = (userId, data) => {
   }
 };
 
+// Helper function to update driver location and broadcast to dashboard
+// This is used both by WebSocket messages and HTTP API calls
+const updateDriverLocationAndBroadcast = (driverId, locationData) => {
+  const driverStatus = locationData.status || "active";
+  const now = new Date().toISOString();
+
+  // Update driver location in memory
+  drivers[driverId] = {
+    id: driverId,
+    latitude: locationData.latitude,
+    longitude: locationData.longitude,
+    bearing:
+      locationData.heading !== null && locationData.heading !== undefined
+        ? locationData.heading
+        : null,
+    name: locationData.name || "Driver",
+    status: driverStatus,
+    vehicleType: locationData.vehicleType || "Car",
+    timestamp: now,
+    lastSeen: now, // Track when driver last sent update for cleanup
+  };
+
+  console.log(
+    `✅ [Location Update] Updated driver location: ID=${driverId}, Status=${driverStatus}, Lat=${locationData.latitude}, Lng=${locationData.longitude}, LastSeen=${now}`
+  );
+
+  // Broadcast to all admin clients (dashboard)
+  const updateMessage = {
+    type: "driverLocationUpdate",
+    driver: drivers[driverId],
+  };
+
+  broadcastToAdmins(updateMessage);
+
+  return drivers[driverId];
+};
+
 wss.on("connection", (ws, req) => {
   // Check if this is an admin connection (from dashboard)
   let isAdmin = false;
   let companyId = null;
   let companyDriverIds = null;
-  
+
   try {
     // Parse URL to get query parameters
     const urlString = req.url || "";
     console.log(`🔍 New WebSocket connection - URL: ${urlString}`);
     const url = new URL(urlString, `http://${req.headers.host || "localhost"}`);
     isAdmin = url.searchParams.get("role") === "admin";
-    
+
     // Try to get token from query params or Authorization header
-    const token = url.searchParams.get("token") || 
-                  (req.headers.authorization && req.headers.authorization.replace("Bearer ", ""));
-    
+    const token =
+      url.searchParams.get("token") ||
+      (req.headers.authorization &&
+        req.headers.authorization.replace("Bearer ", ""));
+
     if (token && isAdmin) {
       try {
         const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
         companyId = decoded.companyId || null;
-        console.log(`🔍 Decoded token - role: ${decoded.role}, companyId: ${companyId}`);
-        
+        console.log(
+          `🔍 Decoded token - role: ${decoded.role}, companyId: ${companyId}`
+        );
+
         // If COMPANY user, fetch company driver IDs
         if (decoded.role === "COMPANY" && companyId) {
           // We'll fetch this from the database via HTTP request
           // For now, we'll set it up to be fetched asynchronously
-          fetchCompanyDrivers(companyId).then((driverIds) => {
-            ws.companyDriverIds = driverIds;
-            companyDriverIds = driverIds;
-            console.log(`✅ Loaded ${driverIds.length} drivers for company ${companyId}`);
-          }).catch((err) => {
-            console.error(`❌ Error fetching company drivers:`, err);
-          });
+          fetchCompanyDrivers(companyId)
+            .then((driverIds) => {
+              ws.companyDriverIds = driverIds;
+              companyDriverIds = driverIds;
+              console.log(
+                `✅ Loaded ${driverIds.length} drivers for company ${companyId}`
+              );
+            })
+            .catch((err) => {
+              console.error(`❌ Error fetching company drivers:`, err);
+            });
         }
       } catch (err) {
         console.log(`⚠️ Could not decode token:`, err.message);
       }
     }
-    
-    console.log(`🔍 Connection type: ${isAdmin ? "Admin (Dashboard)" : "Driver/User"}, companyId: ${companyId}`);
+
+    console.log(
+      `🔍 Connection type: ${
+        isAdmin ? "Admin (Dashboard)" : "Driver/User"
+      }, companyId: ${companyId}`
+    );
   } catch (error) {
     // Fallback: check if URL contains role=admin
     if (req.url && req.url.includes("role=admin")) {
       isAdmin = true;
     }
-    console.log(`🔍 URL parsing fallback, isAdmin: ${isAdmin}, URL: ${req.url}`);
+    console.log(
+      `🔍 URL parsing fallback, isAdmin: ${isAdmin}, URL: ${req.url}`
+    );
   }
-  
+
   ws.isAdmin = isAdmin;
   ws.companyId = companyId;
   ws.companyDriverIds = companyDriverIds;
-  
+
   // Log connection details
   console.log(`📊 Current connections: ${wss.clients.size} total`);
   console.log(`📊 Current drivers in memory: ${Object.keys(drivers).length}`);
@@ -346,43 +452,62 @@ wss.on("connection", (ws, req) => {
 
   // Handle WebSocket errors
   ws.on("error", (error) => {
-    console.error(`❌ WebSocket error for ${isAdmin ? "admin" : "client"}:`, error.message || error);
+    console.error(
+      `❌ WebSocket error for ${isAdmin ? "admin" : "client"}:`,
+      error.message || error
+    );
   });
 
   if (isAdmin) {
     console.log("👤 Admin client connected");
     console.log(`📊 Current drivers in system: ${Object.keys(drivers).length}`);
     console.log(`📊 Current active rides: ${Object.keys(activeRides).length}`);
-    
+
     // Send initial data after company drivers are loaded (if COMPANY user)
     const sendInitialData = () => {
       let driversToSend = drivers;
       let ridesToSend = activeRides;
-      
+
       // Filter by company if COMPANY user
-      if (ws.companyId && ws.companyDriverIds && ws.companyDriverIds.length > 0) {
+      if (
+        ws.companyId &&
+        ws.companyDriverIds &&
+        ws.companyDriverIds.length > 0
+      ) {
         driversToSend = filterDriversByCompany(drivers, ws.companyDriverIds);
         ridesToSend = filterRidesByCompany(activeRides, ws.companyDriverIds);
-        console.log(`🔍 Filtered to ${Object.keys(driversToSend).length} drivers and ${Object.keys(ridesToSend).length} rides for company ${ws.companyId}`);
+        console.log(
+          `🔍 Filtered to ${Object.keys(driversToSend).length} drivers and ${
+            Object.keys(ridesToSend).length
+          } rides for company ${ws.companyId}`
+        );
       }
-      
+
       // Send current driver locations to new admin client
       const driverLocationsMessage = JSON.stringify({
         type: "driverLocations",
         drivers: driversToSend,
       });
-      console.log(`📤 Sending initial driver locations (${Object.keys(driversToSend).length} drivers) to admin client`);
+      console.log(
+        `📤 Sending initial driver locations (${
+          Object.keys(driversToSend).length
+        } drivers) to admin client`
+      );
       ws.send(driverLocationsMessage);
-      
+
       // Send active rides
       const activeRidesMessage = JSON.stringify({
         type: "activeRides",
         rides: ridesToSend,
       });
-      console.log(`📤 Sending initial active rides (${Object.keys(ridesToSend).length} rides) to admin client`);
+      console.log(
+        `📤 Sending initial active rides (${
+          Object.keys(ridesToSend).length
+        } rides) to admin client`
+      );
       ws.send(activeRidesMessage);
     };
-    
+
     // If COMPANY user, wait for driver IDs to load, otherwise send immediately
     if (ws.companyId && !ws.companyDriverIds) {
       // Wait a bit for company drivers to load
@@ -397,7 +522,10 @@ wss.on("connection", (ws, req) => {
     // Try to get userId from query params
     try {
       const urlString = req.url || "";
-      const url = new URL(urlString, `http://${req.headers.host || "localhost"}`);
+      const url = new URL(
+        urlString,
+        `http://${req.headers.host || "localhost"}`
+      );
       const userId = url.searchParams.get("userId");
       if (userId) {
         ws.userId = userId;
@@ -412,11 +540,16 @@ wss.on("connection", (ws, req) => {
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message);
-      console.log(`📨 Received message from ${ws.isAdmin ? "admin" : "client"}:`, data.type || "unknown");
-      
+      console.log(
+        `📨 Received message from ${ws.isAdmin ? "admin" : "client"}:`,
+        data.type || "unknown"
+      );
+
       // Log driver location updates in detail
       if (data.type === "locationUpdate" && data.role === "driver") {
-        console.log(`🚗 [WebSocket] Driver location update received from driver ID: ${data.driver}`);
+        console.log(
+          `🚗 [WebSocket] Driver location update received from driver ID: ${data.driver}`
+        );
         console.log(`🚗 [WebSocket] Location data:`, {
           latitude: data.data?.latitude,
           longitude: data.data?.longitude,
@@ -430,33 +563,31 @@ wss.on("connection", (ws, req) => {
       if (data.type === "locationUpdate" && data.role === "driver") {
         // Store driver ID in the WebSocket connection for cleanup on disconnect
         ws.driverId = data.driver;
-        
+
         const driverStatus = data.data.status || "active";
-        
-        console.log(`📝 [WebSocket] Processing location update for driver ${data.driver} with status: ${driverStatus}`);
-        
-        drivers[data.driver] = {
-          id: data.driver,
+
+        console.log(
+          `📝 [WebSocket] Processing location update for driver ${data.driver} with status: ${driverStatus}`
+        );
+
+        // Use helper function to update location and broadcast
+        updateDriverLocationAndBroadcast(data.driver, {
           latitude: data.data.latitude,
           longitude: data.data.longitude,
-          bearing: data.data.heading !== null && data.data.heading !== undefined ? data.data.heading : null,
+          heading:
+            data.data.heading !== null && data.data.heading !== undefined
+              ? data.data.heading
+              : null,
           name: data.data.name || "Driver",
           status: driverStatus,
           vehicleType: data.data.vehicleType || "Car",
-          timestamp: new Date().toISOString(),
-        };
-        console.log(`✅ [WebSocket] Updated driver location: ID=${data.driver}, Status=${driverStatus}, Name=${drivers[data.driver].name}, Lat=${data.data.latitude}, Lng=${data.data.longitude}, Bearing=${drivers[data.driver].bearing}`);
-        console.log(`📊 [WebSocket] Total drivers in system: ${Object.keys(drivers).length}`);
+        });
 
-        // Broadcast to all admin clients
-        const updateMessage = {
-          type: "driverLocationUpdate",
-          driver: drivers[data.driver],
-        };
-        console.log(`📡 [WebSocket] Broadcasting driver location update for driver ${data.driver} to admin clients`);
-        const adminCount = Array.from(wss.clients).filter(client => client.isAdmin).length;
-        console.log(`📡 [WebSocket] Admin clients connected: ${adminCount}`);
-        broadcastToAdmins(updateMessage);
+        console.log(
+          `📊 [WebSocket] Total drivers in system: ${
+            Object.keys(drivers).length
+          }`
+        );
       }
 
       if (data.type === "requestRide" && data.role === "user") {
@@ -466,7 +597,7 @@ wss.on("connection", (ws, req) => {
           userConnections[data.userId] = ws;
           console.log(`👤 User ${data.userId} registered for ride updates`);
         }
-        
+
         console.log("Requesting ride...");
         console.log(`User location: ${data.latitude}, ${data.longitude}`);
         console.log(`Total drivers in system: ${Object.keys(drivers).length}`);
@@ -474,7 +605,10 @@ wss.on("connection", (ws, req) => {
         const nearbyDrivers = findNearbyDrivers(data.latitude, data.longitude);
         console.log(`Found ${nearbyDrivers.length} nearby drivers`);
         if (nearbyDrivers.length > 0) {
-          console.log("Nearby drivers:", JSON.stringify(nearbyDrivers, null, 2));
+          console.log(
+            "Nearby drivers:",
+            JSON.stringify(nearbyDrivers, null, 2)
+          );
         }
         ws.send(
           JSON.stringify({ type: "nearbyDrivers", drivers: nearbyDrivers })
@@ -486,27 +620,42 @@ wss.on("connection", (ws, req) => {
         ws.userId = data.userId;
         userConnections[data.userId] = ws;
         console.log(`👤 User ${data.userId} registered for updates`);
-        ws.send(JSON.stringify({ type: "registered", message: "User registered successfully" }));
+        ws.send(
+          JSON.stringify({
+            type: "registered",
+            message: "User registered successfully",
+          })
+        );
       }
 
       if (data.type === "driverStatusChange" && data.role === "driver") {
         // Store driver ID in the WebSocket connection for cleanup on disconnect
         ws.driverId = data.driver;
-        
-        console.log(`🔄 [WebSocket] Driver status change received: driver=${data.driver}, status=${data.status}`);
-        
+
+        console.log(
+          `🔄 [WebSocket] Driver status change received: driver=${data.driver}, status=${data.status}`
+        );
+
         if (data.status === "inactive") {
           // Remove driver from available drivers when they go inactive
-          console.log(`🔄 [WebSocket] Driver ${data.driver} went inactive - removing from available drivers`);
+          console.log(
+            `🔄 [WebSocket] Driver ${data.driver} went inactive - removing from available drivers`
+          );
           delete drivers[data.driver];
-          console.log(`📊 [WebSocket] Total drivers in system after removal: ${Object.keys(drivers).length}`);
+          console.log(
+            `📊 [WebSocket] Total drivers in system after removal: ${
+              Object.keys(drivers).length
+            }`
+          );
           // Broadcast removal to admin clients
           broadcastToAdmins({
             type: "driverRemoved",
             driverId: data.driver,
           });
         } else if (data.status === "active") {
-          console.log(`🔄 [WebSocket] Driver ${data.driver} went active - waiting for location update`);
+          console.log(
+            `🔄 [WebSocket] Driver ${data.driver} went active - waiting for location update`
+          );
           // Driver will be added back when they send their next location update
         }
       }
@@ -541,22 +690,31 @@ wss.on("connection", (ws, req) => {
   ws.on("close", (code, reason) => {
     const reasonStr = reason ? reason.toString() : "No reason provided";
     if (ws.isAdmin) {
-      console.log(`👤 Admin client disconnected: code=${code}, reason="${reasonStr}"`);
+      console.log(
+        `👤 Admin client disconnected: code=${code}, reason="${reasonStr}"`
+      );
     } else if (ws.driverId) {
-      // If a driver disconnects, remove them from available drivers
-      console.log(`🚗 Driver ${ws.driverId} disconnected: code=${code}, reason="${reasonStr}" - removing from available drivers`);
-      delete drivers[ws.driverId];
-      // Broadcast removal to admin clients
-      broadcastToAdmins({
-        type: "driverRemoved",
-        driverId: ws.driverId,
-      });
+      // If a driver disconnects, don't immediately remove them
+      // They may still be online and sending HTTP API updates
+      // The cleanup interval will remove them if they're truly offline (no updates for 10+ minutes)
+      console.log(
+        `🚗 Driver ${ws.driverId} disconnected: code=${code}, reason="${reasonStr}" - keeping in memory (will be removed by cleanup if truly offline)`
+      );
+      // Mark lastSeen timestamp if driver exists and doesn't have one
+      if (drivers[ws.driverId] && !drivers[ws.driverId].lastSeen) {
+        drivers[ws.driverId].lastSeen = new Date().toISOString();
+      }
+      // Don't remove driver or broadcast removal - allows HTTP API updates to keep them visible
     } else if (ws.userId) {
       // If a user disconnects, remove them from user connections
-      console.log(`👤 User ${ws.userId} disconnected: code=${code}, reason="${reasonStr}"`);
+      console.log(
+        `👤 User ${ws.userId} disconnected: code=${code}, reason="${reasonStr}"`
+      );
       delete userConnections[ws.userId];
     } else {
-      console.log(`🔌 Client disconnected: code=${code}, reason="${reasonStr}"`);
+      console.log(
+        `🔌 Client disconnected: code=${code}, reason="${reasonStr}"`
+      );
     }
   });
 });
@@ -569,7 +727,9 @@ const PING_TIMEOUT = 60000; // 60 seconds - if no pong received, close connectio
 setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
-      console.log(`💀 Terminating dead connection (${ws.isAdmin ? "admin" : "client"})`);
+      console.log(
+        `💀 Terminating dead connection (${ws.isAdmin ? "admin" : "client"})`
+      );
       ws.terminate();
       return;
     }
@@ -586,88 +746,165 @@ setInterval(() => {
   });
 }, PING_INTERVAL);
 
+// Cleanup stale drivers that haven't sent updates for extended period
+// Runs every 2 minutes to remove drivers with lastSeen older than 10 minutes
+const CLEANUP_INTERVAL = 120000; // 2 minutes
+const STALE_DRIVER_THRESHOLD = 600000; // 10 minutes in milliseconds
+
+setInterval(() => {
+  const now = Date.now();
+  const staleDriverIds = [];
+
+  // Check all drivers for stale lastSeen timestamps
+  Object.entries(drivers).forEach(([driverId, driver]) => {
+    if (driver.lastSeen) {
+      const lastSeenTime = new Date(driver.lastSeen).getTime();
+      const timeSinceLastSeen = now - lastSeenTime;
+
+      if (timeSinceLastSeen > STALE_DRIVER_THRESHOLD) {
+        staleDriverIds.push(driverId);
+      }
+    } else {
+      // If driver doesn't have lastSeen, consider it stale (older implementation)
+      // But give it a chance - only remove if it's been more than 10 minutes since timestamp
+      if (driver.timestamp) {
+        const timestampTime = new Date(driver.timestamp).getTime();
+        const timeSinceTimestamp = now - timestampTime;
+
+        if (timeSinceTimestamp > STALE_DRIVER_THRESHOLD) {
+          staleDriverIds.push(driverId);
+        }
+      } else {
+        // No timestamp at all - mark as stale
+        staleDriverIds.push(driverId);
+      }
+    }
+  });
+
+  // Remove stale drivers and broadcast removal
+  staleDriverIds.forEach((driverId) => {
+    console.log(
+      `🧹 Removing stale driver ${driverId} - no updates received for more than 10 minutes`
+    );
+    delete drivers[driverId];
+    broadcastToAdmins({
+      type: "driverRemoved",
+      driverId: driverId,
+    });
+  });
+
+  if (staleDriverIds.length > 0) {
+    console.log(
+      `🧹 Cleanup completed: removed ${staleDriverIds.length} stale driver(s)`
+    );
+  }
+}, CLEANUP_INTERVAL);
+
 const findNearbyDrivers = (userLat, userLon) => {
   console.log(`🔍 Finding nearby drivers for location: ${userLat}, ${userLon}`);
   console.log(`📊 Total drivers registered: ${Object.keys(drivers).length}`);
-  
+
   const nearbyDrivers = Object.entries(drivers)
     .filter(([id, driver]) => {
       console.log(`\n🚗 Checking driver ${id}:`);
-      console.log(`   Status: "${driver.status}" (type: ${typeof driver.status})`);
+      console.log(
+        `   Status: "${driver.status}" (type: ${typeof driver.status})`
+      );
       console.log(`   Location: ${driver.latitude}, ${driver.longitude}`);
-      
+
       // Only include active drivers - check status with flexible comparison
-      const isActive = driver.status === "active" || driver.status === "Active" || String(driver.status).toLowerCase() === "active";
-      
+      const isActive =
+        driver.status === "active" ||
+        driver.status === "Active" ||
+        String(driver.status).toLowerCase() === "active";
+
       if (!isActive) {
-        console.log(`   ❌ Driver ${id} is not active (status: "${driver.status}") - excluding`);
+        console.log(
+          `   ❌ Driver ${id} is not active (status: "${driver.status}") - excluding`
+        );
         return false;
       }
-      
+
       // Check distance (within 5 kilometers)
       const distance = geolib.getDistance(
         { latitude: userLat, longitude: userLon },
         { latitude: driver.latitude, longitude: driver.longitude }
       );
       const isWithinRange = distance <= 5000; // 5 kilometers
-      
+
       if (!isWithinRange) {
-        console.log(`   ❌ Driver ${id} is too far away (${distance}m = ${(distance/1000).toFixed(2)}km) - excluding`);
+        console.log(
+          `   ❌ Driver ${id} is too far away (${distance}m = ${(
+            distance / 1000
+          ).toFixed(2)}km) - excluding`
+        );
       } else {
-        console.log(`   ✅ Driver ${id} is within range (${distance}m = ${(distance/1000).toFixed(2)}km)`);
+        console.log(
+          `   ✅ Driver ${id} is within range (${distance}m = ${(
+            distance / 1000
+          ).toFixed(2)}km)`
+        );
       }
-      
+
       return isWithinRange;
     })
     .map(([id, driver]) => ({ id, ...driver }));
-  
-  console.log(`\n✅ Total nearby active drivers found: ${nearbyDrivers.length}`);
+
+  console.log(
+    `\n✅ Total nearby active drivers found: ${nearbyDrivers.length}`
+  );
   return nearbyDrivers;
 };
 
 // API endpoint to get current driver locations (for HTTP requests)
 app.get("/api/drivers", (req, res) => {
   const driverCount = Object.keys(drivers).length;
-  console.log(`📡 HTTP API: /api/drivers requested - returning ${driverCount} drivers`);
-  res.json({ 
+  console.log(
+    `📡 HTTP API: /api/drivers requested - returning ${driverCount} drivers`
+  );
+  res.json({
     drivers,
     count: driverCount,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
 // API endpoint to get active rides
 app.get("/api/active-rides", (req, res) => {
   const rideCount = Object.keys(activeRides).length;
-  console.log(`📡 HTTP API: /api/active-rides requested - returning ${rideCount} rides`);
-  res.json({ 
+  console.log(
+    `📡 HTTP API: /api/active-rides requested - returning ${rideCount} rides`
+  );
+  res.json({
     rides: activeRides,
     count: rideCount,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
 // API endpoint to get connection stats (for debugging)
 app.get("/api/stats", (req, res) => {
-  const adminClients = Array.from(wss.clients).filter(client => client.isAdmin).length;
+  const adminClients = Array.from(wss.clients).filter(
+    (client) => client.isAdmin
+  ).length;
   const totalClients = wss.clients.size;
   const driverCount = Object.keys(drivers).length;
-  
+
   console.log(`📡 HTTP API: /api/stats requested`);
   res.json({
     connections: {
       total: totalClients,
       admin: adminClients,
-      drivers: totalClients - adminClients
+      drivers: totalClients - adminClients,
     },
     drivers: {
       count: driverCount,
-      ids: Object.keys(drivers)
+      ids: Object.keys(drivers),
     },
     activeRides: {
-      count: Object.keys(activeRides).length
+      count: Object.keys(activeRides).length,
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -675,9 +912,11 @@ app.get("/api/stats", (req, res) => {
 app.post("/api/notify-ride-accepted", (req, res) => {
   try {
     const { userId, rideData } = req.body;
-    
+
     if (!userId || !rideData) {
-      return res.status(400).json({ success: false, message: "userId and rideData are required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "userId and rideData are required" });
     }
 
     console.log(`📢 Notifying user ${userId} about accepted ride`);
@@ -689,10 +928,12 @@ app.post("/api/notify-ride-accepted", (req, res) => {
       rideData: rideData,
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       delivered: sent,
-      message: sent ? "Notification sent to user" : "User not connected, will receive push notification"
+      message: sent
+        ? "Notification sent to user"
+        : "User not connected, will receive push notification",
     });
   } catch (error) {
     console.error("Error notifying user:", error);
@@ -704,9 +945,11 @@ app.post("/api/notify-ride-accepted", (req, res) => {
 app.post("/api/notify-ride-completed", (req, res) => {
   try {
     const { userId, rideId, rideData } = req.body;
-    
+
     if (!userId || !rideId) {
-      return res.status(400).json({ success: false, message: "userId and rideId are required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "userId and rideId are required" });
     }
 
     console.log(`✅ Notifying user ${userId} about completed ride ${rideId}`);
@@ -719,10 +962,10 @@ app.post("/api/notify-ride-completed", (req, res) => {
       rideData: rideData,
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       delivered: sent,
-      message: sent ? "Notification sent to user" : "User not connected"
+      message: sent ? "Notification sent to user" : "User not connected",
     });
   } catch (error) {
     console.error("Error notifying user about ride completion:", error);
@@ -730,20 +973,69 @@ app.post("/api/notify-ride-completed", (req, res) => {
   }
 });
 
-// Start the HTTP server (WebSocket is attached to it)
-server.listen(PORT, () => {
-  console.log(`🚀 Server started on port ${PORT}`);
-  console.log(`✅ HTTP API server is running`);
-  console.log(`✅ WebSocket server is ready`);
-  console.log(`\n📡 Connect WebSocket to: ws://localhost:${PORT}?role=admin`);
-  console.log(`🌐 HTTP API available at: http://localhost:${PORT}/api\n`);
-}).on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use!`);
-    console.error(`   Please stop the existing server or use a different port.`);
-    process.exit(1);
-  } else {
-    console.error('Server error:', error);
-    throw error;
+// API endpoint to update driver location (called from backend server when app is in background)
+app.post("/api/update-driver-location", (req, res) => {
+  try {
+    const {
+      driverId,
+      latitude,
+      longitude,
+      heading,
+      name,
+      status,
+      vehicleType,
+    } = req.body;
+
+    if (!driverId || latitude === undefined || longitude === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "driverId, latitude, and longitude are required",
+      });
+    }
+
+    console.log(
+      `📡 [HTTP API] Location update received for driver ${driverId} (background update)`
+    );
+
+    // Update driver location and broadcast to dashboard
+    const updatedDriver = updateDriverLocationAndBroadcast(driverId, {
+      latitude,
+      longitude,
+      heading: heading !== undefined ? heading : null,
+      name: name || "Driver",
+      status: status || "active",
+      vehicleType: vehicleType || "Car",
+    });
+
+    res.json({
+      success: true,
+      driver: updatedDriver,
+      message: "Driver location updated and broadcasted to dashboard",
+    });
+  } catch (error) {
+    console.error("Error updating driver location via HTTP API:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// Start the HTTP server (WebSocket is attached to it)
+server
+  .listen(PORT, () => {
+    console.log(`🚀 Server started on port ${PORT}`);
+    console.log(`✅ HTTP API server is running`);
+    console.log(`✅ WebSocket server is ready`);
+    console.log(`\n📡 Connect WebSocket to: ws://localhost:${PORT}?role=admin`);
+    console.log(`🌐 HTTP API available at: http://localhost:${PORT}/api\n`);
+  })
+  .on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`❌ Port ${PORT} is already in use!`);
+      console.error(
+        `   Please stop the existing server or use a different port.`
+      );
+      process.exit(1);
+    } else {
+      console.error("Server error:", error);
+      throw error;
+    }
+  });

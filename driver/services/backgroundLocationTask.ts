@@ -60,6 +60,8 @@ async function sendLocationToServer(
       return;
     }
 
+    // IMPORTANT: This HTTP API call now triggers socket server notification
+    // via the backend controller, ensuring dashboard continues to see driver
     await axios.post(
       `${getServerUri()}/driver/update-location`,
       {
@@ -70,7 +72,7 @@ async function sendLocationToServer(
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-        timeout: 10000, // 10 second timeout
+        timeout: 15000, // 15 second timeout - increased for background requests
       }
     );
 

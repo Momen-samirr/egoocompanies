@@ -1344,7 +1344,11 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
     // Check if captain is online - only process location updates if online
     const captain = await prisma.driver.findUnique({
       where: { id: captainId },
-      select: { status: true },
+      select: {
+        status: true,
+        name: true,
+        vehicle_type: true,
+      },
     });
 
     if (!captain || captain.status !== "active") {
@@ -1352,6 +1356,35 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
         success: false,
         message: "You must be online to update location",
       });
+    }
+
+    // CRITICAL FIX: Notify socket server so dashboard continues to show driver
+    // This ensures location updates from background app are visible on dashboard
+    try {
+      const axios = require("axios");
+      const SOCKET_SERVER_URL =
+        process.env.SOCKET_SERVER_URL || "http://localhost:8080";
+
+      await axios
+        .post(`${SOCKET_SERVER_URL}/api/update-driver-location`, {
+          driverId: captainId,
+          latitude,
+          longitude,
+          heading: null, // Background updates don't include heading
+          name: captain.name || "Driver",
+          status: captain.status || "active",
+          vehicleType: captain.vehicle_type || "Car",
+        })
+        .catch((error: any) => {
+          // Don't fail the request if socket server is unavailable
+          console.log(
+            "⚠️ Could not notify socket server about location update:",
+            error.message
+          );
+        });
+    } catch (socketError) {
+      // Don't fail the request if socket notification fails
+      console.log("⚠️ Socket notification error (non-critical):", socketError);
     }
 
     // Update location in any active trip progress
