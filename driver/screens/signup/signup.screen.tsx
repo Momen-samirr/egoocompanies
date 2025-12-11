@@ -1,5 +1,5 @@
-import { View, Text, ScrollView } from "react-native";
-import React, { useState } from "react";
+import { View, Text, ScrollView, Keyboard } from "react-native";
+import React, { useState, useCallback } from "react";
 import { windowHeight, windowWidth } from "@/themes/app.constant";
 import ProgressBar from "@/components/common/progress.bar";
 import styles from "./styles";
@@ -28,42 +28,105 @@ export default function SignupScreen() {
       ...prevData,
       [key]: value,
     }));
-  };
 
-  const gotoDocument = () => {
-    const isEmailEmpty = formData.email.trim() === "";
-    const isEmailInvalid = !isEmailEmpty && emailFormatWarning !== "";
-
-    if (isEmailEmpty) {
-      setShowWarning(true);
-    } else if (isEmailInvalid) {
-      setShowWarning(true);
-    } else {
-      setShowWarning(false);
-      const phoneNumberData = countryNameItems.find(
-        (i: any) => i.value === formData.country
-      );
-
-      // Remove ALL + signs from value to avoid double plus (++)
-      const cleanCountryCode = (phoneNumberData?.value || formData.country || '').toString().replace(/\+/g, '').trim();
-      console.log('Signup - Original country:', formData.country);
-      console.log('Signup - PhoneNumberData value:', phoneNumberData?.value);
-      console.log('Signup - Cleaned countryCode:', cleanCountryCode);
-      const phone_number = `+${cleanCountryCode}${formData.phoneNumber}`;
-      console.log('Signup - Final phone_number:', phone_number);
-
-      const driverData = {
-        name: formData.name,
-        country: phoneNumberData?.label || formData.country, // Use the label for display
-        phone_number: phone_number,
-        email: formData.email,
-      };
-      router.push({
-        pathname: "/(routes)/document-verification",
-        params: driverData,
-      });
+    // Validate email format when email changes
+    if (key === "email") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (value.trim() !== "" && !emailRegex.test(value)) {
+        setEmailFormatWarning("Please enter a valid email address!");
+      } else {
+        setEmailFormatWarning("");
+      }
     }
   };
+
+  const gotoDocument = useCallback(() => {
+    // Dismiss keyboard
+    Keyboard.dismiss();
+
+    console.log("🔵 Next button pressed!");
+    console.log("🔵 Form data:", formData);
+
+    // Validate all required fields
+    const isNameEmpty = formData.name.trim() === "";
+    const isCountryEmpty = !formData.country || formData.country.trim() === "";
+    const isPhoneNumberEmpty = formData.phoneNumber.trim() === "";
+    const isEmailEmpty = formData.email.trim() === "";
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isEmailInvalid = !isEmailEmpty && !emailRegex.test(formData.email);
+
+    console.log("🔵 Validation check:", {
+      isNameEmpty,
+      isCountryEmpty,
+      isPhoneNumberEmpty,
+      isEmailEmpty,
+      isEmailInvalid,
+    });
+
+    // Check if any validation fails
+    if (
+      isNameEmpty ||
+      isCountryEmpty ||
+      isPhoneNumberEmpty ||
+      isEmailEmpty ||
+      isEmailInvalid
+    ) {
+      console.log("🔴 Validation failed - showing warnings");
+      setShowWarning(true);
+      // Update email format warning if email is invalid
+      if (isEmailInvalid) {
+        setEmailFormatWarning("Please enter a valid email address!");
+      } else {
+        setEmailFormatWarning("");
+      }
+      return;
+    }
+
+    console.log("✅ All validations passed - proceeding to next screen");
+
+    // All validations passed, proceed to next screen
+    setShowWarning(false);
+    setEmailFormatWarning("");
+
+    const phoneNumberData = countryNameItems.find(
+      (i: any) => i.value === formData.country
+    );
+
+    // Remove ALL + signs from value to avoid double plus (++)
+    const cleanCountryCode = (phoneNumberData?.value || formData.country || "")
+      .toString()
+      .replace(/\+/g, "")
+      .trim();
+    console.log("Signup - Original country:", formData.country);
+    console.log("Signup - PhoneNumberData value:", phoneNumberData?.value);
+    console.log("Signup - Cleaned countryCode:", cleanCountryCode);
+    const phone_number = `+${cleanCountryCode}${formData.phoneNumber}`;
+    console.log("Signup - Final phone_number:", phone_number);
+
+    const driverData = {
+      name: formData.name,
+      country: phoneNumberData?.label || formData.country, // Use the label for display
+      phone_number: phone_number,
+      email: formData.email,
+    };
+
+    console.log(
+      "Signup - Navigating to document-verification with data:",
+      driverData
+    );
+
+    try {
+      router.push({
+        pathname: "/(routes)/document-verification",
+        params: driverData as any,
+      });
+      console.log("✅ Navigation initiated successfully");
+    } catch (error) {
+      console.error("❌ Navigation error:", error);
+    }
+  }, [formData]);
 
   return (
     <ScrollView>
@@ -103,8 +166,16 @@ export default function SignupScreen() {
                 value={formData.country}
                 onValueChange={(text) => {
                   // Clean the country code: remove ALL + signs and ensure we have the numeric value
-                  const cleanCode = (text || '').toString().replace(/\+/g, '').trim();
-                  console.log('Signup - Received:', text, 'Cleaned:', cleanCode);
+                  const cleanCode = (text || "")
+                    .toString()
+                    .replace(/\+/g, "")
+                    .trim();
+                  console.log(
+                    "Signup - Received:",
+                    text,
+                    "Cleaned:",
+                    cleanCode
+                  );
                   handleChange("country", cleanCode);
                 }}
                 showWarning={showWarning && !formData.country}
@@ -130,9 +201,9 @@ export default function SignupScreen() {
                   (formData.email === "" || emailFormatWarning !== "")
                 }
                 warning={
-                  emailFormatWarning !== ""
+                  formData.email === ""
                     ? "Please enter your email!"
-                    : "Please enter a validate email!"
+                    : "Please enter a valid email!"
                 }
                 emailFormatWarning={emailFormatWarning}
               />

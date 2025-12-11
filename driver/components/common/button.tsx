@@ -15,55 +15,51 @@ interface ButtonProps {
   disabled?: boolean;
 }
 
-const Button: React.FC<ButtonProps> = React.memo(({
-  title,
-  onPress,
-  width,
-  height,
-  backgroundColor,
-  textColor,
-  disabled,
-}) => {
-  const widthNumber = width || "100%";
-  return (
-    <Pressable
-      style={[
-        styles.container,
-        {
-          width: widthNumber,
-          height: height,
-          backgroundColor: backgroundColor || color.buttonBg,
-          minHeight: 44, // Minimum touch target size
-        },
-      ]}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      accessibilityState={{ disabled }}
-      accessibilityHint={disabled ? "Button is disabled" : undefined}
-    >
-      <Text
+const Button: React.FC<ButtonProps> = React.memo(
+  ({ title, onPress, width, height, backgroundColor, textColor, disabled }) => {
+    const widthNumber = width || "100%";
+    return (
+      <Pressable
         style={[
-          commonStyles.extraBold,
-          { color: textColor || color.whiteColor },
+          styles.container,
+          {
+            width: widthNumber,
+            height: height,
+            backgroundColor: backgroundColor || color.buttonBg,
+            minHeight: 44, // Minimum touch target size
+          },
         ]}
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled }}
+        accessibilityHint={disabled ? "Button is disabled" : undefined}
       >
-        {title}
-      </Text>
-    </Pressable>
-  );
-}, (prevProps, nextProps) => {
-  // Only re-render if props actually change
-  return (
-    prevProps.title === nextProps.title &&
-    prevProps.disabled === nextProps.disabled &&
-    prevProps.width === nextProps.width &&
-    prevProps.height === nextProps.height &&
-    prevProps.backgroundColor === nextProps.backgroundColor &&
-    prevProps.textColor === nextProps.textColor
-  );
-});
+        <Text
+          style={[
+            commonStyles.extraBold,
+            { color: textColor || color.whiteColor },
+          ]}
+        >
+          {title}
+        </Text>
+      </Pressable>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Only re-render if props actually change
+    return (
+      prevProps.title === nextProps.title &&
+      prevProps.onPress === nextProps.onPress &&
+      prevProps.disabled === nextProps.disabled &&
+      prevProps.width === nextProps.width &&
+      prevProps.height === nextProps.height &&
+      prevProps.backgroundColor === nextProps.backgroundColor &&
+      prevProps.textColor === nextProps.textColor
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   container: {
