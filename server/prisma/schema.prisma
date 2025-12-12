@@ -85,6 +85,7 @@ model driver {
   scheduledTripLedger  ScheduledTripLedger[] @relation("LedgerCaptain")
   companies            DriverCompany[]
   templateAssignments  TripTemplate[]        @relation("TemplateCaptain")
+  notifications        AdminNotification[]   @relation("DriverNotifications")
 }
 
 model EmergencyUsage {
@@ -124,6 +125,16 @@ enum ScheduledTripFinancialRule {
 enum TripType {
   ARRIVAL
   DEPARTURE
+}
+
+enum NotificationType {
+  DOCUMENT_UPLOAD
+  DOCUMENT_UPDATE
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
 }
 
 model Company {
@@ -303,4 +314,23 @@ model rides {
   driver                  driver   @relation("DriverRides", fields: [driverId], references: [id])
   cratedAt                DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+model AdminNotification {
+  id            String            @id @default(auto()) @map("_id") @db.ObjectId
+  adminId       String?           @db.ObjectId  // null = all admins
+  driverId      String            @db.ObjectId
+  driver        driver            @relation("DriverNotifications", fields: [driverId], references: [id])
+  type          NotificationType
+  documentType  String            // "selfie", "license_front", "license_back", "drug_test", "criminal_record"
+  status        NotificationStatus @default(UNREAD)
+  readAt        DateTime?
+  readBy        String?           @db.ObjectId
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  @@index([adminId, status])
+  @@index([driverId])
+  @@index([createdAt])
+  @@index([documentType])
 }

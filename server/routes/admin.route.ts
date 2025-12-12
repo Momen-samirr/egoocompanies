@@ -45,6 +45,10 @@ import {
   getDriverDocumentsForReview,
   reviewDriverDocument,
   getDocumentStatistics,
+  getNotifications,
+  getUnreadNotificationCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
 } from "../controllers/admin.controller";
 import {
   isAuthenticatedAdmin,
@@ -169,6 +173,22 @@ adminRouter.get("/analytics", isAuthenticatedAdmin, getAnalytics);
 
 // Notifications
 adminRouter.post("/notifications/send", isAuthenticatedAdmin, sendNotification);
+adminRouter.get("/notifications", isAuthenticatedAdmin, getNotifications);
+adminRouter.get(
+  "/notifications/unread-count",
+  isAuthenticatedAdmin,
+  getUnreadNotificationCount
+);
+adminRouter.put(
+  "/notifications/:id/read",
+  isAuthenticatedAdmin,
+  markNotificationAsRead
+);
+adminRouter.put(
+  "/notifications/mark-all-read",
+  isAuthenticatedAdmin,
+  markAllNotificationsAsRead
+);
 
 // Active Rides for Map
 adminRouter.get(

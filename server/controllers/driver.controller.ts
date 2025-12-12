@@ -1756,8 +1756,34 @@ export const uploadDriverDocument = async (req: any, res: Response) => {
       select: {
         driversLicensePhotos: true,
         documentStatuses: true,
+        selfiePhoto: true,
+        criminalRecordPhoto: true,
+        drugTestPhoto: true,
       },
     });
+
+    // Check if document already exists (to determine if it's an update)
+    let isUpdate = false;
+    if (documentType === "license_front" || documentType === "license_back") {
+      const currentLicensePhotos = (driver?.driversLicensePhotos as any) || [];
+      const side = documentType === "license_front" ? "front" : "back";
+      isUpdate = currentLicensePhotos.some((photo: any) => photo.side === side);
+    } else if (documentType === "license") {
+      const currentLicensePhotos = (driver?.driversLicensePhotos as any) || [];
+      isUpdate = currentLicensePhotos.some(
+        (photo: any) => photo.side === "front"
+      );
+    } else {
+      const fieldMap: Record<string, keyof typeof driver> = {
+        selfie: "selfiePhoto",
+        criminal_record: "criminalRecordPhoto",
+        drug_test: "drugTestPhoto",
+      };
+      const fieldName = fieldMap[documentType];
+      if (fieldName && driver?.[fieldName]) {
+        isUpdate = true;
+      }
+    }
 
     // Prepare update data
     const updateData: any = {
@@ -1867,6 +1893,48 @@ export const uploadDriverDocument = async (req: any, res: Response) => {
       where: { id: driverId },
       data: updateData,
     });
+
+    // Create notification for admin
+    try {
+      const {
+        createDocumentNotification,
+      } = require("../services/notification.service");
+      const notificationResult = await createDocumentNotification(
+        driverId,
+        documentType,
+        isUpdate
+      );
+
+      // Notify socket server to broadcast to admins
+      if (notificationResult.success && notificationResult.notification) {
+        try {
+          const axios = require("axios");
+          const SOCKET_SERVER_URL =
+            process.env.SOCKET_SERVER_URL || "http://localhost:8080";
+
+          await axios
+            .post(`${SOCKET_SERVER_URL}/api/notify-document-upload`, {
+              notification: notificationResult.notification,
+            })
+            .catch((error: any) => {
+              // Don't fail the request if socket server is unavailable
+              console.log(
+                "⚠️ Could not notify socket server about document upload:",
+                error.message
+              );
+            });
+        } catch (socketError) {
+          // Don't fail the request if socket notification fails
+          console.log(
+            "⚠️ Socket notification error (non-critical):",
+            socketError
+          );
+        }
+      }
+    } catch (notificationError) {
+      // Don't fail the upload if notification creation fails
+      console.error("Error creating notification:", notificationError);
+    }
 
     res.status(200).json({
       success: true,

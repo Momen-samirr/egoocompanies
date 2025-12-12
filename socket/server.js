@@ -1018,6 +1018,38 @@ app.post("/api/update-driver-location", (req, res) => {
   }
 });
 
+// API endpoint to notify admins about document upload/update (called from backend server)
+app.post("/api/notify-document-upload", (req, res) => {
+  try {
+    const { notification } = req.body;
+
+    if (!notification) {
+      return res.status(400).json({
+        success: false,
+        message: "notification is required",
+      });
+    }
+
+    console.log(
+      `📄 [HTTP API] Document notification received for driver ${notification.driverId}`
+    );
+
+    // Broadcast to all admin clients
+    broadcastToAdmins({
+      type: "documentNotification",
+      notification: notification,
+    });
+
+    res.json({
+      success: true,
+      message: "Document notification broadcasted to admins",
+    });
+  } catch (error) {
+    console.error("Error broadcasting document notification:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Start the HTTP server (WebSocket is attached to it)
 server
   .listen(PORT, () => {

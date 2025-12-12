@@ -27,7 +27,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!mounted) return;
-    
+
     if (!isAuthenticated()) {
       router.push("/");
       return;
@@ -64,27 +64,40 @@ export default function DashboardLayout({
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
-        {!isMapPage && showSidebar && (
-          <Header>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
-              aria-label="Toggle sidebar"
-            >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </Header>
-        )}
-        <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 ${!isMapPage && showSidebar ? "p-4 lg:p-6" : ""}`}>
-          <QueryProvider>
+      <QueryProvider>
+        <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
+          {!isMapPage && showSidebar && (
+            <Header>
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+                aria-label="Toggle sidebar"
+              >
+                <svg
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+              </button>
+            </Header>
+          )}
+          <main
+            className={`flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 ${
+              !isMapPage && showSidebar ? "p-4 lg:p-6" : ""
+            }`}
+          >
             {children}
-          </QueryProvider>
-        </main>
-      </div>
+          </main>
+        </div>
+      </QueryProvider>
     </div>
   );
 }
-

@@ -4027,3 +4027,143 @@ export const createTripsFromTemplate = async (req: any, res: Response) => {
     });
   }
 };
+
+// Get Admin Notifications
+export const getNotifications = async (req: any, res: Response) => {
+  try {
+    const adminId = req.admin?.id || null;
+    const {
+      driverId,
+      documentType,
+      status,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    const {
+      getAdminNotifications,
+    } = require("../services/notification.service");
+
+    const filters: any = {
+      page: parseInt(page as string),
+      limit: parseInt(limit as string),
+    };
+
+    if (driverId) filters.driverId = driverId as string;
+    if (documentType) filters.documentType = documentType as string;
+    if (status) filters.status = status as string;
+    if (startDate) filters.startDate = new Date(startDate as string);
+    if (endDate) filters.endDate = new Date(endDate as string);
+
+    const result = await getAdminNotifications(adminId, filters);
+
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error("Get notifications error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get Unread Notification Count
+export const getUnreadNotificationCount = async (req: any, res: Response) => {
+  try {
+    const adminId = req.admin?.id || null;
+    const { getUnreadCount } = require("../services/notification.service");
+
+    const count = await getUnreadCount(adminId);
+
+    res.status(200).json({
+      success: true,
+      count,
+    });
+  } catch (error: any) {
+    console.error("Get unread count error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Mark Notification as Read
+export const markNotificationAsRead = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.admin?.id;
+
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const {
+      markNotificationAsRead: markAsRead,
+    } = require("../services/notification.service");
+
+    const result = await markAsRead(id, adminId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error || "Failed to mark notification as read",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      notification: result.notification,
+    });
+  } catch (error: any) {
+    console.error("Mark notification as read error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Mark All Notifications as Read
+export const markAllNotificationsAsRead = async (req: any, res: Response) => {
+  try {
+    const adminId = req.admin?.id;
+
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const { markAllAsRead } = require("../services/notification.service");
+
+    const result = await markAllAsRead(adminId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error || "Failed to mark all notifications as read",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      count: result.count,
+    });
+  } catch (error: any) {
+    console.error("Mark all notifications as read error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};

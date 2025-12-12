@@ -2,14 +2,18 @@
 
 import { usePathname } from "next/navigation";
 import Breadcrumbs from "@/components/common/Breadcrumbs";
-import { MagnifyingGlassIcon, BellIcon } from "@heroicons/react/24/outline";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { ReactNode } from "react";
 
 function getBreadcrumbs(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
   const breadcrumbs: Array<{ label: string; href?: string }> = [];
 
-  if (segments.length === 0 || (segments.length === 1 && segments[0] === "dashboard")) {
+  if (
+    segments.length === 0 ||
+    (segments.length === 1 && segments[0] === "dashboard")
+  ) {
     return [];
   }
 
@@ -20,7 +24,7 @@ function getBreadcrumbs(pathname: string) {
   pathSegments.forEach((segment, index) => {
     currentPath += `/${segment}`;
     const isLast = index === pathSegments.length - 1;
-    
+
     // Format segment name
     const name = segment
       .split("-")
@@ -71,10 +75,7 @@ export default function Header({ children }: HeaderProps) {
                 className="block w-48 lg:w-64 pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
-            <button className="relative p-2 text-gray-400 hover:text-gray-600 transition-colors">
-              <BellIcon className="h-5 w-5 lg:h-6 lg:w-6" />
-              <span className="absolute top-1 right-1 block h-2 w-2 rounded-full bg-red-500"></span>
-            </button>
+            <NotificationBell />
             <div className="flex items-center space-x-2 lg:space-x-3">
               <div className="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
                 A
@@ -90,4 +91,3 @@ export default function Header({ children }: HeaderProps) {
     </header>
   );
 }
-

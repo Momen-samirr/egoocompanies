@@ -99,3 +99,48 @@ export interface Company {
   createdAt: string;
   updatedAt: string;
 }
+
+export type NotificationType = "DOCUMENT_UPLOAD" | "DOCUMENT_UPDATE";
+export type NotificationStatus = "UNREAD" | "READ";
+export type DocumentType =
+  | "selfie"
+  | "license_front"
+  | "license_back"
+  | "drug_test"
+  | "criminal_record";
+
+export interface AdminNotification {
+  id: string;
+  adminId?: string;
+  driverId: string;
+  driver: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  type: NotificationType;
+  documentType: DocumentType;
+  status: NotificationStatus;
+  readAt?: string;
+  readBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationFilters {
+  driverId?: string;
+  documentType?: DocumentType;
+  status?: NotificationStatus;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface NotificationResponse {
+  notifications: AdminNotification[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}

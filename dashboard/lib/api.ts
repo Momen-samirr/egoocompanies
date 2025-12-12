@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 console.log("🔗 API URL configured:", API_URL);
 
@@ -35,7 +36,11 @@ api.interceptors.response.use(
   },
   (error) => {
     // Ignore canceled requests (AbortError) - these are expected when requests are cancelled
-    if (error.name === "AbortError" || error.code === "ERR_CANCELED" || error.message === "canceled") {
+    if (
+      error.name === "AbortError" ||
+      error.code === "ERR_CANCELED" ||
+      error.message === "canceled"
+    ) {
       return Promise.reject(error); // Reject silently without logging
     }
 
@@ -44,7 +49,10 @@ api.interceptors.response.use(
       console.error("❌ Network error:", error.message);
       if (typeof window !== "undefined") {
         // Show user-friendly error message
-        if (error.code === "ECONNREFUSED" || error.message.includes("Network Error")) {
+        if (
+          error.code === "ECONNREFUSED" ||
+          error.message.includes("Network Error")
+        ) {
           console.error("⚠️ Cannot connect to server. Please check:", API_URL);
         }
       }
@@ -58,7 +66,10 @@ api.interceptors.response.use(
 
     // Handle other HTTP errors
     if (error.response) {
-      console.error(`❌ API Error [${error.response.status}]:`, error.response.data);
+      console.error(
+        `❌ API Error [${error.response.status}]:`,
+        error.response.data
+      );
     }
 
     return Promise.reject(error);
@@ -67,3 +78,42 @@ api.interceptors.response.use(
 
 export default api;
 
+// Notification API methods
+import type {
+  NotificationFilters,
+  NotificationResponse,
+  AdminNotification,
+} from "@/types";
+
+export const getNotifications = async (
+  filters: NotificationFilters = {}
+): Promise<NotificationResponse> => {
+  const params = new URLSearchParams();
+  if (filters.driverId) params.append("driverId", filters.driverId);
+  if (filters.documentType) params.append("documentType", filters.documentType);
+  if (filters.status) params.append("status", filters.status);
+  if (filters.startDate) params.append("startDate", filters.startDate);
+  if (filters.endDate) params.append("endDate", filters.endDate);
+  if (filters.page) params.append("page", filters.page.toString());
+  if (filters.limit) params.append("limit", filters.limit.toString());
+
+  const response = await api.get(`/admin/notifications?${params.toString()}`);
+  return response.data;
+};
+
+export const getUnreadCount = async (): Promise<number> => {
+  const response = await api.get("/admin/notifications/unread-count");
+  return response.data.count;
+};
+
+export const markAsRead = async (
+  notificationId: string
+): Promise<AdminNotification> => {
+  const response = await api.put(`/admin/notifications/${notificationId}/read`);
+  return response.data.notification;
+};
+
+export const markAllAsRead = async (): Promise<{ count: number }> => {
+  const response = await api.put("/admin/notifications/mark-all-read");
+  return response.data;
+};
