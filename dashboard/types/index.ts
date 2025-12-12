@@ -32,7 +32,18 @@ export interface Driver {
   status: string;
   selfiePhoto?: string;
   driversLicensePhoto?: string;
+  driversLicensePhotos?: Array<{ side: "front" | "back"; url: string }>;
   criminalRecordPhoto?: string;
+  drugTestPhoto?: string;
+  documentStatuses?: {
+    [key: string]: {
+      status: "pending" | "approved" | "rejected";
+      reviewedBy?: string;
+      reviewedAt?: string;
+      rejectionReason?: string;
+      rejectedAt?: string;
+    };
+  };
   documentsVerified?: boolean;
   documentsVerifiedAt?: string;
   documentsVerifiedBy?: string;

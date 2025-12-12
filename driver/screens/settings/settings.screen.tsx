@@ -20,9 +20,36 @@ import { Toast } from "react-native-toast-notifications";
 
 const SettingsScreen: React.FC = () => {
   const [documents, setDocuments] = useState({
-    selfie: { url: undefined as string | undefined, uploaded: false },
-    license: { url: undefined as string | undefined, uploaded: false },
-    criminalRecord: { url: undefined as string | undefined, uploaded: false },
+    selfie: {
+      url: undefined as string | undefined,
+      uploaded: false,
+      status: undefined as "pending" | "approved" | "rejected" | undefined,
+      rejectionReason: undefined as string | undefined,
+    },
+    licenseFront: {
+      url: undefined as string | undefined,
+      uploaded: false,
+      status: undefined as "pending" | "approved" | "rejected" | undefined,
+      rejectionReason: undefined as string | undefined,
+    },
+    licenseBack: {
+      url: undefined as string | undefined,
+      uploaded: false,
+      status: undefined as "pending" | "approved" | "rejected" | undefined,
+      rejectionReason: undefined as string | undefined,
+    },
+    criminalRecord: {
+      url: undefined as string | undefined,
+      uploaded: false,
+      status: undefined as "pending" | "approved" | "rejected" | undefined,
+      rejectionReason: undefined as string | undefined,
+    },
+    drugTest: {
+      url: undefined as string | undefined,
+      uploaded: false,
+      status: undefined as "pending" | "approved" | "rejected" | undefined,
+      rejectionReason: undefined as string | undefined,
+    },
     verified: false,
     verifiedAt: undefined as string | undefined,
   });
@@ -39,7 +66,40 @@ const SettingsScreen: React.FC = () => {
     try {
       setLoading(true);
       const docs = await getDriverDocuments();
-      setDocuments(docs);
+      setDocuments({
+        selfie: {
+          url: docs.selfie.url,
+          uploaded: docs.selfie.uploaded,
+          status: docs.selfie.status,
+          rejectionReason: docs.selfie.rejectionReason,
+        },
+        licenseFront: {
+          url: docs.licenseFront.url,
+          uploaded: docs.licenseFront.uploaded,
+          status: docs.licenseFront.status,
+          rejectionReason: docs.licenseFront.rejectionReason,
+        },
+        licenseBack: {
+          url: docs.licenseBack.url,
+          uploaded: docs.licenseBack.uploaded,
+          status: docs.licenseBack.status,
+          rejectionReason: docs.licenseBack.rejectionReason,
+        },
+        criminalRecord: {
+          url: docs.criminalRecord.url,
+          uploaded: docs.criminalRecord.uploaded,
+          status: docs.criminalRecord.status,
+          rejectionReason: docs.criminalRecord.rejectionReason,
+        },
+        drugTest: {
+          url: docs.drugTest.url,
+          uploaded: docs.drugTest.uploaded,
+          status: docs.drugTest.status,
+          rejectionReason: docs.drugTest.rejectionReason,
+        },
+        verified: docs.verified,
+        verifiedAt: docs.verifiedAt,
+      });
     } catch (error: any) {
       console.error("Error loading documents:", error);
       Toast.show(error.message || "Failed to load documents", {
@@ -167,19 +227,40 @@ const SettingsScreen: React.FC = () => {
           imageUrl={documents.selfie.url}
           isUploaded={documents.selfie.uploaded}
           isUploading={uploading.selfie || false}
+          status={documents.selfie.status}
+          rejectionReason={documents.selfie.rejectionReason}
           onTakePhoto={() => handleImagePicker("selfie", "camera")}
           onUploadFromGallery={() => handleImagePicker("selfie", "gallery")}
         />
 
         <DocumentUploadCard
-          title="Driver's License"
-          description="Upload a clear photo of your driver's license"
-          documentType="license"
-          imageUrl={documents.license.url}
-          isUploaded={documents.license.uploaded}
-          isUploading={uploading.license || false}
-          onTakePhoto={() => handleImagePicker("license", "camera")}
-          onUploadFromGallery={() => handleImagePicker("license", "gallery")}
+          title="Driver's License - Front Side"
+          description="Upload a clear photo of the front side of your driver's license"
+          documentType="license_front"
+          imageUrl={documents.licenseFront.url}
+          isUploaded={documents.licenseFront.uploaded}
+          isUploading={uploading.license_front || false}
+          status={documents.licenseFront.status}
+          rejectionReason={documents.licenseFront.rejectionReason}
+          onTakePhoto={() => handleImagePicker("license_front", "camera")}
+          onUploadFromGallery={() =>
+            handleImagePicker("license_front", "gallery")
+          }
+        />
+
+        <DocumentUploadCard
+          title="Driver's License - Back Side"
+          description="Upload a clear photo of the back side of your driver's license"
+          documentType="license_back"
+          imageUrl={documents.licenseBack.url}
+          isUploaded={documents.licenseBack.uploaded}
+          isUploading={uploading.license_back || false}
+          status={documents.licenseBack.status}
+          rejectionReason={documents.licenseBack.rejectionReason}
+          onTakePhoto={() => handleImagePicker("license_back", "camera")}
+          onUploadFromGallery={() =>
+            handleImagePicker("license_back", "gallery")
+          }
         />
 
         <DocumentUploadCard
@@ -189,10 +270,25 @@ const SettingsScreen: React.FC = () => {
           imageUrl={documents.criminalRecord.url}
           isUploaded={documents.criminalRecord.uploaded}
           isUploading={uploading.criminal_record || false}
+          status={documents.criminalRecord.status}
+          rejectionReason={documents.criminalRecord.rejectionReason}
           onTakePhoto={() => handleImagePicker("criminal_record", "camera")}
           onUploadFromGallery={() =>
             handleImagePicker("criminal_record", "gallery")
           }
+        />
+
+        <DocumentUploadCard
+          title="Drug Test Document"
+          description="Upload or capture a photo of your drug test analysis document"
+          documentType="drug_test"
+          imageUrl={documents.drugTest.url}
+          isUploaded={documents.drugTest.uploaded}
+          isUploading={uploading.drug_test || false}
+          status={documents.drugTest.status}
+          rejectionReason={documents.drugTest.rejectionReason}
+          onTakePhoto={() => handleImagePicker("drug_test", "camera")}
+          onUploadFromGallery={() => handleImagePicker("drug_test", "gallery")}
         />
       </View>
     </ScrollView>

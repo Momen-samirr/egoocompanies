@@ -3,21 +3,28 @@ import * as FileSystem from "expo-file-system";
 import { getServerUri } from "@/configs/constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type DocumentType = "selfie" | "license" | "criminal_record";
+export type DocumentType =
+  | "selfie"
+  | "license"
+  | "license_front"
+  | "license_back"
+  | "criminal_record"
+  | "drug_test";
+
+export interface DocumentInfo {
+  url?: string;
+  uploaded: boolean;
+  status?: "pending" | "approved" | "rejected";
+  rejectionReason?: string;
+  reviewedAt?: string;
+}
 
 export interface DocumentStatus {
-  selfie: {
-    url?: string;
-    uploaded: boolean;
-  };
-  license: {
-    url?: string;
-    uploaded: boolean;
-  };
-  criminalRecord: {
-    url?: string;
-    uploaded: boolean;
-  };
+  selfie: DocumentInfo;
+  licenseFront: DocumentInfo;
+  licenseBack: DocumentInfo;
+  criminalRecord: DocumentInfo;
+  drugTest: DocumentInfo;
   verified: boolean;
   verifiedAt?: string;
 }

@@ -11,7 +11,13 @@ import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import Button from "@/components/common/button";
 
-export type DocumentType = "selfie" | "license" | "criminal_record";
+export type DocumentType =
+  | "selfie"
+  | "license"
+  | "license_front"
+  | "license_back"
+  | "criminal_record"
+  | "drug_test";
 
 interface DocumentUploadCardProps {
   title: string;
@@ -20,6 +26,8 @@ interface DocumentUploadCardProps {
   imageUrl?: string;
   isUploaded: boolean;
   isUploading: boolean;
+  status?: "pending" | "approved" | "rejected";
+  rejectionReason?: string;
   onTakePhoto: () => void;
   onUploadFromGallery: () => void;
 }
@@ -31,20 +39,63 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   imageUrl,
   isUploaded,
   isUploading,
+  status,
+  rejectionReason,
   onTakePhoto,
   onUploadFromGallery,
 }) => {
+  const getStatusBadge = () => {
+    if (!status && !isUploaded) return null;
+
+    let badgeStyle = styles.statusBadge;
+    let badgeText = "Uploaded";
+    let textColor = "#fff";
+
+    if (status === "approved") {
+      badgeStyle = [styles.statusBadge, styles.approvedBadge];
+      badgeText = "✓ Approved";
+      textColor = "#fff";
+    } else if (status === "rejected") {
+      badgeStyle = [styles.statusBadge, styles.rejectedBadge];
+      badgeText = "✗ Rejected";
+      textColor = "#fff";
+    } else if (status === "pending" || (isUploaded && !status)) {
+      badgeStyle = [styles.statusBadge, styles.pendingBadge];
+      badgeText = "Pending Review";
+      textColor = "#fff";
+    }
+
+    return (
+      <View style={badgeStyle}>
+        <Text style={[styles.statusText, { color: textColor }]}>
+          {badgeText}
+        </Text>
+      </View>
+    );
+  };
+
+  // Determine if upload buttons should be shown
+  // Show upload buttons when: no status (not uploaded), approved (can update), or rejected (can re-upload)
+  // Do NOT show upload buttons when: pending (waiting for admin review)
+  // Show approved message ONLY when status is explicitly "approved"
+  const showUploadButtons =
+    !status || status === "approved" || status === "rejected";
+  const showApprovedMessage = status === "approved";
+  const isPending = status === "pending";
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
-        {isUploaded && (
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>Uploaded</Text>
-          </View>
-        )}
+        {getStatusBadge()}
       </View>
       <Text style={styles.description}>{description}</Text>
+      {status === "rejected" && rejectionReason && (
+        <View style={styles.rejectionContainer}>
+          <Text style={styles.rejectionLabel}>Rejection Reason:</Text>
+          <Text style={styles.rejectionReason}>{rejectionReason}</Text>
+        </View>
+      )}
 
       {imageUrl ? (
         <View style={styles.imageContainer}>
@@ -66,24 +117,56 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       )}
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.cameraButton]}
-          onPress={onTakePhoto}
-          disabled={isUploading}
-        >
-          <Text style={[styles.actionButtonText, { color: "#fff" }]}>
-            📷 Take Photo
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.galleryButton]}
-          onPress={onUploadFromGallery}
-          disabled={isUploading}
-        >
-          <Text style={[styles.actionButtonText, { color: "#000" }]}>
-            🖼️ Upload from Gallery
-          </Text>
-        </TouchableOpacity>
+        {isPending ? (
+          <View style={styles.pendingMessage}>
+            <Text style={styles.pendingText}>
+              ⏳ This document is pending review. Please wait for admin
+              approval.
+            </Text>
+          </View>
+        ) : showUploadButtons ? (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.cameraButton,
+                (isUploading || isPending) && styles.disabledButton,
+              ]}
+              onPress={onTakePhoto}
+              disabled={isUploading || isPending}
+            >
+              <Text style={[styles.actionButtonText, { color: "#fff" }]}>
+                {status === "rejected"
+                  ? "🔄 Re-upload"
+                  : status === "approved"
+                  ? "🔄 Update"
+                  : "📷 Take Photo"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.galleryButton,
+                (isUploading || isPending) && styles.disabledButton,
+              ]}
+              onPress={onUploadFromGallery}
+              disabled={isUploading || isPending}
+            >
+              <Text style={[styles.actionButtonText, { color: "#000" }]}>
+                🖼️ Upload from Gallery
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : showApprovedMessage ? (
+          <View style={styles.approvedMessage}>
+            <Text style={styles.approvedText}>
+              ✓ This document has been approved
+            </Text>
+            <Text style={styles.approvedSubtext}>
+              You can update it if needed
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -113,15 +196,77 @@ const styles = StyleSheet.create({
     color: "#000",
   },
   statusBadge: {
-    backgroundColor: "#10B981",
     paddingHorizontal: windowWidth(12),
     paddingVertical: windowHeight(4),
     borderRadius: 12,
   },
+  approvedBadge: {
+    backgroundColor: "#10B981",
+  },
+  rejectedBadge: {
+    backgroundColor: "#EF4444",
+  },
+  pendingBadge: {
+    backgroundColor: "#F59E0B",
+  },
   statusText: {
-    color: "#fff",
     fontSize: fontSizes.FONT12,
     fontWeight: "600",
+  },
+  rejectionContainer: {
+    backgroundColor: "#FEE2E2",
+    padding: windowWidth(12),
+    borderRadius: 8,
+    marginBottom: windowHeight(12),
+    borderLeftWidth: 3,
+    borderLeftColor: "#EF4444",
+  },
+  rejectionLabel: {
+    fontSize: fontSizes.FONT12,
+    fontWeight: "600",
+    color: "#991B1B",
+    marginBottom: windowHeight(4),
+  },
+  rejectionReason: {
+    fontSize: fontSizes.FONT14,
+    color: "#DC2626",
+    lineHeight: 20,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  approvedMessage: {
+    width: "100%",
+    paddingVertical: windowHeight(12),
+    backgroundColor: "#D1FAE5",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  approvedText: {
+    fontSize: fontSizes.FONT14,
+    color: "#065F46",
+    fontWeight: "600",
+  },
+  approvedSubtext: {
+    fontSize: fontSizes.FONT12,
+    color: "#047857",
+    marginTop: windowHeight(4),
+  },
+  pendingMessage: {
+    width: "100%",
+    paddingVertical: windowHeight(12),
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+  },
+  pendingText: {
+    fontSize: fontSizes.FONT14,
+    color: "#92400E",
+    fontWeight: "500",
+    textAlign: "center",
+    paddingHorizontal: windowWidth(8),
   },
   description: {
     fontSize: fontSizes.FONT14,

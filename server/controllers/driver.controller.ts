@@ -1720,12 +1720,19 @@ export const uploadDriverDocument = async (req: any, res: Response) => {
       });
     }
 
-    const validDocumentTypes = ["selfie", "license", "criminal_record"];
+    const validDocumentTypes = [
+      "selfie",
+      "license",
+      "license_front",
+      "license_back",
+      "criminal_record",
+      "drug_test",
+    ];
     if (!validDocumentTypes.includes(documentType)) {
       return res.status(400).json({
         success: false,
         message:
-          "Invalid document type. Must be: selfie, license, or criminal_record",
+          "Invalid document type. Must be: selfie, license, license_front, license_back, criminal_record, or drug_test",
       });
     }
 
@@ -1743,25 +1750,122 @@ export const uploadDriverDocument = async (req: any, res: Response) => {
       folder: "driver-documents",
     });
 
-    // Map document type to database field
-    const fieldMap: Record<string, string> = {
-      selfie: "selfiePhoto",
-      license: "driversLicensePhoto",
-      criminal_record: "criminalRecordPhoto",
+    // Get current driver data
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      select: {
+        driversLicensePhotos: true,
+        documentStatuses: true,
+      },
+    });
+
+    // Prepare update data
+    const updateData: any = {
+      // Reset verification status when new document is uploaded
+      documentsVerified: false,
+      documentsVerifiedAt: null,
+      documentsVerifiedBy: null,
     };
 
-    const fieldName = fieldMap[documentType];
+    // Initialize documentStatuses if it doesn't exist
+    const currentStatuses = (driver?.documentStatuses as any) || {};
+    const newStatuses = { ...currentStatuses };
 
-    // Update driver record with new document URL
-    const updatedDriver = await prisma.driver.update({
+    // Handle different document types
+    if (documentType === "license_front" || documentType === "license_back") {
+      // Handle license photos as array
+      const currentLicensePhotos = (driver?.driversLicensePhotos as any) || [];
+      const side = documentType === "license_front" ? "front" : "back";
+
+      // Find and update existing entry or add new one
+      const existingIndex = currentLicensePhotos.findIndex(
+        (photo: any) => photo.side === side
+      );
+      const updatedPhotos = [...currentLicensePhotos];
+      if (existingIndex >= 0) {
+        updatedPhotos[existingIndex] = { side, url: imageUrl };
+      } else {
+        updatedPhotos.push({ side, url: imageUrl });
+      }
+
+      updateData.driversLicensePhotos = updatedPhotos;
+      newStatuses.licenseFront =
+        documentType === "license_front"
+          ? {
+              status: "pending",
+              reviewedAt: null,
+              reviewedBy: null,
+              rejectionReason: null,
+              rejectedAt: null,
+            }
+          : newStatuses.licenseFront || {};
+      newStatuses.licenseBack =
+        documentType === "license_back"
+          ? {
+              status: "pending",
+              reviewedAt: null,
+              reviewedBy: null,
+              rejectionReason: null,
+              rejectedAt: null,
+            }
+          : newStatuses.licenseBack || {};
+    } else if (documentType === "license") {
+      // Legacy support: convert old license to front
+      const currentLicensePhotos = (driver?.driversLicensePhotos as any) || [];
+      const updatedPhotos = [...currentLicensePhotos];
+      const existingFrontIndex = updatedPhotos.findIndex(
+        (photo: any) => photo.side === "front"
+      );
+      if (existingFrontIndex >= 0) {
+        updatedPhotos[existingFrontIndex] = { side: "front", url: imageUrl };
+      } else {
+        updatedPhotos.push({ side: "front", url: imageUrl });
+      }
+      updateData.driversLicensePhotos = updatedPhotos;
+      newStatuses.licenseFront = {
+        status: "pending",
+        reviewedAt: null,
+        reviewedBy: null,
+        rejectionReason: null,
+        rejectedAt: null,
+      };
+    } else {
+      // Map document type to database field
+      const fieldMap: Record<string, string> = {
+        selfie: "selfiePhoto",
+        criminal_record: "criminalRecordPhoto",
+        drug_test: "drugTestPhoto",
+      };
+
+      const fieldName = fieldMap[documentType];
+      if (fieldName) {
+        updateData[fieldName] = imageUrl;
+      }
+
+      // Set status for document type
+      const statusKeyMap: Record<string, string> = {
+        selfie: "selfie",
+        criminal_record: "criminalRecord",
+        drug_test: "drugTest",
+      };
+      const statusKey = statusKeyMap[documentType];
+      if (statusKey) {
+        newStatuses[statusKey] = {
+          status: "pending",
+          reviewedAt: null,
+          reviewedBy: null,
+          rejectionReason: null,
+          rejectedAt: null,
+        };
+      }
+    }
+
+    updateData.documentStatuses = newStatuses;
+
+    // Update driver record
+    await prisma.driver.update({
       where: { id: driverId },
-      data: {
-        [fieldName]: imageUrl,
-        // Reset verification status when new document is uploaded
-        documentsVerified: false,
-        documentsVerifiedAt: null,
-        documentsVerifiedBy: null,
-      },
+      data: updateData,
     });
 
     res.status(200).json({
@@ -1790,7 +1894,10 @@ export const getDriverDocuments = async (req: any, res: Response) => {
         id: true,
         selfiePhoto: true,
         driversLicensePhoto: true,
+        driversLicensePhotos: true,
         criminalRecordPhoto: true,
+        drugTestPhoto: true,
+        documentStatuses: true,
         documentsVerified: true,
         documentsVerifiedAt: true,
       },
@@ -1803,21 +1910,46 @@ export const getDriverDocuments = async (req: any, res: Response) => {
       });
     }
 
+    const statuses = (driver.documentStatuses as any) || {};
+    const licensePhotos = (driver.driversLicensePhotos as any) || [];
+
+    // Get license front and back URLs
+    const licenseFront = licensePhotos.find(
+      (photo: any) => photo.side === "front"
+    );
+    const licenseBack = licensePhotos.find(
+      (photo: any) => photo.side === "back"
+    );
+
+    // Helper to get document info
+    const getDocumentInfo = (
+      url: string | null | undefined,
+      statusKey: string
+    ) => {
+      const status = statuses[statusKey] || {};
+      return {
+        url: url || undefined,
+        uploaded: !!url,
+        status: status.status || (url ? "pending" : undefined),
+        rejectionReason: status.rejectionReason || undefined,
+        reviewedAt: status.reviewedAt || undefined,
+      };
+    };
+
     res.status(200).json({
       success: true,
       documents: {
-        selfie: {
-          url: driver.selfiePhoto,
-          uploaded: !!driver.selfiePhoto,
-        },
-        license: {
-          url: driver.driversLicensePhoto,
-          uploaded: !!driver.driversLicensePhoto,
-        },
-        criminalRecord: {
-          url: driver.criminalRecordPhoto,
-          uploaded: !!driver.criminalRecordPhoto,
-        },
+        selfie: getDocumentInfo(driver.selfiePhoto, "selfie"),
+        licenseFront: getDocumentInfo(
+          licenseFront?.url || driver.driversLicensePhoto,
+          "licenseFront"
+        ),
+        licenseBack: getDocumentInfo(licenseBack?.url, "licenseBack"),
+        criminalRecord: getDocumentInfo(
+          driver.criminalRecordPhoto,
+          "criminalRecord"
+        ),
+        drugTest: getDocumentInfo(driver.drugTestPhoto, "drugTest"),
         verified: driver.documentsVerified,
         verifiedAt: driver.documentsVerifiedAt,
       },

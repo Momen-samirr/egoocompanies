@@ -8,7 +8,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export type DocumentType = "selfie" | "license" | "criminal_record";
+export type DocumentType =
+  | "selfie"
+  | "license"
+  | "license_front"
+  | "license_back"
+  | "criminal_record"
+  | "drug_test";
 
 interface UploadOptions {
   folder: string;
@@ -140,5 +146,7 @@ export const generateDocumentFileName = (
   documentType: DocumentType
 ): string => {
   const timestamp = Date.now();
-  return `driver-${driverId}-${documentType}-${timestamp}`;
+  // Normalize document type for filename (replace underscores with hyphens)
+  const normalizedType = documentType.replace(/_/g, "-");
+  return `driver-${driverId}-${normalizedType}-${timestamp}`;
 };

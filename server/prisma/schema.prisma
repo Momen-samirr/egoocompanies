@@ -34,63 +34,66 @@ enum AdminRole {
 }
 
 model Admin {
-  id                String              @id @default(auto()) @map("_id") @db.ObjectId
-  email             String              @unique
-  password          String
-  name              String
-  role              AdminRole           @default(ADMIN)
-  companyId         String?             @db.ObjectId
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime           @updatedAt
-  createdTrips      ScheduledTrip[]     @relation("CreatedBy")
-  company           Company?            @relation("CompanyAccounts", fields: [companyId], references: [id])
+  id                  String              @id @default(auto()) @map("_id") @db.ObjectId
+  email               String              @unique
+  password            String
+  name                String
+  role                AdminRole           @default(ADMIN)
+  companyId           String?             @db.ObjectId
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  createdTrips        ScheduledTrip[]     @relation("CreatedBy")
+  company             Company?            @relation("CompanyAccounts", fields: [companyId], references: [id])
   statusChangeHistory TripStatusHistory[] @relation("StatusChangeHistory")
-  createdTemplates  TripTemplate[]      @relation("CreatedTemplates")
+  createdTemplates    TripTemplate[]      @relation("CreatedTemplates")
 }
 
 model driver {
-  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
-  name                String
-  country             String
-  phone_number        String           @unique
-  email               String           @unique
-  vehicle_type        VehicleType
-  registration_number String           @unique
-  registration_date   String
-  driving_license     String
-  vehicle_color       String?
-  rate                String
-  notificationToken   String?
-  ratings             Float            @default(0)
-  totalEarning        Float            @default(0)
-  scheduledTripBalance Float            @default(0)
-  totalRides          Float            @default(0)
-  pendingRides        Float            @default(0)
-  cancelRides         Float            @default(0)
-  status              String           @default("inactive")
-  selfiePhoto         String?
-  driversLicensePhoto String?
-  criminalRecordPhoto String?
-  documentsVerified   Boolean         @default(false)
+  id                   String                @id @default(auto()) @map("_id") @db.ObjectId
+  name                 String
+  country              String
+  phone_number         String                @unique
+  email                String                @unique
+  vehicle_type         VehicleType
+  registration_number  String                @unique
+  registration_date    String
+  driving_license      String
+  vehicle_color        String?
+  rate                 String
+  notificationToken    String?
+  ratings              Float                 @default(0)
+  totalEarning         Float                 @default(0)
+  scheduledTripBalance Float                 @default(0)
+  totalRides           Float                 @default(0)
+  pendingRides         Float                 @default(0)
+  cancelRides          Float                 @default(0)
+  status               String                @default("inactive")
+  selfiePhoto          String?
+  driversLicensePhoto  String?
+  driversLicensePhotos Json? // Array: [{side: "front", url: string}, {side: "back", url: string}]
+  criminalRecordPhoto  String?
+  drugTestPhoto        String?
+  documentStatuses     Json? // Individual document status tracking
+  documentsVerified    Boolean               @default(false)
   documentsVerifiedAt  DateTime?
-  documentsVerifiedBy String?          @db.ObjectId
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  rides               rides[]          @relation("DriverRides")
-  assignedTrips       ScheduledTrip[]  @relation("AssignedCaptain")
-  emergencyUsages     EmergencyUsage[] @relation("DriverEmergencyUsages")
-  scheduledTripLedger ScheduledTripLedger[] @relation("LedgerCaptain")
-  companies           DriverCompany[]
-  templateAssignments TripTemplate[]   @relation("TemplateCaptain")
+  documentsVerifiedBy  String?               @db.ObjectId
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  rides                rides[]               @relation("DriverRides")
+  assignedTrips        ScheduledTrip[]       @relation("AssignedCaptain")
+  emergencyUsages      EmergencyUsage[]      @relation("DriverEmergencyUsages")
+  scheduledTripLedger  ScheduledTripLedger[] @relation("LedgerCaptain")
+  companies            DriverCompany[]
+  templateAssignments  TripTemplate[]        @relation("TemplateCaptain")
 }
 
 model EmergencyUsage {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  driverId    String   @db.ObjectId
-  tripId      String   @db.ObjectId
-  usedAt      DateTime @default(now())
-  createdAt   DateTime @default(now())
-  driver      driver   @relation("DriverEmergencyUsages", fields: [driverId], references: [id])
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  driverId  String   @db.ObjectId
+  tripId    String   @db.ObjectId
+  usedAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+  driver    driver   @relation("DriverEmergencyUsages", fields: [driverId], references: [id])
 }
 
 enum ScheduledTripStatus {
@@ -147,79 +150,79 @@ model DriverCompany {
 }
 
 model ScheduledTrip {
-  id                String              @id @default(auto()) @map("_id") @db.ObjectId
-  name              String
-  tripDate          DateTime
-  scheduledTime     DateTime
-  status            ScheduledTripStatus  @default(SCHEDULED)
-  tripType          TripType             @default(DEPARTURE)
-  assignedCaptainId String?             @db.ObjectId
-  createdById       String              @db.ObjectId
-  companyId         String?             @db.ObjectId
-  price             Float?              @default(0)
-  financialStatus   ScheduledTripFinancialStatus @default(NONE)
-  financialRule     ScheduledTripFinancialRule @default(NONE)
-  financialAdjustment Float             @default(0)
-  netAmount         Float               @default(0)
-  financialAppliedAt DateTime?
+  id                    String                       @id @default(auto()) @map("_id") @db.ObjectId
+  name                  String
+  tripDate              DateTime
+  scheduledTime         DateTime
+  status                ScheduledTripStatus          @default(SCHEDULED)
+  tripType              TripType                     @default(DEPARTURE)
+  assignedCaptainId     String?                      @db.ObjectId
+  createdById           String                       @db.ObjectId
+  companyId             String?                      @db.ObjectId
+  price                 Float?                       @default(0)
+  financialStatus       ScheduledTripFinancialStatus @default(NONE)
+  financialRule         ScheduledTripFinancialRule   @default(NONE)
+  financialAdjustment   Float                        @default(0)
+  netAmount             Float                        @default(0)
+  financialAppliedAt    DateTime?
   emergencyTerminatedAt DateTime?
-  emergencyTerminatedBy String?         @db.ObjectId
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  assignedCaptain   driver?             @relation("AssignedCaptain", fields: [assignedCaptainId], references: [id])
-  createdBy         Admin               @relation("CreatedBy", fields: [createdById], references: [id])
-  company           Company?            @relation(fields: [companyId], references: [id])
-  points            TripPoint[]
-  progress          TripProgress?
-  activationChecks  TripActivationCheck[]
-  ledgerEntries     ScheduledTripLedger[]
-  statusHistory     TripStatusHistory[] @relation("TripStatusHistory")
+  emergencyTerminatedBy String?                      @db.ObjectId
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  assignedCaptain       driver?                      @relation("AssignedCaptain", fields: [assignedCaptainId], references: [id])
+  createdBy             Admin                        @relation("CreatedBy", fields: [createdById], references: [id])
+  company               Company?                     @relation(fields: [companyId], references: [id])
+  points                TripPoint[]
+  progress              TripProgress?
+  activationChecks      TripActivationCheck[]
+  ledgerEntries         ScheduledTripLedger[]
+  statusHistory         TripStatusHistory[]          @relation("TripStatusHistory")
 }
 
 model TripPoint {
-  id              String         @id @default(auto()) @map("_id") @db.ObjectId
-  scheduledTripId String         @db.ObjectId
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId String        @db.ObjectId
   name            String
   latitude        Float
   longitude       Float
   order           Int
-  isFinalPoint    Boolean        @default(false)
+  isFinalPoint    Boolean       @default(false)
   expectedTime    DateTime?
   reachedAt       DateTime?
-  employees       Json?          // Array of { name: string, employeeId?: string }
-  scheduledTrip   ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  employees       Json? // Array of { name: string, employeeId?: string }
+  scheduledTrip   ScheduledTrip @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 model TripProgress {
-  id                String         @id @default(auto()) @map("_id") @db.ObjectId
-  scheduledTripId   String         @unique @db.ObjectId
-  captainId         String         @db.ObjectId
-  currentPointIndex Int            @default(0)
-  startedAt         DateTime?
-  completedAt       DateTime?
+  id                 String        @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId    String        @unique @db.ObjectId
+  captainId          String        @db.ObjectId
+  currentPointIndex  Int           @default(0)
+  startedAt          DateTime?
+  completedAt        DateTime?
   lastLocationUpdate DateTime?
-  lastLatitude      Float?
-  lastLongitude     Float?
-  scheduledTrip     ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  lastLatitude       Float?
+  lastLongitude      Float?
+  scheduledTrip      ScheduledTrip @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 }
 
 model TripActivationCheck {
-  id                String         @id @default(auto()) @map("_id") @db.ObjectId
-  scheduledTripId   String         @db.ObjectId
-  captainId         String         @db.ObjectId
-  checkedAt         DateTime       @default(now())
-  wasWithinProximity Boolean       @default(false)
-  wasOnTime         Boolean         @default(false)
-  activated         Boolean         @default(false)
-  captainLatitude   Float?
-  captainLongitude  Float?
+  id                   String        @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId      String        @db.ObjectId
+  captainId            String        @db.ObjectId
+  checkedAt            DateTime      @default(now())
+  wasWithinProximity   Boolean       @default(false)
+  wasOnTime            Boolean       @default(false)
+  activated            Boolean       @default(false)
+  captainLatitude      Float?
+  captainLongitude     Float?
   distanceToFirstPoint Float?
-  scheduledTrip     ScheduledTrip  @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
-  createdAt         DateTime       @default(now())
+  scheduledTrip        ScheduledTrip @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  createdAt            DateTime      @default(now())
 }
 
 model ScheduledTripLedger {
@@ -256,10 +259,10 @@ model TripStatusHistory {
 
 model TripTemplate {
   id                String              @id @default(auto()) @map("_id") @db.ObjectId
-  name              String              // Template name
-  description       String?             // Optional description
+  name              String // Template name
+  description       String? // Optional description
   companyId         String?             @db.ObjectId
-  tripType          TripType             @default(DEPARTURE)
+  tripType          TripType            @default(DEPARTURE)
   assignedCaptainId String?             @db.ObjectId
   createdById       String              @db.ObjectId
   price             Float?              @default(0)
@@ -267,23 +270,23 @@ model TripTemplate {
   updatedAt         DateTime            @updatedAt
   createdBy         Admin               @relation("CreatedTemplates", fields: [createdById], references: [id])
   company           Company?            @relation(fields: [companyId], references: [id])
-  assignedCaptain   driver?            @relation("TemplateCaptain", fields: [assignedCaptainId], references: [id])
+  assignedCaptain   driver?             @relation("TemplateCaptain", fields: [assignedCaptainId], references: [id])
   points            TripTemplatePoint[]
 }
 
 model TripTemplatePoint {
-  id              String         @id @default(auto()) @map("_id") @db.ObjectId
-  templateId      String         @db.ObjectId
-  name            String
-  latitude        Float
-  longitude       Float
-  order           Int
-  isFinalPoint    Boolean        @default(false)
-  expectedTime    String?       // Stored as "HH:MM" format (time only, no date)
-  employees       Json?          // Array of { name: string, employeeId?: string }
-  template        TripTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  templateId   String       @db.ObjectId
+  name         String
+  latitude     Float
+  longitude    Float
+  order        Int
+  isFinalPoint Boolean      @default(false)
+  expectedTime String? // Stored as "HH:MM" format (time only, no date)
+  employees    Json? // Array of { name: string, employeeId?: string }
+  template     TripTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
 model rides {

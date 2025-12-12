@@ -1174,7 +1174,7 @@ export const updateDriverStatus = async (req: any, res: Response) => {
   }
 };
 
-// Verify Driver Documents
+// Verify Driver Documents (Legacy - kept for backward compatibility)
 export const verifyDriverDocuments = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
@@ -1191,6 +1191,455 @@ export const verifyDriverDocuments = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     console.error("Verify driver documents error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get all drivers with pending documents
+export const getPendingDocuments = async (req: any, res: Response) => {
+  try {
+    const { documentType, page = 1, limit = 20 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Get all drivers
+    const drivers = await prisma.driver.findMany({
+      skip,
+      take: Number(limit),
+      select: {
+        id: true,
+        name: true,
+        phone_number: true,
+        email: true,
+        selfiePhoto: true,
+        driversLicensePhotos: true,
+        criminalRecordPhoto: true,
+        drugTestPhoto: true,
+        documentStatuses: true,
+        status: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Filter drivers with pending documents
+    const driversWithPending = drivers
+      .map((driver) => {
+        const statuses = (driver.documentStatuses as any) || {};
+        const pendingDocs: string[] = [];
+
+        // Check each document type
+        if (
+          driver.selfiePhoto &&
+          statuses.selfie?.status !== "approved" &&
+          statuses.selfie?.status !== "rejected"
+        ) {
+          pendingDocs.push("selfie");
+        }
+
+        const licensePhotos = (driver.driversLicensePhotos as any) || [];
+        const licenseFront = licensePhotos.find((p: any) => p.side === "front");
+        const licenseBack = licensePhotos.find((p: any) => p.side === "back");
+
+        if (
+          licenseFront?.url &&
+          statuses.licenseFront?.status !== "approved" &&
+          statuses.licenseFront?.status !== "rejected"
+        ) {
+          pendingDocs.push("licenseFront");
+        }
+
+        if (
+          licenseBack?.url &&
+          statuses.licenseBack?.status !== "approved" &&
+          statuses.licenseBack?.status !== "rejected"
+        ) {
+          pendingDocs.push("licenseBack");
+        }
+
+        if (
+          driver.criminalRecordPhoto &&
+          statuses.criminalRecord?.status !== "approved" &&
+          statuses.criminalRecord?.status !== "rejected"
+        ) {
+          pendingDocs.push("criminalRecord");
+        }
+
+        if (
+          driver.drugTestPhoto &&
+          statuses.drugTest?.status !== "approved" &&
+          statuses.drugTest?.status !== "rejected"
+        ) {
+          pendingDocs.push("drugTest");
+        }
+
+        if (pendingDocs.length === 0) return null;
+
+        // Filter by document type if specified
+        if (documentType && !pendingDocs.includes(documentType)) {
+          return null;
+        }
+
+        return {
+          driver: {
+            id: driver.id,
+            name: driver.name,
+            phone_number: driver.phone_number,
+            email: driver.email,
+            status: driver.status,
+          },
+          pendingDocuments: pendingDocs,
+        };
+      })
+      .filter((item) => item !== null);
+
+    const total = await prisma.driver.count();
+
+    res.status(200).json({
+      success: true,
+      drivers: driversWithPending,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: driversWithPending.length,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    });
+  } catch (error: any) {
+    console.error("Get pending documents error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get driver documents for review
+export const getDriverDocumentsForReview = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const driver = await prisma.driver.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        phone_number: true,
+        email: true,
+        selfiePhoto: true,
+        driversLicensePhoto: true,
+        driversLicensePhotos: true,
+        criminalRecordPhoto: true,
+        drugTestPhoto: true,
+        documentStatuses: true,
+        documentsVerified: true,
+        documentsVerifiedAt: true,
+      },
+    });
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: "Driver not found",
+      });
+    }
+
+    const statuses = (driver.documentStatuses as any) || {};
+    const licensePhotos = (driver.driversLicensePhotos as any) || [];
+
+    const licenseFront = licensePhotos.find((p: any) => p.side === "front");
+    const licenseBack = licensePhotos.find((p: any) => p.side === "back");
+
+    const documents = {
+      selfie: {
+        url: driver.selfiePhoto,
+        uploaded: !!driver.selfiePhoto,
+        status:
+          statuses.selfie?.status || (driver.selfiePhoto ? "pending" : null),
+        rejectionReason: statuses.selfie?.rejectionReason || null,
+        reviewedBy: statuses.selfie?.reviewedBy || null,
+        reviewedAt: statuses.selfie?.reviewedAt || null,
+        rejectedAt: statuses.selfie?.rejectedAt || null,
+      },
+      licenseFront: {
+        url: licenseFront?.url || driver.driversLicensePhoto,
+        uploaded: !!(licenseFront?.url || driver.driversLicensePhoto),
+        status:
+          statuses.licenseFront?.status ||
+          (licenseFront?.url || driver.driversLicensePhoto ? "pending" : null),
+        rejectionReason: statuses.licenseFront?.rejectionReason || null,
+        reviewedBy: statuses.licenseFront?.reviewedBy || null,
+        reviewedAt: statuses.licenseFront?.reviewedAt || null,
+        rejectedAt: statuses.licenseFront?.rejectedAt || null,
+      },
+      licenseBack: {
+        url: licenseBack?.url,
+        uploaded: !!licenseBack?.url,
+        status:
+          statuses.licenseBack?.status || (licenseBack?.url ? "pending" : null),
+        rejectionReason: statuses.licenseBack?.rejectionReason || null,
+        reviewedBy: statuses.licenseBack?.reviewedBy || null,
+        reviewedAt: statuses.licenseBack?.reviewedAt || null,
+        rejectedAt: statuses.licenseBack?.rejectedAt || null,
+      },
+      criminalRecord: {
+        url: driver.criminalRecordPhoto,
+        uploaded: !!driver.criminalRecordPhoto,
+        status:
+          statuses.criminalRecord?.status ||
+          (driver.criminalRecordPhoto ? "pending" : null),
+        rejectionReason: statuses.criminalRecord?.rejectionReason || null,
+        reviewedBy: statuses.criminalRecord?.reviewedBy || null,
+        reviewedAt: statuses.criminalRecord?.reviewedAt || null,
+        rejectedAt: statuses.criminalRecord?.rejectedAt || null,
+      },
+      drugTest: {
+        url: driver.drugTestPhoto,
+        uploaded: !!driver.drugTestPhoto,
+        status:
+          statuses.drugTest?.status ||
+          (driver.drugTestPhoto ? "pending" : null),
+        rejectionReason: statuses.drugTest?.rejectionReason || null,
+        reviewedBy: statuses.drugTest?.reviewedBy || null,
+        reviewedAt: statuses.drugTest?.reviewedAt || null,
+        rejectedAt: statuses.drugTest?.rejectedAt || null,
+      },
+    };
+
+    res.status(200).json({
+      success: true,
+      driver: {
+        id: driver.id,
+        name: driver.name,
+        phone_number: driver.phone_number,
+        email: driver.email,
+      },
+      documents,
+      overallVerification: {
+        verified: driver.documentsVerified,
+        verifiedAt: driver.documentsVerifiedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error("Get driver documents for review error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Review driver document (approve/reject)
+export const reviewDriverDocument = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { documentType, action, rejectionReason } = req.body;
+
+    if (!documentType || !action) {
+      return res.status(400).json({
+        success: false,
+        message: "Document type and action are required",
+      });
+    }
+
+    if (action !== "approve" && action !== "reject") {
+      return res.status(400).json({
+        success: false,
+        message: "Action must be 'approve' or 'reject'",
+      });
+    }
+
+    if (action === "reject" && !rejectionReason) {
+      return res.status(400).json({
+        success: false,
+        message: "Rejection reason is required when rejecting a document",
+      });
+    }
+
+    const driver = await prisma.driver.findUnique({
+      where: { id },
+      select: {
+        documentStatuses: true,
+        notificationToken: true,
+        name: true,
+      },
+    });
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: "Driver not found",
+      });
+    }
+
+    const statuses = (driver.documentStatuses as any) || {};
+    const newStatuses = { ...statuses };
+
+    // Map document type to status key
+    const statusKeyMap: Record<string, string> = {
+      selfie: "selfie",
+      licenseFront: "licenseFront",
+      licenseBack: "licenseBack",
+      criminalRecord: "criminalRecord",
+      drugTest: "drugTest",
+    };
+
+    const statusKey = statusKeyMap[documentType];
+    if (!statusKey) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document type",
+      });
+    }
+
+    // Update document status
+    const now = new Date().toISOString();
+    newStatuses[statusKey] = {
+      status: action === "approve" ? "approved" : "rejected",
+      reviewedBy: req.admin.id,
+      reviewedAt: now,
+      rejectionReason: action === "reject" ? rejectionReason : null,
+      rejectedAt: action === "reject" ? now : null,
+    };
+
+    // Check if all required documents are approved
+    const requiredDocs = [
+      "selfie",
+      "licenseFront",
+      "licenseBack",
+      "criminalRecord",
+      "drugTest",
+    ];
+    const allApproved = requiredDocs.every(
+      (doc) => newStatuses[doc]?.status === "approved"
+    );
+
+    // Update driver
+    const updateData: any = {
+      documentStatuses: newStatuses,
+    };
+
+    if (allApproved) {
+      updateData.documentsVerified = true;
+      updateData.documentsVerifiedAt = new Date();
+      updateData.documentsVerifiedBy = req.admin.id;
+    }
+
+    await prisma.driver.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // Send notification to driver
+    const { sendNotificationToCaptain } = require("../utils/send-notification");
+    const documentTypeNames: Record<string, string> = {
+      selfie: "Selfie Photo",
+      licenseFront: "Driver's License (Front)",
+      licenseBack: "Driver's License (Back)",
+      criminalRecord: "Criminal Record",
+      drugTest: "Drug Test Document",
+    };
+
+    const documentName = documentTypeNames[documentType] || documentType;
+    const title =
+      action === "approve" ? "Document Approved" : "Document Rejected";
+    const body =
+      action === "approve"
+        ? `Your ${documentName} has been approved!`
+        : `Your ${documentName} was rejected. Reason: ${rejectionReason}. Please re-upload.`;
+
+    await sendNotificationToCaptain(id, title, body, {
+      type: "documentStatus",
+      documentType,
+      action,
+      rejectionReason: action === "reject" ? rejectionReason : undefined,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Document ${
+        action === "approve" ? "approved" : "rejected"
+      } successfully`,
+      allDocumentsApproved: allApproved,
+    });
+  } catch (error: any) {
+    console.error("Review driver document error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get document statistics
+export const getDocumentStatistics = async (req: any, res: Response) => {
+  try {
+    const drivers = await prisma.driver.findMany({
+      select: {
+        documentStatuses: true,
+        selfiePhoto: true,
+        driversLicensePhotos: true,
+        criminalRecordPhoto: true,
+        drugTestPhoto: true,
+      },
+    });
+
+    const stats = {
+      selfie: { pending: 0, approved: 0, rejected: 0 },
+      licenseFront: { pending: 0, approved: 0, rejected: 0 },
+      licenseBack: { pending: 0, approved: 0, rejected: 0 },
+      criminalRecord: { pending: 0, approved: 0, rejected: 0 },
+      drugTest: { pending: 0, approved: 0, rejected: 0 },
+    };
+
+    drivers.forEach((driver) => {
+      const statuses = (driver.documentStatuses as any) || {};
+      const licensePhotos = (driver.driversLicensePhotos as any) || [];
+      const licenseFront = licensePhotos.find((p: any) => p.side === "front");
+      const licenseBack = licensePhotos.find((p: any) => p.side === "back");
+
+      const checkDocument = (
+        key: keyof typeof stats,
+        hasDocument: boolean,
+        status?: string
+      ) => {
+        if (!hasDocument) return;
+        const docStatus = status || "pending";
+        if (docStatus === "approved") stats[key].approved++;
+        else if (docStatus === "rejected") stats[key].rejected++;
+        else stats[key].pending++;
+      };
+
+      checkDocument("selfie", !!driver.selfiePhoto, statuses.selfie?.status);
+      checkDocument(
+        "licenseFront",
+        !!licenseFront?.url,
+        statuses.licenseFront?.status
+      );
+      checkDocument(
+        "licenseBack",
+        !!licenseBack?.url,
+        statuses.licenseBack?.status
+      );
+      checkDocument(
+        "criminalRecord",
+        !!driver.criminalRecordPhoto,
+        statuses.criminalRecord?.status
+      );
+      checkDocument(
+        "drugTest",
+        !!driver.drugTestPhoto,
+        statuses.drugTest?.status
+      );
+    });
+
+    res.status(200).json({
+      success: true,
+      statistics: stats,
+    });
+  } catch (error: any) {
+    console.error("Get document statistics error:", error);
     res.status(500).json({
       success: false,
       message: error.message || "Internal server error",

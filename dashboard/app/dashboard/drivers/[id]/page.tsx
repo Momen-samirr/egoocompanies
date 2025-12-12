@@ -188,9 +188,13 @@ export default function DriverDetailsPage() {
         </CardHeader>
         <CardBody>
           <DocumentViewer
+            driverId={driver.id}
             selfiePhoto={driver.selfiePhoto}
             driversLicensePhoto={driver.driversLicensePhoto}
+            driversLicensePhotos={driver.driversLicensePhotos}
             criminalRecordPhoto={driver.criminalRecordPhoto}
+            drugTestPhoto={driver.drugTestPhoto}
+            documentStatuses={driver.documentStatuses}
             documentsVerified={driver.documentsVerified}
             documentsVerifiedAt={driver.documentsVerifiedAt}
           />

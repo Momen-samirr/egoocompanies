@@ -41,6 +41,10 @@ import {
   updateTripTemplate,
   deleteTripTemplate,
   createTripsFromTemplate,
+  getPendingDocuments,
+  getDriverDocumentsForReview,
+  reviewDriverDocument,
+  getDocumentStatistics,
 } from "../controllers/admin.controller";
 import {
   isAuthenticatedAdmin,
@@ -72,6 +76,28 @@ adminRouter.put(
   "/drivers/:id/verify",
   isAuthenticatedAdmin,
   verifyDriverDocuments
+);
+
+// Document Management
+adminRouter.get(
+  "/documents/pending",
+  isAuthenticatedAdmin,
+  getPendingDocuments
+);
+adminRouter.get(
+  "/drivers/:id/documents",
+  isAuthenticatedAdmin,
+  getDriverDocumentsForReview
+);
+adminRouter.post(
+  "/drivers/:id/documents/review",
+  isAuthenticatedAdmin,
+  reviewDriverDocument
+);
+adminRouter.get(
+  "/documents/stats",
+  isAuthenticatedAdmin,
+  getDocumentStatistics
 );
 
 // Companies
