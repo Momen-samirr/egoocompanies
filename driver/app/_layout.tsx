@@ -28,6 +28,7 @@ export {
 
 // Global error handler to catch UserHandle serialization errors
 // This error occurs on subsequent app launches when expo-device tries to access system properties
+// or when expo-notifications tries to serialize notification responses containing UserHandle
 // Using a try-catch to safely handle ErrorUtils availability
 try {
   // ErrorUtils might not be available in all React Native versions or build configurations
@@ -40,21 +41,28 @@ try {
     const originalErrorHandler = ErrorUtils.getGlobalHandler();
     ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
       const errorMessage = error?.message || String(error);
+      const errorStack = error?.stack || "";
 
       // Check if this is the UserHandle serialization error
+      // This can occur from expo-device or expo-notifications when trying to serialize Android Intent extras
       if (
         errorMessage.includes("UserHandle") ||
         errorMessage.includes("NativeUnimoduleProxy") ||
         errorMessage.includes("Could not put") ||
-        errorMessage.includes("WritableMap")
+        errorMessage.includes("WritableMap") ||
+        errorStack.includes("NotificationsEmitter") ||
+        errorStack.includes("NotificationManager") ||
+        errorStack.includes("onNotificationResponseIntentReceived") ||
+        errorMessage.includes("expo.modules.notifications")
       ) {
         logger.warn(
-          "Caught UserHandle serialization error - this is a known issue with expo-device on Android"
+          "Caught UserHandle serialization error - this is a known issue with expo-notifications on Android"
         );
         logger.warn(
-          "The app will continue to function, but some device features may be unavailable"
+          "The error occurs when reopening the app from a notification. The app will continue to function normally."
         );
         // Don't crash the app - just log the error
+        // The notification data will be handled by the safe wrappers in notification listeners
         return;
       }
 
@@ -65,7 +73,7 @@ try {
     });
   }
 } catch (error) {
-  // Silently fail if ErrorUtils is not available - the safe wrapper in home.screen.tsx will still work
+  // Silently fail if ErrorUtils is not available - the safe wrapper in notification listeners will still work
   logger.warn("Could not set up global error handler", error);
 }
 

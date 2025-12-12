@@ -523,7 +523,15 @@ export default function HomeScreen() {
         console.log("👆 ===== NOTIFICATION TAPPED - APP OPENED =====");
         console.log("👆 Timestamp:", new Date().toISOString());
         console.log("👆 Action identifier:", response.actionIdentifier);
-        console.log("👆 Full response:", JSON.stringify(response, null, 2));
+
+        // Safely stringify response - may fail if it contains non-serializable objects
+        try {
+          console.log("👆 Full response:", JSON.stringify(response, null, 2));
+        } catch (stringifyError) {
+          console.warn(
+            "⚠️ Could not stringify response (contains non-serializable data)"
+          );
+        }
 
         // Prevent processing if already processing or modal is visible
         if (isProcessingNotification.current || isModalVisible) {
@@ -540,10 +548,61 @@ export default function HomeScreen() {
         });
 
         try {
-          const data = response.notification.request.content.data;
-          console.log("📦 Raw data from tapped notification:", data);
-          console.log("📦 Data type:", typeof data);
-          console.log("📦 Extracted data:", JSON.stringify(data, null, 2));
+          // Safely extract data from notification response
+          // This may fail if the response contains non-serializable objects like UserHandle
+          let data;
+          try {
+            data = response.notification.request.content.data;
+            console.log("📦 Raw data from tapped notification:", data);
+            console.log("📦 Data type:", typeof data);
+
+            // Safely stringify data
+            try {
+              console.log("📦 Extracted data:", JSON.stringify(data, null, 2));
+            } catch (stringifyError) {
+              console.warn(
+                "⚠️ Could not stringify data (may contain non-serializable properties)"
+              );
+            }
+          } catch (serializationError: any) {
+            const errorMessage =
+              serializationError?.message || String(serializationError);
+            if (
+              errorMessage.includes("UserHandle") ||
+              errorMessage.includes("Could not put") ||
+              errorMessage.includes("WritableMap")
+            ) {
+              console.warn(
+                "⚠️ Notification response contains non-serializable data (UserHandle). This is a known Android issue."
+              );
+              console.warn(
+                "⚠️ Attempting to extract data using alternative method..."
+              );
+
+              // Try to access data directly from the notification object
+              try {
+                const notification = response.notification;
+                if (notification?.request?.content?.data) {
+                  data = notification.request.content.data;
+                }
+              } catch (fallbackError) {
+                console.error(
+                  "❌ Could not extract notification data:",
+                  fallbackError
+                );
+                Toast.show(
+                  "Notification received but could not process data. Please check manually.",
+                  {
+                    type: "warning",
+                    duration: 5000,
+                  }
+                );
+                return;
+              }
+            } else {
+              throw serializationError;
+            }
+          }
 
           if (!data) {
             console.error("❌ No data found in tapped notification");
@@ -563,78 +622,184 @@ export default function HomeScreen() {
             );
           }, 500);
         } catch (error: any) {
+          const errorMessage = error?.message || String(error);
           console.error("❌ Error handling tapped notification:", error);
           console.error("❌ Error stack:", error.stack);
-          Toast.show(`Error processing tapped notification: ${error.message}`, {
-            type: "danger",
-            duration: 5000,
-          });
+
+          // Don't show error toast for serialization errors - they're expected
+          if (
+            !errorMessage.includes("UserHandle") &&
+            !errorMessage.includes("Could not put") &&
+            !errorMessage.includes("WritableMap")
+          ) {
+            Toast.show(
+              `Error processing tapped notification: ${errorMessage}`,
+              {
+                type: "danger",
+                duration: 5000,
+              }
+            );
+          }
         }
       });
 
     // Check if app was opened from a notification (when app was CLOSED)
-    Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        if (response) {
-          console.log("🚀 ===== APP WAS OPENED FROM NOTIFICATION =====");
-          console.log("🚀 Timestamp:", new Date().toISOString());
-          console.log(
-            "🚀 Last notification response:",
-            JSON.stringify(response, null, 2)
-          );
+    // Delay this call to ensure app is fully initialized and avoid serialization errors
+    setTimeout(() => {
+      Notifications.getLastNotificationResponseAsync()
+        .then((response) => {
+          if (response) {
+            console.log("🚀 ===== APP WAS OPENED FROM NOTIFICATION =====");
+            console.log("🚀 Timestamp:", new Date().toISOString());
 
-          // Prevent processing if already processing or modal is visible
-          if (isProcessingNotification.current || isModalVisible) {
-            console.log(
-              "⚠️ Already processing notification or modal visible, ignoring last notification"
-            );
-            return;
-          }
-
-          // Show a toast to indicate app was opened from notification
-          Toast.show("🚀 App opened from notification", {
-            type: "info",
-            duration: 3000,
-          });
-
-          try {
-            const data = response.notification.request.content.data;
-            console.log("📦 Raw data from last notification:", data);
-            console.log("📦 Data type:", typeof data);
-            console.log("📦 Extracted data:", JSON.stringify(data, null, 2));
-
-            if (data) {
-              // Delay to ensure app is fully loaded before showing modal
-              console.log("🔄 Processing last notification data...");
-              setTimeout(() => {
-                handleNotificationData(
-                  data,
-                  response.notification.request.identifier
-                );
-              }, 1000);
-            } else {
-              console.error("❌ No data found in last notification");
-              Toast.show("Notification found but no data available", {
-                type: "warning",
-                duration: 3000,
-              });
+            // Safely stringify response - may fail if it contains non-serializable objects
+            try {
+              console.log(
+                "🚀 Last notification response:",
+                JSON.stringify(response, null, 2)
+              );
+            } catch (stringifyError) {
+              console.warn(
+                "⚠️ Could not stringify response (contains non-serializable data)"
+              );
             }
-          } catch (error: any) {
-            console.error("❌ Error handling last notification:", error);
-            console.error("❌ Error stack:", error.stack);
-            Toast.show(`Error processing last notification: ${error.message}`, {
-              type: "danger",
-              duration: 5000,
+
+            // Prevent processing if already processing or modal is visible
+            if (isProcessingNotification.current || isModalVisible) {
+              console.log(
+                "⚠️ Already processing notification or modal visible, ignoring last notification"
+              );
+              return;
+            }
+
+            // Show a toast to indicate app was opened from notification
+            Toast.show("🚀 App opened from notification", {
+              type: "info",
+              duration: 3000,
             });
+
+            try {
+              // Safely extract data from notification response
+              // This may fail if the response contains non-serializable objects like UserHandle
+              let data;
+              try {
+                data = response.notification.request.content.data;
+                console.log("📦 Raw data from last notification:", data);
+                console.log("📦 Data type:", typeof data);
+
+                // Safely stringify data
+                try {
+                  console.log(
+                    "📦 Extracted data:",
+                    JSON.stringify(data, null, 2)
+                  );
+                } catch (stringifyError) {
+                  console.warn(
+                    "⚠️ Could not stringify data (may contain non-serializable properties)"
+                  );
+                }
+              } catch (serializationError: any) {
+                const errorMessage =
+                  serializationError?.message || String(serializationError);
+                if (
+                  errorMessage.includes("UserHandle") ||
+                  errorMessage.includes("Could not put") ||
+                  errorMessage.includes("WritableMap")
+                ) {
+                  console.warn(
+                    "⚠️ Notification response contains non-serializable data (UserHandle). This is a known Android issue."
+                  );
+                  console.warn(
+                    "⚠️ Attempting to extract data using alternative method..."
+                  );
+
+                  // Try to access data directly from the notification object
+                  try {
+                    const notification = response.notification;
+                    if (notification?.request?.content?.data) {
+                      data = notification.request.content.data;
+                    }
+                  } catch (fallbackError) {
+                    console.error(
+                      "❌ Could not extract notification data:",
+                      fallbackError
+                    );
+                    Toast.show(
+                      "Notification received but could not process data. Please check manually.",
+                      {
+                        type: "warning",
+                        duration: 5000,
+                      }
+                    );
+                    return;
+                  }
+                } else {
+                  throw serializationError;
+                }
+              }
+
+              if (data) {
+                // Delay to ensure app is fully loaded before showing modal
+                console.log("🔄 Processing last notification data...");
+                setTimeout(() => {
+                  handleNotificationData(
+                    data,
+                    response.notification.request.identifier
+                  );
+                }, 1000);
+              } else {
+                console.error("❌ No data found in last notification");
+                Toast.show("Notification found but no data available", {
+                  type: "warning",
+                  duration: 3000,
+                });
+              }
+            } catch (error: any) {
+              const errorMessage = error?.message || String(error);
+              console.error("❌ Error handling last notification:", error);
+              console.error("❌ Error stack:", error.stack);
+
+              // Don't show error toast for serialization errors - they're expected
+              if (
+                !errorMessage.includes("UserHandle") &&
+                !errorMessage.includes("Could not put") &&
+                !errorMessage.includes("WritableMap")
+              ) {
+                Toast.show(
+                  `Error processing last notification: ${errorMessage}`,
+                  {
+                    type: "danger",
+                    duration: 5000,
+                  }
+                );
+              }
+            }
+          } else {
+            console.log("ℹ️ App opened normally (not from notification)");
           }
-        } else {
-          console.log("ℹ️ App opened normally (not from notification)");
-        }
-      })
-      .catch((error) => {
-        console.error("❌ Error checking last notification:", error);
-        console.error("❌ Error stack:", error.stack);
-      });
+        })
+        .catch((error: any) => {
+          const errorMessage = error?.message || String(error);
+          console.error("❌ Error checking last notification:", error);
+          console.error("❌ Error stack:", error.stack);
+
+          // Don't log as error for serialization issues - they're expected on Android
+          if (
+            errorMessage.includes("UserHandle") ||
+            errorMessage.includes("Could not put") ||
+            errorMessage.includes("WritableMap")
+          ) {
+            console.warn(
+              "⚠️ Could not retrieve last notification response due to serialization issue. This is expected on Android."
+            );
+          } else {
+            console.error(
+              "❌ Unexpected error checking last notification:",
+              error
+            );
+          }
+        });
+    }, 2000); // Delay 2 seconds to ensure app is fully initialized
 
     console.log("✅ Notification listeners set up successfully");
     console.log(

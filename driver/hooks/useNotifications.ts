@@ -45,7 +45,9 @@ export function useNotifications(handlers: NotificationHandlers) {
       try {
         // Prevent concurrent processing
         if (isProcessingNotification.current) {
-          console.log("⚠️ Already processing a notification, ignoring duplicate");
+          console.log(
+            "⚠️ Already processing a notification, ignoring duplicate"
+          );
           return;
         }
 
@@ -65,7 +67,9 @@ export function useNotifications(handlers: NotificationHandlers) {
 
         // Check if already processed
         if (processedNotificationIds.current.has(uniqueId)) {
-          console.log(`⚠️ Notification ${uniqueId} already processed, ignoring duplicate`);
+          console.log(
+            `⚠️ Notification ${uniqueId} already processed, ignoring duplicate`
+          );
           return;
         }
 
@@ -75,11 +79,16 @@ export function useNotifications(handlers: NotificationHandlers) {
 
         // Clean up old IDs (keep only last 10)
         if (processedNotificationIds.current.size > 10) {
-          const firstId = processedNotificationIds.current.values().next().value;
+          const firstId = processedNotificationIds.current
+            .values()
+            .next().value;
           processedNotificationIds.current.delete(firstId);
         }
 
-        console.log("📬 Processing notification data:", JSON.stringify(notificationData, null, 2));
+        console.log(
+          "📬 Processing notification data:",
+          JSON.stringify(notificationData, null, 2)
+        );
 
         // Parse orderData
         let orderData;
@@ -97,7 +106,10 @@ export function useNotifications(handlers: NotificationHandlers) {
           try {
             orderData = JSON.parse(notificationData);
           } catch (parseError) {
-            console.error("❌ Error parsing notificationData as JSON:", parseError);
+            console.error(
+              "❌ Error parsing notificationData as JSON:",
+              parseError
+            );
             return;
           }
         } else {
@@ -109,10 +121,13 @@ export function useNotifications(handlers: NotificationHandlers) {
         // Check if trip activation notification
         if (orderData && orderData.type === "tripActivation") {
           console.log("📬 Trip activation notification received:", orderData);
-          Toast.show(`Trip "${orderData.tripName}" is now available to start!`, {
-            type: "success",
-            duration: 5000,
-          });
+          Toast.show(
+            `Trip "${orderData.tripName}" is now available to start!`,
+            {
+              type: "success",
+              duration: 5000,
+            }
+          );
           if (handlers.onTripActivation) {
             handlers.onTripActivation(orderData.tripName);
           } else {
@@ -132,11 +147,20 @@ export function useNotifications(handlers: NotificationHandlers) {
           return;
         }
 
-        if (!orderData.currentLocation || !orderData.marker || !orderData.user) {
-          console.error("❌ Invalid notification data - missing required fields");
-          Toast.show("Invalid ride request data - missing location or user info", {
-            type: "danger",
-          });
+        if (
+          !orderData.currentLocation ||
+          !orderData.marker ||
+          !orderData.user
+        ) {
+          console.error(
+            "❌ Invalid notification data - missing required fields"
+          );
+          Toast.show(
+            "Invalid ride request data - missing location or user info",
+            {
+              type: "danger",
+            }
+          );
           return;
         }
 
@@ -147,7 +171,9 @@ export function useNotifications(handlers: NotificationHandlers) {
           user: orderData.user,
           distance: orderData.distance || "0",
           currentLocationName:
-            orderData.currentLocationName || orderData.currentLocation?.name || "Pickup Location",
+            orderData.currentLocationName ||
+            orderData.currentLocation?.name ||
+            "Pickup Location",
           destinationLocationName:
             orderData.destinationLocation ||
             orderData.destinationLocationName ||
@@ -179,10 +205,14 @@ export function useNotifications(handlers: NotificationHandlers) {
       try {
         const accessToken = await AsyncStorage.getItem("accessToken");
         if (accessToken) {
-          console.log("🔑 Driver is logged in - registering for push notifications...");
+          console.log(
+            "🔑 Driver is logged in - registering for push notifications..."
+          );
           await registerForPushNotificationsAsync();
         } else {
-          console.warn("⚠️ Driver not logged in - skipping push notification registration");
+          console.warn(
+            "⚠️ Driver not logged in - skipping push notification registration"
+          );
         }
       } catch (error) {
         console.error("❌ Error checking access token:", error);
@@ -191,12 +221,15 @@ export function useNotifications(handlers: NotificationHandlers) {
 
     checkAndRegister();
 
-    appStateSubscription = require("react-native").AppState.addEventListener("change", (nextAppState: string) => {
-      if (nextAppState === "active" && isMounted) {
-        console.log("📱 App came to foreground - refreshing push token...");
-        checkAndRegister();
+    appStateSubscription = require("react-native").AppState.addEventListener(
+      "change",
+      (nextAppState: string) => {
+        if (nextAppState === "active" && isMounted) {
+          console.log("📱 App came to foreground - refreshing push token...");
+          checkAndRegister();
+        }
       }
-    });
+    );
 
     return () => {
       isMounted = false;
@@ -229,10 +262,13 @@ export function useNotifications(handlers: NotificationHandlers) {
       .then((permissions) => {
         if (!permissions.granted) {
           console.error("❌ Notification permissions not granted!");
-          Toast.show("Notification permissions not granted. Please enable notifications in settings.", {
-            type: "danger",
-            duration: 5000,
-          });
+          Toast.show(
+            "Notification permissions not granted. Please enable notifications in settings.",
+            {
+              type: "danger",
+              duration: 5000,
+            }
+          );
         } else {
           console.log("✅ Notification permissions granted");
         }
@@ -242,118 +278,264 @@ export function useNotifications(handlers: NotificationHandlers) {
       });
 
     // Foreground listener
-    const foregroundSubscription = Notifications.addNotificationReceivedListener((notification) => {
-      console.log("📱 ===== NOTIFICATION RECEIVED - LISTENER FIRED =====");
+    const foregroundSubscription =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log("📱 ===== NOTIFICATION RECEIVED - LISTENER FIRED =====");
 
-      if (isProcessingNotification.current) {
-        console.log("⚠️ Already processing notification, ignoring");
-        return;
-      }
-
-      Toast.show("📱 New ride request received!", {
-        type: "success",
-        duration: 3000,
-      });
-
-      try {
-        const data = notification.request.content.data;
-        if (!data) {
-          console.error("❌ ERROR: No data in notification");
-          Toast.show("Notification received but no data found", {
-            type: "warning",
-            duration: 3000,
-          });
+        if (isProcessingNotification.current) {
+          console.log("⚠️ Already processing notification, ignoring");
           return;
         }
-        handleNotificationData(data, notification.request.identifier);
-      } catch (error: any) {
-        console.error("❌ ERROR: Exception in notification listener", error);
-        Toast.show(`Error: ${error.message}`, {
-          type: "danger",
-          duration: 5000,
+
+        Toast.show("📱 New ride request received!", {
+          type: "success",
+          duration: 3000,
         });
-      }
-    });
+
+        try {
+          const data = notification.request.content.data;
+          if (!data) {
+            console.error("❌ ERROR: No data in notification");
+            Toast.show("Notification received but no data found", {
+              type: "warning",
+              duration: 3000,
+            });
+            return;
+          }
+          handleNotificationData(data, notification.request.identifier);
+        } catch (error: any) {
+          console.error("❌ ERROR: Exception in notification listener", error);
+          Toast.show(`Error: ${error.message}`, {
+            type: "danger",
+            duration: 5000,
+          });
+        }
+      });
 
     // Response listener (when user taps notification)
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log("👆 ===== NOTIFICATION TAPPED - APP OPENED =====");
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        console.log("👆 ===== NOTIFICATION TAPPED - APP OPENED =====");
 
-      if (isProcessingNotification.current) {
-        console.log("⚠️ Already processing notification, ignoring tapped notification");
-        return;
-      }
-
-      Toast.show("👆 Notification tapped - opening app...", {
-        type: "info",
-        duration: 3000,
-      });
-
-      try {
-        const data = response.notification.request.content.data;
-        if (!data) {
-          console.error("❌ No data found in tapped notification");
-          Toast.show("Notification tapped but no data found", {
-            type: "warning",
-            duration: 3000,
-          });
+        if (isProcessingNotification.current) {
+          console.log(
+            "⚠️ Already processing notification, ignoring tapped notification"
+          );
           return;
         }
-        setTimeout(() => {
-          handleNotificationData(data, response.notification.request.identifier);
-        }, 500);
-      } catch (error: any) {
-        console.error("❌ Error handling tapped notification:", error);
-        Toast.show(`Error processing tapped notification: ${error.message}`, {
-          type: "danger",
-          duration: 5000,
+
+        Toast.show("👆 Notification tapped - opening app...", {
+          type: "info",
+          duration: 3000,
         });
-      }
-    });
 
-    // Check if app was opened from notification
-    Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        if (response) {
-          console.log("🚀 ===== APP WAS OPENED FROM NOTIFICATION =====");
+        try {
+          // Safely extract data from notification response
+          // This may fail if the response contains non-serializable objects like UserHandle
+          let data;
+          try {
+            data = response.notification.request.content.data;
+          } catch (serializationError: any) {
+            const errorMessage =
+              serializationError?.message || String(serializationError);
+            if (
+              errorMessage.includes("UserHandle") ||
+              errorMessage.includes("Could not put") ||
+              errorMessage.includes("WritableMap")
+            ) {
+              console.warn(
+                "⚠️ Notification response contains non-serializable data (UserHandle). This is a known Android issue."
+              );
+              console.warn(
+                "⚠️ Attempting to extract data using alternative method..."
+              );
 
-          if (isProcessingNotification.current) {
-            console.log("⚠️ Already processing notification, ignoring last notification");
+              // Try to access data directly from the notification object
+              try {
+                const notification = response.notification;
+                if (notification?.request?.content?.data) {
+                  data = notification.request.content.data;
+                }
+              } catch (fallbackError) {
+                console.error(
+                  "❌ Could not extract notification data:",
+                  fallbackError
+                );
+                Toast.show(
+                  "Notification received but could not process data. Please check manually.",
+                  {
+                    type: "warning",
+                    duration: 5000,
+                  }
+                );
+                return;
+              }
+            } else {
+              throw serializationError;
+            }
+          }
+
+          if (!data) {
+            console.error("❌ No data found in tapped notification");
+            Toast.show("Notification tapped but no data found", {
+              type: "warning",
+              duration: 3000,
+            });
             return;
           }
 
-          Toast.show("🚀 App opened from notification", {
-            type: "info",
-            duration: 3000,
-          });
+          // Delay processing to ensure app is fully initialized
+          setTimeout(() => {
+            handleNotificationData(
+              data,
+              response.notification.request.identifier
+            );
+          }, 500);
+        } catch (error: any) {
+          const errorMessage = error?.message || String(error);
+          console.error("❌ Error handling tapped notification:", error);
 
-          try {
-            const data = response.notification.request.content.data;
-            if (data) {
-              setTimeout(() => {
-                handleNotificationData(data, response.notification.request.identifier);
-              }, 1000);
-            } else {
-              console.error("❌ No data found in last notification");
-              Toast.show("Notification found but no data available", {
-                type: "warning",
-                duration: 3000,
-              });
-            }
-          } catch (error: any) {
-            console.error("❌ Error handling last notification:", error);
-            Toast.show(`Error processing last notification: ${error.message}`, {
-              type: "danger",
-              duration: 5000,
-            });
+          // Don't show error toast for serialization errors - they're expected
+          if (
+            !errorMessage.includes("UserHandle") &&
+            !errorMessage.includes("Could not put") &&
+            !errorMessage.includes("WritableMap")
+          ) {
+            Toast.show(
+              `Error processing tapped notification: ${errorMessage}`,
+              {
+                type: "danger",
+                duration: 5000,
+              }
+            );
           }
-        } else {
-          console.log("ℹ️ App opened normally (not from notification)");
         }
-      })
-      .catch((error) => {
-        console.error("❌ Error checking last notification:", error);
       });
+
+    // Check if app was opened from notification
+    // Delay this call to ensure app is fully initialized and avoid serialization errors
+    setTimeout(() => {
+      Notifications.getLastNotificationResponseAsync()
+        .then((response) => {
+          if (response) {
+            console.log("🚀 ===== APP WAS OPENED FROM NOTIFICATION =====");
+
+            if (isProcessingNotification.current) {
+              console.log(
+                "⚠️ Already processing notification, ignoring last notification"
+              );
+              return;
+            }
+
+            Toast.show("🚀 App opened from notification", {
+              type: "info",
+              duration: 3000,
+            });
+
+            try {
+              // Safely extract data from notification response
+              // This may fail if the response contains non-serializable objects like UserHandle
+              let data;
+              try {
+                data = response.notification.request.content.data;
+              } catch (serializationError: any) {
+                const errorMessage =
+                  serializationError?.message || String(serializationError);
+                if (
+                  errorMessage.includes("UserHandle") ||
+                  errorMessage.includes("Could not put") ||
+                  errorMessage.includes("WritableMap")
+                ) {
+                  console.warn(
+                    "⚠️ Notification response contains non-serializable data (UserHandle). This is a known Android issue."
+                  );
+                  console.warn(
+                    "⚠️ Attempting to extract data using alternative method..."
+                  );
+
+                  // Try to access data directly from the notification object
+                  try {
+                    const notification = response.notification;
+                    if (notification?.request?.content?.data) {
+                      data = notification.request.content.data;
+                    }
+                  } catch (fallbackError) {
+                    console.error(
+                      "❌ Could not extract notification data:",
+                      fallbackError
+                    );
+                    Toast.show(
+                      "Notification received but could not process data. Please check manually.",
+                      {
+                        type: "warning",
+                        duration: 5000,
+                      }
+                    );
+                    return;
+                  }
+                } else {
+                  throw serializationError;
+                }
+              }
+
+              if (data) {
+                setTimeout(() => {
+                  handleNotificationData(
+                    data,
+                    response.notification.request.identifier
+                  );
+                }, 1000);
+              } else {
+                console.error("❌ No data found in last notification");
+                Toast.show("Notification found but no data available", {
+                  type: "warning",
+                  duration: 3000,
+                });
+              }
+            } catch (error: any) {
+              const errorMessage = error?.message || String(error);
+              console.error("❌ Error handling last notification:", error);
+
+              // Don't show error toast for serialization errors - they're expected
+              if (
+                !errorMessage.includes("UserHandle") &&
+                !errorMessage.includes("Could not put") &&
+                !errorMessage.includes("WritableMap")
+              ) {
+                Toast.show(
+                  `Error processing last notification: ${errorMessage}`,
+                  {
+                    type: "danger",
+                    duration: 5000,
+                  }
+                );
+              }
+            }
+          } else {
+            console.log("ℹ️ App opened normally (not from notification)");
+          }
+        })
+        .catch((error: any) => {
+          const errorMessage = error?.message || String(error);
+          console.error("❌ Error checking last notification:", error);
+
+          // Don't log as error for serialization issues - they're expected on Android
+          if (
+            errorMessage.includes("UserHandle") ||
+            errorMessage.includes("Could not put") ||
+            errorMessage.includes("WritableMap")
+          ) {
+            console.warn(
+              "⚠️ Could not retrieve last notification response due to serialization issue. This is expected on Android."
+            );
+          } else {
+            console.error(
+              "❌ Unexpected error checking last notification:",
+              error
+            );
+          }
+        });
+    }, 2000); // Delay 2 seconds to ensure app is fully initialized
 
     return () => {
       console.log("🧹 Cleaning up notification listeners");
@@ -371,7 +553,9 @@ export function useNotifications(handlers: NotificationHandlers) {
     console.log("🔔 ===== STARTING PUSH NOTIFICATION REGISTRATION =====");
 
     if (!isPhysicalDevice()) {
-      console.warn("⚠️ Not a physical device - push notifications not available");
+      console.warn(
+        "⚠️ Not a physical device - push notifications not available"
+      );
       Toast.show("Must use physical device for Push Notifications", {
         type: "danger",
       });
@@ -380,7 +564,8 @@ export function useNotifications(handlers: NotificationHandlers) {
 
     try {
       // Request permissions
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
 
       if (existingStatus !== "granted") {
@@ -400,7 +585,8 @@ export function useNotifications(handlers: NotificationHandlers) {
 
       // Get project ID
       const projectId =
-        Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+        Constants?.expoConfig?.extra?.eas?.projectId ??
+        Constants?.easConfig?.projectId;
 
       if (!projectId) {
         console.error("❌ Project ID not found for push notifications");
@@ -413,9 +599,14 @@ export function useNotifications(handlers: NotificationHandlers) {
       console.log("✅ Project ID found:", projectId);
 
       // Get Expo push token
-      const pushTokenString = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      const pushTokenString = (
+        await Notifications.getExpoPushTokenAsync({ projectId })
+      ).data;
 
-      if (!pushTokenString || !pushTokenString.startsWith("ExponentPushToken[")) {
+      if (
+        !pushTokenString ||
+        !pushTokenString.startsWith("ExponentPushToken[")
+      ) {
         console.error("❌ Invalid push token format:", pushTokenString);
         Toast.show("Invalid push token format", {
           type: "danger",
@@ -439,7 +630,9 @@ export function useNotifications(handlers: NotificationHandlers) {
               if (i < retries - 1) {
                 continue;
               } else {
-                console.error("❌ Failed to save token: No access token after all retries");
+                console.error(
+                  "❌ Failed to save token: No access token after all retries"
+                );
                 Toast.show("Please log in to enable push notifications", {
                   type: "warning",
                   duration: 3000,
@@ -463,7 +656,9 @@ export function useNotifications(handlers: NotificationHandlers) {
 
             console.log("✅ ===== NOTIFICATION TOKEN SAVED SUCCESSFULLY =====");
             if (response.data?.driver?.notificationToken === pushTokenString) {
-              console.log("✅ Token verification: MATCH - notifications should work!");
+              console.log(
+                "✅ Token verification: MATCH - notifications should work!"
+              );
               Toast.show("Push notifications enabled!", {
                 type: "success",
                 duration: 2000,
@@ -471,7 +666,10 @@ export function useNotifications(handlers: NotificationHandlers) {
             }
             return;
           } catch (error: any) {
-            console.error(`❌ Error saving notification token (attempt ${i + 1}):`, error.message);
+            console.error(
+              `❌ Error saving notification token (attempt ${i + 1}):`,
+              error.message
+            );
             if (error.response?.status === 401) {
               Toast.show("Please log in again to enable notifications", {
                 type: "warning",
@@ -480,13 +678,20 @@ export function useNotifications(handlers: NotificationHandlers) {
               return;
             }
             if (i < retries - 1) {
-              await new Promise((resolve) => setTimeout(resolve, 2000 * (i + 1)));
+              await new Promise((resolve) =>
+                setTimeout(resolve, 2000 * (i + 1))
+              );
             } else {
-              console.error("❌ Failed to save notification token after all retries");
-              Toast.show("Failed to save notification token. Please check your connection and try again.", {
-                type: "warning",
-                duration: 5000,
-              });
+              console.error(
+                "❌ Failed to save notification token after all retries"
+              );
+              Toast.show(
+                "Failed to save notification token. Please check your connection and try again.",
+                {
+                  type: "warning",
+                  duration: 5000,
+                }
+              );
             }
           }
         }
@@ -496,15 +701,22 @@ export function useNotifications(handlers: NotificationHandlers) {
     } catch (e: any) {
       console.error("Error getting push token:", e);
       const errorMessage = e?.message || String(e);
-      const isFirebaseError = errorMessage.includes("FirebaseApp") || errorMessage.includes("Firebase");
+      const isFirebaseError =
+        errorMessage.includes("FirebaseApp") ||
+        errorMessage.includes("Firebase");
 
       if (isFirebaseError) {
-        console.warn("Firebase not initialized. Rebuild the app with expo-notifications plugin.");
+        console.warn(
+          "Firebase not initialized. Rebuild the app with expo-notifications plugin."
+        );
       } else if (isPhysicalDevice()) {
-        Toast.show("Push notifications may not be available. Please rebuild the app.", {
-          type: "warning",
-          duration: 3000,
-        });
+        Toast.show(
+          "Push notifications may not be available. Please rebuild the app.",
+          {
+            type: "warning",
+            duration: 3000,
+          }
+        );
       }
     }
 
@@ -522,4 +734,3 @@ export function useNotifications(handlers: NotificationHandlers) {
     isProcessingNotification: isProcessingNotification.current,
   };
 }
-
