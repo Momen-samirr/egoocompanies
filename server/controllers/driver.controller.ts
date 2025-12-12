@@ -1774,7 +1774,10 @@ export const uploadDriverDocument = async (req: any, res: Response) => {
         (photo: any) => photo.side === "front"
       );
     } else {
-      const fieldMap: Record<string, keyof typeof driver> = {
+      const fieldMap: Record<
+        string,
+        "selfiePhoto" | "criminalRecordPhoto" | "drugTestPhoto"
+      > = {
         selfie: "selfiePhoto",
         criminal_record: "criminalRecordPhoto",
         drug_test: "drugTestPhoto",
