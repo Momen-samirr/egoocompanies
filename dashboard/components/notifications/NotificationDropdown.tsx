@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
 import NotificationItem from "./NotificationItem";
-import { AdminNotification } from "@/types";
+import { AdminNotification, NotificationStatus } from "@/types";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import EmptyState from "@/components/common/EmptyState";
 import Link from "next/link";
@@ -17,12 +17,12 @@ export default function NotificationDropdown({
 }: NotificationDropdownProps) {
   const router = useRouter();
   const { notifications, isLoading, markAsRead } = useNotifications({
-    filters: { limit: 10, status: "UNREAD" }, // Show only unread, limit to 10
+    filters: { limit: 10, status: NotificationStatus.UNREAD }, // Show only unread, limit to 10
   });
 
   const handleNotificationClick = async (notification: AdminNotification) => {
     // Mark as read
-    if (notification.status === "UNREAD") {
+    if (notification.status === NotificationStatus.UNREAD) {
       markAsRead(notification.id);
     }
 

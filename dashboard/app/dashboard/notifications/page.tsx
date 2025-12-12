@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
-import { NotificationFilters as NotificationFiltersType } from "@/types";
+import {
+  NotificationFilters as NotificationFiltersType,
+  NotificationStatus,
+} from "@/types";
 import NotificationItem from "@/components/notifications/NotificationItem";
 import NotificationFilters from "@/components/notifications/NotificationFilters";
 import Pagination from "@/components/common/Pagination";
@@ -52,7 +55,7 @@ export default function NotificationsPage() {
   ) => {
     // Mark as read if unread
     const notification = notifications.find((n) => n.id === notificationId);
-    if (notification && notification.status === "UNREAD") {
+    if (notification && notification.status === NotificationStatus.UNREAD) {
       markAsRead(notificationId);
     }
     // Navigate to driver page

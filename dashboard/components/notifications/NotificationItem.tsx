@@ -1,6 +1,10 @@
 "use client";
 
-import { AdminNotification, NotificationType } from "@/types";
+import {
+  AdminNotification,
+  NotificationType,
+  NotificationStatus,
+} from "@/types";
 import { formatDistanceToNow } from "date-fns";
 import { DocumentIcon, ClockIcon } from "@heroicons/react/24/outline";
 
@@ -32,7 +36,7 @@ export default function NotificationItem({
   notification,
   onClick,
 }: NotificationItemProps) {
-  const isUnread = notification.status === "UNREAD";
+  const isUnread = notification.status === NotificationStatus.UNREAD;
   const driverName =
     notification.driver?.name || `Driver ${notification.driverId.slice(-6)}`;
   const documentTypeLabel = getDocumentTypeLabel(notification.documentType);
