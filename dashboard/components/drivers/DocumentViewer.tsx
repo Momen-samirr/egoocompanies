@@ -376,7 +376,7 @@ export default function DocumentViewer({
                           console.error("Image load error:", document.url);
                           const target = e.currentTarget;
                           target.style.display = "none";
-                          const errorDiv = document.createElement("div");
+                          const errorDiv = window.document.createElement("div");
                           errorDiv.className =
                             "absolute inset-0 flex items-center justify-center bg-red-50";
                           errorDiv.innerHTML = `
