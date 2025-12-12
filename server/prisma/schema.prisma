@@ -68,6 +68,12 @@ model driver {
   pendingRides        Float            @default(0)
   cancelRides         Float            @default(0)
   status              String           @default("inactive")
+  selfiePhoto         String?
+  driversLicensePhoto String?
+  criminalRecordPhoto String?
+  documentsVerified   Boolean         @default(false)
+  documentsVerifiedAt  DateTime?
+  documentsVerifiedBy String?          @db.ObjectId
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   rides               rides[]          @relation("DriverRides")

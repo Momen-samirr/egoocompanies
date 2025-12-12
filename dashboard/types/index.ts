@@ -30,6 +30,12 @@ export interface Driver {
   pendingRides: number;
   cancelRides: number;
   status: string;
+  selfiePhoto?: string;
+  driversLicensePhoto?: string;
+  criminalRecordPhoto?: string;
+  documentsVerified?: boolean;
+  documentsVerifiedAt?: string;
+  documentsVerifiedBy?: string;
   createdAt: string;
   updatedAt: string;
   rides?: Ride[];
@@ -82,4 +88,3 @@ export interface Company {
   createdAt: string;
   updatedAt: string;
 }
-

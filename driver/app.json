@@ -17,6 +17,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
+        "NSCameraUsageDescription": "Allow egoo to access your camera to take photos for document verification.",
+        "NSPhotoLibraryUsageDescription": "Allow egoo to access your photo library to upload documents for verification.",
         "UIBackgroundModes": ["location", "locationAlways"]
       },
       "bundleIdentifier": "com.becodemy.ridewavedriver"
@@ -41,7 +43,10 @@
         "FOREGROUND_SERVICE_LOCATION",
         "INTERNET",
         "POST_NOTIFICATIONS",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
       ],
       "privacy": "https://egoobus.com/privacy-policy"
     },
@@ -74,6 +79,13 @@
           "color": "#ffffff",
           "sounds": [],
           "mode": "production"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow egoo to access your photo library to upload documents for verification.",
+          "cameraPermission": "Allow egoo to access your camera to take photos for document verification."
         }
       ]
     ],

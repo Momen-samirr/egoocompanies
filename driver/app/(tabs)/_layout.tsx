@@ -3,6 +3,7 @@ import { HomeLight } from "@/assets/icons/homeLight";
 import { Person } from "@/assets/icons/person";
 import { History } from "@/assets/icons/history";
 import { Calender } from "@/assets/icons/calender";
+import { Setting } from "@/assets/icons/setting";
 import color from "@/themes/app.colors";
 import { Tabs } from "expo-router";
 import React from "react";
@@ -20,6 +21,8 @@ export default function TabLayout() {
         return "Trips";
       case "profile/index":
         return "Profile";
+      case "settings/index":
+        return "Settings";
       default:
         return "";
     }
@@ -41,7 +44,8 @@ export default function TabLayout() {
           tabBarInactiveTintColor: "#8F8F8F",
           tabBarStyle: {
             height: Platform.OS === "ios" ? windowHeight(85) : windowHeight(60),
-            paddingBottom: Platform.OS === "ios" ? windowHeight(20) : windowHeight(5),
+            paddingBottom:
+              Platform.OS === "ios" ? windowHeight(20) : windowHeight(5),
             paddingTop: windowHeight(5),
             backgroundColor: "#fff",
             borderTopWidth: 1,
@@ -76,6 +80,10 @@ export default function TabLayout() {
               } else {
                 iconName = <Person fill={"#8F8F8F"} />;
               }
+            } else if (route.name === "settings/index") {
+              iconName = (
+                <Setting colors={focused ? color.buttonBg : "#8F8F8F"} />
+              );
             }
             return iconName;
           },
@@ -83,28 +91,34 @@ export default function TabLayout() {
         };
       }}
     >
-      <Tabs.Screen 
-        name="home" 
+      <Tabs.Screen
+        name="home"
         options={{
           title: "Home",
         }}
       />
-      <Tabs.Screen 
-        name="rides/index" 
+      <Tabs.Screen
+        name="rides/index"
         options={{
           title: "Rides",
         }}
       />
-      <Tabs.Screen 
-        name="trips/index" 
+      <Tabs.Screen
+        name="trips/index"
         options={{
           title: "Trips",
         }}
       />
-      <Tabs.Screen 
-        name="profile/index" 
+      <Tabs.Screen
+        name="profile/index"
         options={{
           title: "Profile",
+        }}
+      />
+      <Tabs.Screen
+        name="settings/index"
+        options={{
+          title: "Settings",
         }}
       />
     </Tabs>

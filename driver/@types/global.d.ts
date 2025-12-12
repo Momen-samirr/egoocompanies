@@ -27,6 +27,11 @@ type DriverType = {
   pendingRides: number;
   cancelRides: number;
   status: string;
+  selfiePhoto?: string;
+  driversLicensePhoto?: string;
+  criminalRecordPhoto?: string;
+  documentsVerified?: boolean;
+  documentsVerifiedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 };

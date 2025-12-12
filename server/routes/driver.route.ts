@@ -18,6 +18,8 @@ import {
   getDriverStats,
   checkEmergencyUsageStatus,
   emergencyTerminateTrip,
+  uploadDriverDocument,
+  getDriverDocuments,
 } from "../controllers/driver.controller";
 import { isAuthenticatedDriver } from "../middleware/isAuthenticated";
 
@@ -37,7 +39,11 @@ driverRouter.get("/get-drivers-data", getDriversById);
 
 driverRouter.put("/update-status", isAuthenticatedDriver, updateDriverStatus);
 
-driverRouter.put("/update-notification-token", isAuthenticatedDriver, updateNotificationToken);
+driverRouter.put(
+  "/update-notification-token",
+  isAuthenticatedDriver,
+  updateNotificationToken
+);
 
 driverRouter.post("/new-ride", isAuthenticatedDriver, newRide);
 
@@ -53,12 +59,36 @@ driverRouter.get("/stats", isAuthenticatedDriver, getDriverStats);
 
 // Scheduled Trips
 driverRouter.get("/scheduled-trips", isAuthenticatedDriver, getScheduledTrips);
-driverRouter.post("/start-trip/:tripId", isAuthenticatedDriver, startScheduledTrip);
+driverRouter.post(
+  "/start-trip/:tripId",
+  isAuthenticatedDriver,
+  startScheduledTrip
+);
 driverRouter.post("/trip/progress", isAuthenticatedDriver, updateTripProgress);
-driverRouter.post("/update-location", isAuthenticatedDriver, updateCaptainLocation);
+driverRouter.post(
+  "/update-location",
+  isAuthenticatedDriver,
+  updateCaptainLocation
+);
 
 // Emergency Termination
-driverRouter.get("/emergency-usage-status", isAuthenticatedDriver, checkEmergencyUsageStatus);
-driverRouter.post("/emergency-terminate-trip", isAuthenticatedDriver, emergencyTerminateTrip);
+driverRouter.get(
+  "/emergency-usage-status",
+  isAuthenticatedDriver,
+  checkEmergencyUsageStatus
+);
+driverRouter.post(
+  "/emergency-terminate-trip",
+  isAuthenticatedDriver,
+  emergencyTerminateTrip
+);
+
+// Document Upload
+driverRouter.post(
+  "/upload-document",
+  isAuthenticatedDriver,
+  uploadDriverDocument
+);
+driverRouter.get("/documents", isAuthenticatedDriver, getDriverDocuments);
 
 export default driverRouter;

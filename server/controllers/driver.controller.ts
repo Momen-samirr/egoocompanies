@@ -1706,3 +1706,127 @@ export const emergencyTerminateTrip = async (req: any, res: Response) => {
     });
   }
 };
+
+// Upload driver document
+export const uploadDriverDocument = async (req: any, res: Response) => {
+  try {
+    const driverId = req.driver.id;
+    const { documentType, imageBase64 } = req.body;
+
+    if (!documentType || !imageBase64) {
+      return res.status(400).json({
+        success: false,
+        message: "Document type and image are required",
+      });
+    }
+
+    const validDocumentTypes = ["selfie", "license", "criminal_record"];
+    if (!validDocumentTypes.includes(documentType)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid document type. Must be: selfie, license, or criminal_record",
+      });
+    }
+
+    // Import upload service
+    const {
+      uploadBase64ToCloudinary,
+      generateDocumentFileName,
+    } = require("../services/file-upload.service");
+
+    // Generate unique file name
+    const fileName = generateDocumentFileName(driverId, documentType);
+
+    // Upload to Cloudinary
+    const imageUrl = await uploadBase64ToCloudinary(imageBase64, fileName, {
+      folder: "driver-documents",
+    });
+
+    // Map document type to database field
+    const fieldMap: Record<string, string> = {
+      selfie: "selfiePhoto",
+      license: "driversLicensePhoto",
+      criminal_record: "criminalRecordPhoto",
+    };
+
+    const fieldName = fieldMap[documentType];
+
+    // Update driver record with new document URL
+    const updatedDriver = await prisma.driver.update({
+      where: { id: driverId },
+      data: {
+        [fieldName]: imageUrl,
+        // Reset verification status when new document is uploaded
+        documentsVerified: false,
+        documentsVerifiedAt: null,
+        documentsVerifiedBy: null,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Document uploaded successfully",
+      documentUrl: imageUrl,
+      documentType,
+    });
+  } catch (error: any) {
+    console.error("Upload driver document error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to upload document",
+    });
+  }
+};
+
+// Get driver documents status
+export const getDriverDocuments = async (req: any, res: Response) => {
+  try {
+    const driverId = req.driver.id;
+
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      select: {
+        id: true,
+        selfiePhoto: true,
+        driversLicensePhoto: true,
+        criminalRecordPhoto: true,
+        documentsVerified: true,
+        documentsVerifiedAt: true,
+      },
+    });
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: "Driver not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      documents: {
+        selfie: {
+          url: driver.selfiePhoto,
+          uploaded: !!driver.selfiePhoto,
+        },
+        license: {
+          url: driver.driversLicensePhoto,
+          uploaded: !!driver.driversLicensePhoto,
+        },
+        criminalRecord: {
+          url: driver.criminalRecordPhoto,
+          uploaded: !!driver.criminalRecordPhoto,
+        },
+        verified: driver.documentsVerified,
+        verifiedAt: driver.documentsVerifiedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error("Get driver documents error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
