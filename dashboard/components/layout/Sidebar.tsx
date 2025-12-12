@@ -14,6 +14,7 @@ import {
   CalendarIcon,
   Squares2X2Icon,
   BuildingOffice2Icon,
+  BellIcon,
 } from "@heroicons/react/24/outline";
 import { logout, isCompanyUser } from "@/lib/auth";
 
@@ -43,11 +44,22 @@ const navigationGroups: NavGroup[] = [
       { name: "Drivers", href: "/dashboard/drivers", icon: TruckIcon },
       { name: "Rides", href: "/dashboard/rides", icon: MapIcon },
       { name: "Scheduled Trips", href: "/dashboard/trips", icon: CalendarIcon },
+      {
+        name: "Notifications",
+        href: "/dashboard/notifications",
+        icon: BellIcon,
+      },
     ],
   },
   {
     title: "Companies",
-    items: [{ name: "Companies", href: "/dashboard/companies", icon: BuildingOffice2Icon }],
+    items: [
+      {
+        name: "Companies",
+        href: "/dashboard/companies",
+        icon: BuildingOffice2Icon,
+      },
+    ],
   },
   {
     title: "Analytics",
@@ -64,8 +76,13 @@ export default function Sidebar() {
 
   // Check user role only on client side to avoid hydration mismatch
   useEffect(() => {
-    setMounted(true);
-    setIsCompany(isCompanyUser());
+    // Defer state updates to avoid synchronous setState in effect
+    const timer = setTimeout(() => {
+      setMounted(true);
+      setIsCompany(isCompanyUser());
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const isActive = (href: string) => {
@@ -76,15 +93,18 @@ export default function Sidebar() {
   };
 
   // Filter navigation groups based on role (only after mount)
-  const filteredGroups = mounted && isCompany
-    ? navigationGroups.filter((group) => {
-        // For COMPANY users, only show groups with Live Map
-        return group.items.some((item) => item.href === "/dashboard/map");
-      }).map((group) => ({
-        ...group,
-        items: group.items.filter((item) => item.href === "/dashboard/map"),
-      }))
-    : navigationGroups;
+  const filteredGroups =
+    mounted && isCompany
+      ? navigationGroups
+          .filter((group) => {
+            // For COMPANY users, only show groups with Live Map
+            return group.items.some((item) => item.href === "/dashboard/map");
+          })
+          .map((group) => ({
+            ...group,
+            items: group.items.filter((item) => item.href === "/dashboard/map"),
+          }))
+      : navigationGroups;
 
   return (
     <div className="flex flex-col w-64 bg-slate-900 text-white border-r border-slate-800/50">
@@ -94,8 +114,12 @@ export default function Sidebar() {
           <Squares2X2Icon className="h-6 w-6 text-white" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-white">{isCompany ? "Company" : "Mo2 Admin"}</h1>
-          <p className="text-xs text-slate-400">{isCompany ? "Live Map" : "Dashboard"}</p>
+          <h1 className="text-lg font-bold text-white">
+            {isCompany ? "Company" : "Mo2 Admin"}
+          </h1>
+          <p className="text-xs text-slate-400">
+            {isCompany ? "Live Map" : "Dashboard"}
+          </p>
         </div>
       </div>
 
@@ -158,4 +182,3 @@ export default function Sidebar() {
     </div>
   );
 }
-

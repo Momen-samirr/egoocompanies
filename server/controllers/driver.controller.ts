@@ -1908,6 +1908,14 @@ export const uploadDriverDocument = async (req: any, res: Response) => {
         isUpdate
       );
 
+      console.log("📄 Notification creation result:", {
+        success: notificationResult.success,
+        hasNotification: !!notificationResult.notification,
+        driverId,
+        documentType,
+        isUpdate,
+      });
+
       // Notify socket server to broadcast to admins
       if (notificationResult.success && notificationResult.notification) {
         try {
@@ -1915,28 +1923,40 @@ export const uploadDriverDocument = async (req: any, res: Response) => {
           const SOCKET_SERVER_URL =
             process.env.SOCKET_SERVER_URL || "http://localhost:8080";
 
-          await axios
-            .post(`${SOCKET_SERVER_URL}/api/notify-document-upload`, {
-              notification: notificationResult.notification,
-            })
-            .catch((error: any) => {
-              // Don't fail the request if socket server is unavailable
-              console.log(
-                "⚠️ Could not notify socket server about document upload:",
-                error.message
-              );
-            });
-        } catch (socketError) {
-          // Don't fail the request if socket notification fails
           console.log(
-            "⚠️ Socket notification error (non-critical):",
-            socketError
+            `📡 Sending notification to socket server: ${SOCKET_SERVER_URL}/api/notify-document-upload`
           );
+
+          const response = await axios.post(
+            `${SOCKET_SERVER_URL}/api/notify-document-upload`,
+            {
+              notification: notificationResult.notification,
+            },
+            {
+              timeout: 5000,
+            }
+          );
+
+          console.log("✅ Notification sent to socket server:", response.data);
+        } catch (socketError: any) {
+          // Don't fail the request if socket server is unavailable
+          console.error(
+            "⚠️ Could not notify socket server about document upload:",
+            socketError.message || socketError
+          );
+          if (socketError.response) {
+            console.error("Socket server response:", socketError.response.data);
+          }
         }
+      } else {
+        console.error("❌ Notification creation failed:", notificationResult);
       }
-    } catch (notificationError) {
+    } catch (notificationError: any) {
       // Don't fail the upload if notification creation fails
-      console.error("Error creating notification:", notificationError);
+      console.error(
+        "❌ Error creating notification:",
+        notificationError.message || notificationError
+      );
     }
 
     res.status(200).json({

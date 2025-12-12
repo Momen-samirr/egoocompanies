@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
 import NotificationItem from "./NotificationItem";
-import { ArrowRightIcon } from "@heroicons/react/24/outline";
+import { AdminNotification } from "@/types";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
+import EmptyState from "@/components/common/EmptyState";
+import Link from "next/link";
 
 interface NotificationDropdownProps {
   onClose: () => void;
@@ -13,51 +16,54 @@ export default function NotificationDropdown({
   onClose,
 }: NotificationDropdownProps) {
   const router = useRouter();
-  const { notifications, unreadCount, isLoading } = useNotifications({
-    limit: 10,
+  const { notifications, isLoading, markAsRead } = useNotifications({
+    filters: { limit: 10, status: "UNREAD" }, // Show only unread, limit to 10
   });
 
-  const handleViewAll = () => {
-    router.push("/dashboard/notifications");
+  const handleNotificationClick = async (notification: AdminNotification) => {
+    // Mark as read
+    if (notification.status === "UNREAD") {
+      markAsRead(notification.id);
+    }
+
+    // Navigate to driver page
+    router.push(`/dashboard/drivers/${notification.driverId}`);
     onClose();
   };
 
   return (
-    <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[600px] flex flex-col">
+    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-hidden flex flex-col">
       <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">
-          Notifications
-          {unreadCount > 0 && (
-            <span className="ml-2 text-sm font-normal text-gray-500">
-              ({unreadCount} unread)
-            </span>
-          )}
-        </h3>
-        <button
-          onClick={handleViewAll}
-          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
-        >
-          View all
-          <ArrowRightIcon className="h-4 w-4" />
-        </button>
+        <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+        {notifications.length > 0 && (
+          <Link
+            href="/dashboard/notifications"
+            onClick={onClose}
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            View All
+          </Link>
+        )}
       </div>
-
       <div className="overflow-y-auto flex-1">
         {isLoading ? (
-          <div className="px-4 py-8 text-center text-gray-500">
-            Loading notifications...
+          <div className="flex items-center justify-center py-8">
+            <LoadingSpinner />
           </div>
         ) : notifications.length === 0 ? (
-          <div className="px-4 py-8 text-center text-gray-500">
-            No notifications
+          <div className="py-8">
+            <EmptyState
+              title="No new notifications"
+              description="You're all caught up!"
+            />
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <div>
             {notifications.map((notification) => (
               <NotificationItem
                 key={notification.id}
                 notification={notification}
-                onClose={onClose}
+                onClick={() => handleNotificationClick(notification)}
               />
             ))}
           </div>

@@ -1,134 +1,205 @@
 "use client";
 
-import { useState } from "react";
-import type {
-  NotificationFilters,
-  DocumentType,
+import { useState, useEffect } from "react";
+import {
+  NotificationFilters as NotificationFiltersType,
   NotificationStatus,
 } from "@/types";
+import { FunnelIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import Button from "@/components/common/Button";
 
 interface NotificationFiltersProps {
-  filters: NotificationFilters;
-  onFiltersChange: (filters: NotificationFilters) => void;
+  filters: NotificationFiltersType;
+  onChange: (filters: NotificationFiltersType) => void;
+  onClear: () => void;
 }
 
-const documentTypes: DocumentType[] = [
-  "selfie",
-  "license_front",
-  "license_back",
-  "drug_test",
-  "criminal_record",
+const documentTypeOptions = [
+  { value: "selfie", label: "Selfie" },
+  { value: "license_front", label: "License (Front)" },
+  { value: "license_back", label: "License (Back)" },
+  { value: "license", label: "License" },
+  { value: "criminal_record", label: "Criminal Record" },
+  { value: "drug_test", label: "Drug Test" },
 ];
 
-const documentTypeLabels: Record<DocumentType, string> = {
-  selfie: "Selfie",
-  license_front: "License Front",
-  license_back: "License Back",
-  drug_test: "Drug Test",
-  criminal_record: "Criminal Record",
-};
+const statusOptions = [
+  { value: NotificationStatus.UNREAD, label: "Unread" },
+  { value: NotificationStatus.READ, label: "Read" },
+];
 
 export default function NotificationFilters({
   filters,
-  onFiltersChange,
+  onChange,
+  onClear,
 }: NotificationFiltersProps) {
+  const [showFilters, setShowFilters] = useState(false);
   const [localFilters, setLocalFilters] =
-    useState<NotificationFilters>(filters);
+    useState<NotificationFiltersType>(filters);
 
-  const handleChange = (key: keyof NotificationFilters, value: any) => {
-    const newFilters = { ...localFilters, [key]: value, page: 1 };
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
+
+  const hasActiveFilters =
+    localFilters.documentType ||
+    localFilters.status ||
+    localFilters.startDate ||
+    localFilters.endDate ||
+    localFilters.driverId;
+
+  const handleFilterChange = <K extends keyof NotificationFiltersType>(
+    key: K,
+    value: NotificationFiltersType[K] | undefined
+  ) => {
+    const newFilters = { ...localFilters };
+    if (value === undefined || value === "") {
+      delete newFilters[key];
+    } else {
+      newFilters[key] = value;
+    }
     setLocalFilters(newFilters);
-    onFiltersChange(newFilters);
+    onChange(newFilters);
   };
 
   const handleClear = () => {
-    const clearedFilters: NotificationFilters = { page: 1, limit: 20 };
+    const clearedFilters: NotificationFiltersType = {
+      page: 1,
+      limit: 20,
+    };
     setLocalFilters(clearedFilters);
-    onFiltersChange(clearedFilters);
+    onClear();
   };
 
   return (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Filters</h3>
+    <div className="mb-4">
+      <div className="flex items-center justify-between">
         <button
-          onClick={handleClear}
-          className="text-sm text-indigo-600 hover:text-indigo-700"
+          onClick={() => setShowFilters(!showFilters)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+            hasActiveFilters
+              ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+              : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+          }`}
         >
-          Clear all
+          <FunnelIcon className="h-5 w-5" />
+          <span className="text-sm font-medium">Filters</span>
+          {hasActiveFilters && (
+            <span className="ml-1 px-2 py-0.5 bg-indigo-600 text-white text-xs rounded-full">
+              Active
+            </span>
+          )}
         </button>
+        {hasActiveFilters && (
+          <button
+            onClick={handleClear}
+            className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+          >
+            <XMarkIcon className="h-4 w-4" />
+            Clear filters
+          </button>
+        )}
       </div>
 
-      <div className="space-y-4">
-        {/* Document Type Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Document Type
-          </label>
-          <select
-            value={localFilters.documentType || ""}
-            onChange={(e) =>
-              handleChange("documentType", e.target.value || undefined)
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-          >
-            <option value="">All types</option>
-            {documentTypes.map((type) => (
-              <option key={type} value={type}>
-                {documentTypeLabels[type]}
-              </option>
-            ))}
-          </select>
-        </div>
+      {showFilters && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Document Type Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Document Type
+              </label>
+              <select
+                value={localFilters.documentType || ""}
+                onChange={(e) =>
+                  handleFilterChange(
+                    "documentType",
+                    e.target.value || undefined
+                  )
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="">All Types</option>
+                {documentTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* Status Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Status
-          </label>
-          <select
-            value={localFilters.status || ""}
-            onChange={(e) =>
-              handleChange("status", e.target.value || undefined)
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-          >
-            <option value="">All statuses</option>
-            <option value="UNREAD">Unread</option>
-            <option value="READ">Read</option>
-          </select>
-        </div>
+            {/* Status Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Status
+              </label>
+              <select
+                value={localFilters.status || ""}
+                onChange={(e) =>
+                  handleFilterChange(
+                    "status",
+                    (e.target.value as NotificationStatus) || undefined
+                  )
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="">All Status</option>
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* Date Range Filters */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Start Date
-            </label>
-            <input
-              type="date"
-              value={localFilters.startDate || ""}
-              onChange={(e) =>
-                handleChange("startDate", e.target.value || undefined)
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              End Date
-            </label>
-            <input
-              type="date"
-              value={localFilters.endDate || ""}
-              onChange={(e) =>
-                handleChange("endDate", e.target.value || undefined)
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            />
+            {/* Start Date Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={localFilters.startDate || ""}
+                onChange={(e) =>
+                  handleFilterChange("startDate", e.target.value || undefined)
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+
+            {/* End Date Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={localFilters.endDate || ""}
+                onChange={(e) =>
+                  handleFilterChange("endDate", e.target.value || undefined)
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Driver ID Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Driver ID
+              </label>
+              <input
+                type="text"
+                value={localFilters.driverId || ""}
+                onChange={(e) =>
+                  handleFilterChange("driverId", e.target.value || undefined)
+                }
+                placeholder="Enter driver ID"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

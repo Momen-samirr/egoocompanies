@@ -76,44 +76,63 @@ api.interceptors.response.use(
   }
 );
 
-export default api;
-
 // Notification API methods
-import type {
-  NotificationFilters,
-  NotificationResponse,
-  AdminNotification,
-} from "@/types";
-
-export const getNotifications = async (
-  filters: NotificationFilters = {}
-): Promise<NotificationResponse> => {
+export const getNotifications = async (filters?: {
+  driverId?: string;
+  documentType?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}) => {
   const params = new URLSearchParams();
-  if (filters.driverId) params.append("driverId", filters.driverId);
-  if (filters.documentType) params.append("documentType", filters.documentType);
-  if (filters.status) params.append("status", filters.status);
-  if (filters.startDate) params.append("startDate", filters.startDate);
-  if (filters.endDate) params.append("endDate", filters.endDate);
-  if (filters.page) params.append("page", filters.page.toString());
-  if (filters.limit) params.append("limit", filters.limit.toString());
+  if (filters?.driverId) params.append("driverId", filters.driverId);
+  if (filters?.documentType)
+    params.append("documentType", filters.documentType);
+  if (filters?.status) params.append("status", filters.status);
+  if (filters?.startDate) params.append("startDate", filters.startDate);
+  if (filters?.endDate) params.append("endDate", filters.endDate);
+  if (filters?.page) params.append("page", filters.page.toString());
+  if (filters?.limit) params.append("limit", filters.limit.toString());
 
   const response = await api.get(`/admin/notifications?${params.toString()}`);
+  console.log("📬 Notifications API response:", {
+    success: response.data?.success,
+    notificationsCount: response.data?.notifications?.length || 0,
+    total: response.data?.total,
+    page: response.data?.page,
+    fullResponse: response.data,
+  });
+
+  // Log first notification structure if available
+  if (response.data?.notifications?.length > 0) {
+    console.log("📬 First notification sample:", {
+      id: response.data.notifications[0].id,
+      driverId: response.data.notifications[0].driverId,
+      driver: response.data.notifications[0].driver,
+      type: response.data.notifications[0].type,
+      documentType: response.data.notifications[0].documentType,
+      status: response.data.notifications[0].status,
+    });
+  }
+
   return response.data;
 };
 
-export const getUnreadCount = async (): Promise<number> => {
+export const getUnreadNotificationCount = async () => {
   const response = await api.get("/admin/notifications/unread-count");
-  return response.data.count;
+  return response.data;
 };
 
-export const markAsRead = async (
-  notificationId: string
-): Promise<AdminNotification> => {
-  const response = await api.put(`/admin/notifications/${notificationId}/read`);
-  return response.data.notification;
+export const markNotificationAsRead = async (id: string) => {
+  const response = await api.put(`/admin/notifications/${id}/read`);
+  return response.data;
 };
 
-export const markAllAsRead = async (): Promise<{ count: number }> => {
+export const markAllNotificationsAsRead = async () => {
   const response = await api.put("/admin/notifications/mark-all-read");
   return response.data;
 };
+
+export default api;

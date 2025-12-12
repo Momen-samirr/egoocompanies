@@ -1,76 +1,76 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useNotifications } from "@/hooks/useNotifications";
-import type { AdminNotification } from "@/types";
-import { DocumentTextIcon, ClockIcon } from "@heroicons/react/24/outline";
+import { AdminNotification, NotificationType } from "@/types";
 import { formatDistanceToNow } from "date-fns";
+import { DocumentIcon, ClockIcon } from "@heroicons/react/24/outline";
 
 interface NotificationItemProps {
   notification: AdminNotification;
-  onClose?: () => void;
+  onClick?: () => void;
 }
 
-const documentTypeLabels: Record<string, string> = {
-  selfie: "Selfie",
-  license_front: "License Front",
-  license_back: "License Back",
-  drug_test: "Drug Test",
-  criminal_record: "Criminal Record",
+const getDocumentTypeLabel = (documentType: string): string => {
+  const labels: Record<string, string> = {
+    selfie: "Selfie",
+    license_front: "License (Front)",
+    license_back: "License (Back)",
+    license: "License",
+    criminal_record: "Criminal Record",
+    drug_test: "Drug Test",
+  };
+  return (
+    labels[documentType] ||
+    documentType.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+  );
+};
+
+const getActionLabel = (type: NotificationType): string => {
+  return type === NotificationType.DOCUMENT_UPDATE ? "updated" : "uploaded";
 };
 
 export default function NotificationItem({
   notification,
-  onClose,
+  onClick,
 }: NotificationItemProps) {
-  const router = useRouter();
-  const { markAsRead } = useNotifications();
-
-  const handleClick = () => {
-    if (notification.status === "UNREAD") {
-      markAsRead(notification.id);
-    }
-    router.push(`/dashboard/drivers/${notification.driverId}`);
-    onClose?.();
-  };
-
-  const documentLabel =
-    documentTypeLabels[notification.documentType] || notification.documentType;
-  const action =
-    notification.type === "DOCUMENT_UPDATE" ? "updated" : "uploaded";
+  const isUnread = notification.status === "UNREAD";
+  const driverName =
+    notification.driver?.name || `Driver ${notification.driverId.slice(-6)}`;
+  const documentTypeLabel = getDocumentTypeLabel(notification.documentType);
+  const actionLabel = getActionLabel(notification.type);
+  const timeAgo = formatDistanceToNow(new Date(notification.createdAt), {
+    addSuffix: true,
+  });
 
   return (
     <div
-      onClick={handleClick}
-      className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-        notification.status === "UNREAD" ? "bg-indigo-50" : ""
+      onClick={onClick}
+      className={`p-4 border-b border-gray-200 cursor-pointer transition-colors hover:bg-gray-50 ${
+        isUnread ? "bg-blue-50 border-l-4 border-l-blue-500" : ""
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className="flex-shrink-0">
-          <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-            <DocumentTextIcon className="h-5 w-5 text-indigo-600" />
-          </div>
+        <div
+          className={`flex-shrink-0 mt-1 ${
+            isUnread ? "text-blue-600" : "text-gray-400"
+          }`}
+        >
+          <DocumentIcon className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">
-                {notification.driver.name}
-              </p>
+              <p className="text-sm font-medium text-gray-900">{driverName}</p>
               <p className="text-sm text-gray-600 mt-1">
-                {action} {documentLabel}
+                {actionLabel} {documentTypeLabel}
               </p>
-              <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                <ClockIcon className="h-3 w-3" />
-                {formatDistanceToNow(new Date(notification.createdAt), {
-                  addSuffix: true,
-                })}
-              </div>
             </div>
-            {notification.status === "UNREAD" && (
-              <div className="h-2 w-2 rounded-full bg-indigo-600 flex-shrink-0 mt-1" />
+            {isUnread && (
+              <span className="flex-shrink-0 h-2 w-2 rounded-full bg-blue-500 mt-2" />
             )}
+          </div>
+          <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
+            <ClockIcon className="h-3.5 w-3.5" />
+            <span>{timeAgo}</span>
           </div>
         </div>
       </div>

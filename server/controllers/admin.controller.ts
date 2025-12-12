@@ -4042,29 +4042,82 @@ export const getNotifications = async (req: any, res: Response) => {
       limit = 20,
     } = req.query;
 
+    console.log("🔍 [getNotifications Controller] Request received:", {
+      adminId,
+      queryParams: {
+        driverId,
+        documentType,
+        status,
+        startDate,
+        endDate,
+        page,
+        limit,
+      },
+    });
+
     const {
       getAdminNotifications,
     } = require("../services/notification.service");
 
     const filters: any = {
-      page: parseInt(page as string),
-      limit: parseInt(limit as string),
+      page: parseInt(page as string) || 1,
+      limit: parseInt(limit as string) || 20,
     };
 
     if (driverId) filters.driverId = driverId as string;
     if (documentType) filters.documentType = documentType as string;
     if (status) filters.status = status as string;
-    if (startDate) filters.startDate = new Date(startDate as string);
-    if (endDate) filters.endDate = new Date(endDate as string);
+    if (startDate) {
+      const parsedDate = new Date(startDate as string);
+      if (!isNaN(parsedDate.getTime())) {
+        filters.startDate = parsedDate;
+      } else {
+        console.warn(
+          "⚠️ [getNotifications Controller] Invalid startDate:",
+          startDate
+        );
+      }
+    }
+    if (endDate) {
+      const parsedDate = new Date(endDate as string);
+      if (!isNaN(parsedDate.getTime())) {
+        filters.endDate = parsedDate;
+      } else {
+        console.warn(
+          "⚠️ [getNotifications Controller] Invalid endDate:",
+          endDate
+        );
+      }
+    }
+
+    console.log(
+      "🔍 [getNotifications Controller] Calling service with filters:",
+      filters
+    );
 
     const result = await getAdminNotifications(adminId, filters);
+
+    console.log("🔍 [getNotifications Controller] Service returned:", {
+      notificationsCount: result.notifications?.length || 0,
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+    });
 
     res.status(200).json({
       success: true,
       ...result,
     });
   } catch (error: any) {
-    console.error("Get notifications error:", error);
+    console.error(
+      "❌ [getNotifications Controller] Error fetching notifications:",
+      error
+    );
+    console.error(
+      "❌ [getNotifications Controller] Error message:",
+      error.message
+    );
+    console.error("❌ [getNotifications Controller] Error stack:", error.stack);
     res.status(500).json({
       success: false,
       message: error.message || "Internal server error",

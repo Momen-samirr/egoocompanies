@@ -383,7 +383,38 @@ wss.on("connection", (ws, req) => {
     // Parse URL to get query parameters
     const urlString = req.url || "";
     console.log(`🔍 New WebSocket connection - URL: ${urlString}`);
-    const url = new URL(urlString, `http://${req.headers.host || "localhost"}`);
+    console.log(`🔍 Request headers:`, {
+      host: req.headers.host,
+      origin: req.headers.origin,
+    });
+
+    // Parse URL - handle both absolute and relative URLs
+    let url;
+    try {
+      // Try parsing as absolute URL first (for WebSocket URLs)
+      if (urlString.startsWith("/")) {
+        // Relative URL - construct full URL
+        const protocol = req.headers["x-forwarded-proto"] || "http";
+        const host = req.headers.host || "localhost:8080";
+        url = new URL(urlString, `${protocol}://${host}`);
+      } else {
+        // Already absolute or just query string
+        url = new URL(
+          urlString,
+          `http://${req.headers.host || "localhost:8080"}`
+        );
+      }
+    } catch (parseError) {
+      // Fallback: parse query string manually
+      console.log("⚠️ URL parsing error, using fallback:", parseError.message);
+      const queryString = urlString.includes("?")
+        ? urlString.split("?")[1]
+        : urlString;
+      const params = new URLSearchParams(queryString);
+      isAdmin = params.get("role") === "admin";
+      url = { searchParams: params }; // Create a mock URL object for consistency
+    }
+
     isAdmin = url.searchParams.get("role") === "admin";
 
     // Try to get token from query params or Authorization header
@@ -1033,12 +1064,19 @@ app.post("/api/notify-document-upload", (req, res) => {
     console.log(
       `📄 [HTTP API] Document notification received for driver ${notification.driverId}`
     );
+    console.log("📄 Notification data:", JSON.stringify(notification, null, 2));
 
     // Broadcast to all admin clients
-    broadcastToAdmins({
+    const broadcastData = {
       type: "documentNotification",
       notification: notification,
-    });
+    };
+
+    console.log(
+      "📡 Broadcasting to admins:",
+      JSON.stringify(broadcastData, null, 2)
+    );
+    broadcastToAdmins(broadcastData);
 
     res.json({
       success: true,

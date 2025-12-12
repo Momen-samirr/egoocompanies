@@ -100,36 +100,37 @@ export interface Company {
   updatedAt: string;
 }
 
-export type NotificationType = "DOCUMENT_UPLOAD" | "DOCUMENT_UPDATE";
-export type NotificationStatus = "UNREAD" | "READ";
-export type DocumentType =
-  | "selfie"
-  | "license_front"
-  | "license_back"
-  | "drug_test"
-  | "criminal_record";
+export enum NotificationType {
+  DOCUMENT_UPLOAD = "DOCUMENT_UPLOAD",
+  DOCUMENT_UPDATE = "DOCUMENT_UPDATE",
+}
+
+export enum NotificationStatus {
+  UNREAD = "UNREAD",
+  READ = "READ",
+}
 
 export interface AdminNotification {
   id: string;
-  adminId?: string;
+  adminId?: string | null;
   driverId: string;
-  driver: {
+  driver?: {
     id: string;
     name: string;
     email: string;
   };
   type: NotificationType;
-  documentType: DocumentType;
+  documentType: string;
   status: NotificationStatus;
-  readAt?: string;
-  readBy?: string;
+  readAt?: string | null;
+  readBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface NotificationFilters {
   driverId?: string;
-  documentType?: DocumentType;
+  documentType?: string;
   status?: NotificationStatus;
   startDate?: string;
   endDate?: string;

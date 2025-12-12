@@ -3,8 +3,8 @@
 import { usePathname } from "next/navigation";
 import Breadcrumbs from "@/components/common/Breadcrumbs";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import NotificationBell from "@/components/notifications/NotificationBell";
 import { ReactNode } from "react";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 function getBreadcrumbs(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
