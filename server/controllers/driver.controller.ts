@@ -348,7 +348,7 @@ export const verifyingEmailOtp = async (req: Request, res: Response) => {
   }
 };
 
-// get logged in driver data
+// get logged in driver data Here
 export const getLoggedInDriverData = async (req: any, res: Response) => {
   try {
     const driver = req.driver;
