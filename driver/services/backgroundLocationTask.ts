@@ -1,660 +1,313 @@
+import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import * as FileSystem from "expo-file-system";
 import { getServerUri } from "@/configs/constants";
 import { logger } from "@/lib/logger";
 
-// Conditionally import TaskManager to avoid errors if native module isn't ready
-let TaskManager: any = null;
-try {
-  const taskManagerModule = require("expo-task-manager");
-  if (taskManagerModule && typeof taskManagerModule.defineTask === "function") {
-    TaskManager = taskManagerModule;
-  }
-} catch (error) {
-  // TaskManager not available - this is expected in some environments
-}
+// Standard import ensures this runs at module load time!
+console.log("[backgroundLocationTask] Module loading...");
 
-// Task name for background location tracking
 export const BACKGROUND_LOCATION_TASK = "background-location-tracking";
 
-/**
- * Check if driver is active and should send location updates
- */
-async function isDriverActive(): Promise<boolean> {
-  // #region agent log
-  fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "backgroundLocationTask.ts:24",
-      message: "isDriverActive called",
-      data: {},
+// Debug logging helper
+const DEBUG_LOG_PATH = `${FileSystem.documentDirectory}debug.log`;
+async function debugLog(
+  location: string,
+  message: string,
+  data: any,
+  hypothesisId: string
+) {
+  // Keep debug logging for now as it helps with troubleshooting
+  console.log(`[DEBUG ${hypothesisId}] ${location}: ${message}`, data);
+  try {
+    const logEntry = {
       timestamp: Date.now(),
-      sessionId: "debug-session",
-      runId: "run1",
-      hypothesisId: "E",
-    }),
-  }).catch(() => {});
-  // #endregion
+      location,
+      message,
+      data,
+      hypothesisId,
+    };
+    const logLine = JSON.stringify(logEntry) + "\n";
+    // Optimistic write - don't await check to keep it fast
+    // In a real app we might want to be more careful, but this is debug code
+    await FileSystem.writeAsStringAsync(DEBUG_LOG_PATH, logLine, {
+      encoding: FileSystem.EncodingType.UTF8,
+      append: true,
+    }).catch(async () => {
+      // If append failed (file doesn't exist?), try write
+      await FileSystem.writeAsStringAsync(DEBUG_LOG_PATH, logLine, {
+        encoding: FileSystem.EncodingType.UTF8,
+      }).catch(() => {});
+    });
+  } catch (error) {
+    // Silently fail logging
+  }
+}
+
+// Check if driver is active
+async function isDriverActive(): Promise<boolean> {
   try {
     const status = await AsyncStorage.getItem("status");
-    const isActive = status === "active";
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "backgroundLocationTask.ts:29",
-        message: "isDriverActive result",
-        data: { status, isActive },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        runId: "run1",
-        hypothesisId: "E",
-      }),
-    }).catch(() => {});
-    // #endregion
-    return isActive;
+    return status === "active";
   } catch (error) {
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "backgroundLocationTask.ts:32",
-        message: "isDriverActive error",
-        data: { error: error instanceof Error ? error.message : String(error) },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        runId: "run1",
-        hypothesisId: "E",
-      }),
-    }).catch(() => {});
-    // #endregion
-    logger.error("Error checking driver status in background task", error);
+    logger.error("Error checking driver status", error);
     return false;
   }
 }
 
-/**
- * Send location update to server API with retry logic
- * This is the only method used in background tasks (WebSocket doesn't work in background)
- */
-async function sendLocationToServer(
+// Send location to server
+export async function sendLocationToServer(
   location: Location.LocationObject,
   retryCount: number = 0
 ): Promise<void> {
-  // #region agent log
-  fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "backgroundLocationTask.ts:38",
-      message: "sendLocationToServer called",
-      data: {
-        retryCount,
-        lat: location.coords?.latitude,
-        lng: location.coords?.longitude,
-      },
-      timestamp: Date.now(),
-      sessionId: "debug-session",
-      runId: "run1",
-      hypothesisId: "B",
-    }),
-  }).catch(() => {});
-  // #endregion
   const MAX_RETRIES = 3;
-  const RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff in ms
-
-  const updateStartTime = Date.now();
+  const RETRY_DELAYS = [1000, 2000, 4000];
 
   try {
-    // Check if driver is active before sending
     const driverActive = await isDriverActive();
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "backgroundLocationTask.ts:50",
-        message: "Driver active check result",
-        data: { driverActive },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        runId: "run1",
-        hypothesisId: "B,E",
-      }),
-    }).catch(() => {});
-    // #endregion
     if (!driverActive) {
-      // #region agent log
-      fetch(
-        "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "backgroundLocationTask.ts:52",
-            message: "Early exit - driver not active",
-            data: {},
-            timestamp: Date.now(),
-            sessionId: "debug-session",
-            runId: "run1",
-            hypothesisId: "E",
-          }),
-        }
-      ).catch(() => {});
-      // #endregion
-      logger.debug(
-        "[Background] Driver is not active - skipping background location update"
-      );
+      logger.debug("[Background] Driver inactive, skipping update");
       return;
     }
 
     const accessToken = await AsyncStorage.getItem("accessToken");
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "backgroundLocationTask.ts:58",
-        message: "Access token check",
-        data: {
-          hasToken: !!accessToken,
-          tokenLength: accessToken?.length || 0,
-        },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        runId: "run1",
-        hypothesisId: "F",
-      }),
-    }).catch(() => {});
-    // #endregion
     if (!accessToken) {
-      // #region agent log
-      fetch(
-        "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "backgroundLocationTask.ts:60",
-            message: "Early exit - no access token",
-            data: {},
-            timestamp: Date.now(),
-            sessionId: "debug-session",
-            runId: "run1",
-            hypothesisId: "F",
-          }),
-        }
-      ).catch(() => {});
-      // #endregion
-      logger.warn(
-        "[Background] No access token in background task - skipping location update"
-      );
+      logger.warn("[Background] No access token");
       return;
     }
 
-    logger.info("[Background] Sending location update via HTTP API", {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      heading: location.coords.heading ?? null,
-      accuracy: location.coords.accuracy ?? null,
-      speed: location.coords.speed ?? null,
-      retryAttempt: retryCount,
-      timestamp: new Date().toISOString(),
-    });
-
-    // IMPORTANT: This HTTP API call now triggers socket server notification
-    // via the backend controller, ensuring dashboard continues to see driver
-    // even when WebSocket is disconnected (which happens when app is in background)
     const serverUri = getServerUri();
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "backgroundLocationTask.ts:79",
-        message: "Starting HTTP request",
-        data: { url: `${serverUri}/driver/update-location`, retryCount },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        runId: "run1",
-        hypothesisId: "C",
-      }),
-    }).catch(() => {});
-    // #endregion
-    const response = await axios.post(
+    await axios.post(
       `${serverUri}/driver/update-location`,
       {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        heading:
-          location.coords.heading !== undefined
-            ? location.coords.heading
-            : null,
-        accuracy:
-          location.coords.accuracy !== undefined
-            ? location.coords.accuracy
-            : null,
-        speed:
-          location.coords.speed !== undefined ? location.coords.speed : null,
+        heading: location.coords.heading ?? null,
+        accuracy: location.coords.accuracy ?? null,
+        speed: location.coords.speed ?? null,
       },
       {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        timeout: 15000, // 15 second timeout - increased for background requests
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 15000,
       }
     );
 
-    const updateLatency = Date.now() - updateStartTime;
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "backgroundLocationTask.ts:103",
-        message: "HTTP request success",
-        data: { status: response.status, latency: updateLatency },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        runId: "run1",
-        hypothesisId: "C",
-      }),
-    }).catch(() => {});
-    // #endregion
-    logger.info("[Background] Location update sent successfully via HTTP", {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      heading: location.coords.heading ?? null,
-      accuracy: location.coords.accuracy ?? null,
-      speed: location.coords.speed ?? null,
-      latency: `${updateLatency}ms`,
-      status: response.status,
+    logger.info("[Background] Location update sent", {
       timestamp: new Date().toISOString(),
+      coords: location.coords,
     });
   } catch (error: any) {
-    const updateLatency = Date.now() - updateStartTime;
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "backgroundLocationTask.ts:114",
-        message: "HTTP request error",
-        data: {
-          error: error.message,
-          code: error.code,
-          status: error.response?.status,
-          retryCount,
-        },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        runId: "run1",
-        hypothesisId: "C",
-      }),
-    }).catch(() => {});
-    // #endregion
-
-    // Handle specific error cases
-    if (
-      error.response?.status === 400 &&
-      error.response?.data?.message?.includes("online")
-    ) {
-      // #region agent log
-      fetch(
-        "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "backgroundLocationTask.ts:122",
-            message: "Early exit - driver offline (400)",
-            data: {},
-            timestamp: Date.now(),
-            sessionId: "debug-session",
-            runId: "run1",
-            hypothesisId: "C",
-          }),
-        }
-      ).catch(() => {});
-      // #endregion
-      logger.debug(
-        "[Background] Location update skipped - driver is offline (not active)"
-      );
-      return;
-    }
-
-    // Determine if error is retryable
+    // Enhanced error handling with detailed logging
     const isNetworkError =
       !error.response ||
       error.code === "ECONNABORTED" ||
-      error.code === "ETIMEDOUT" ||
-      error.code === "ENOTFOUND" ||
-      error.code === "ECONNREFUSED" ||
+      error.code === "NETWORK_ERROR" ||
       error.message?.includes("Network Error") ||
-      error.message?.includes("timeout");
-    const isServerError =
-      error.response?.status >= 500 && error.response?.status < 600;
-    const isRetryable = isNetworkError || isServerError;
+      error.message?.includes("timeout") ||
+      error.message?.includes("ECONNREFUSED");
 
-    // Retry on network errors or 5xx server errors
-    if (retryCount < MAX_RETRIES && isRetryable) {
-      const delay = RETRY_DELAYS[retryCount] || 4000;
-      logger.warn(
-        `[Background] Location update failed (retryable error), retrying in ${delay}ms (attempt ${
+    const isAuthError =
+      error.response?.status === 401 || error.response?.status === 403;
+    const isServerError = error.response?.status >= 500;
+
+    // Retry on network errors only
+    if (retryCount < MAX_RETRIES && isNetworkError) {
+      const delay = RETRY_DELAYS[retryCount];
+      logger.debug(
+        `[Background] Retrying location send (attempt ${
           retryCount + 1
-        }/${MAX_RETRIES})`,
+        }/${MAX_RETRIES}) after ${delay}ms`,
         {
-          errorType: isNetworkError ? "network" : "server",
-          errorCode: error.code,
-          status: error.response?.status,
-          message: error.message,
-          latency: `${updateLatency}ms`,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
         }
       );
-
-      // Wait before retrying
       await new Promise((resolve) => setTimeout(resolve, delay));
-
-      // Recursive retry
       return sendLocationToServer(location, retryCount + 1);
     }
 
-    // Log error if all retries failed or it's a non-retryable error
-    if (retryCount >= MAX_RETRIES) {
-      logger.error("[Background] Failed to update location after all retries", {
-        error: error.message,
-        code: error.code,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        latency: `${updateLatency}ms`,
-        location: {
+    // Log error with context but don't throw - allow task to continue
+    if (isAuthError) {
+      logger.warn(
+        "[Background] Authentication error sending location - token may be invalid",
+        {
+          status: error.response?.status,
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
-        },
-      });
-    } else {
+        }
+      );
+    } else if (isServerError) {
       logger.warn(
-        "[Background] Failed to update location (non-retryable error)",
+        "[Background] Server error sending location - server may be unavailable",
+        {
+          status: error.response?.status,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          retryCount,
+        }
+      );
+    } else if (isNetworkError) {
+      logger.warn(
+        "[Background] Network error sending location - max retries reached",
         {
           error: error.message,
           code: error.code,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-          latency: `${updateLatency}ms`,
-          location: {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          },
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          retryCount,
         }
       );
+    } else {
+      logger.error("[Background] Failed to send location", {
+        error: error.message || String(error),
+        code: error.code,
+        status: error.response?.status,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        retryCount,
+      });
     }
+
+    // Don't throw - let the task continue processing other locations
   }
 }
 
-/**
- * Define the background location task
- * This task runs even when the app is in the background or screen is off
- * WebSocket connections are not available in background, so we only use HTTP API
- */
-if (TaskManager && typeof TaskManager.defineTask === "function") {
-  try {
-    TaskManager.defineTask(
-      BACKGROUND_LOCATION_TASK,
-      async ({ data, error }) => {
-        // #region agent log
-        fetch(
-          "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              location: "backgroundLocationTask.ts:206",
-              message: "Background task handler called",
-              data: { hasError: !!error, hasData: !!data },
-              timestamp: Date.now(),
-              sessionId: "debug-session",
-              runId: "run1",
-              hypothesisId: "A",
-            }),
-          }
-        ).catch(() => {});
-        // #endregion
-        if (error) {
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                location: "backgroundLocationTask.ts:208",
-                message: "Background task error",
-                data: { error: error.message, code: error.code },
-                timestamp: Date.now(),
-                sessionId: "debug-session",
-                runId: "run1",
-                hypothesisId: "A",
-              }),
-            }
-          ).catch(() => {});
-          // #endregion
-          logger.error("[Background Task] Task execution error", {
-            error: error.message,
-            code: error.code,
-            stack: error.stack,
-          });
-          return;
-        }
+// DEFINE TASK IMMEDIATELY
+// Enhanced error handling ensures the task continues running even if individual location sends fail
+try {
+  console.log(
+    `[backgroundLocationTask] Defining task: ${BACKGROUND_LOCATION_TASK}`
+  );
+  TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+    const taskStartTime = Date.now();
+    const timestamp = new Date().toISOString();
 
-        if (!data) {
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                location: "backgroundLocationTask.ts:217",
-                message: "No data in task",
-                data: {},
-                timestamp: Date.now(),
-                sessionId: "debug-session",
-                runId: "run1",
-                hypothesisId: "A",
-              }),
-            }
-          ).catch(() => {});
-          // #endregion
-          logger.warn("[Background Task] Received task execution with no data");
-          return;
-        }
+    try {
+      // Handle task-level errors (e.g., permission issues, service errors)
+      if (error) {
+        logger.error(`[Background Task ${timestamp}] Task error occurred`, {
+          error: error.message || String(error),
+          errorCode: (error as any)?.code,
+          stack: (error as any)?.stack,
+        });
+        // Don't throw - allow task to continue running
+        return;
+      }
 
-        const { locations } = data as {
-          locations: Location.LocationObject[];
-        };
+      // Process location data
+      if (data) {
+        const { locations } = data as { locations: Location.LocationObject[] };
 
-        // #region agent log
-        fetch(
-          "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              location: "backgroundLocationTask.ts:225",
-              message: "Locations extracted",
-              data: { locationCount: locations?.length || 0 },
-              timestamp: Date.now(),
-              sessionId: "debug-session",
-              runId: "run1",
-              hypothesisId: "A",
-            }),
-          }
-        ).catch(() => {});
-        // #endregion
         if (!locations || locations.length === 0) {
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                location: "backgroundLocationTask.ts:227",
-                message: "Early exit - no locations",
-                data: {},
-                timestamp: Date.now(),
-                sessionId: "debug-session",
-                runId: "run1",
-                hypothesisId: "A",
-              }),
-            }
-          ).catch(() => {});
-          // #endregion
-          logger.debug("[Background Task] No locations in data payload");
+          logger.debug(`[Background Task ${timestamp}] No locations received`);
           return;
         }
 
-        // Process each location update
         logger.info(
-          `[Background Task] Received ${locations.length} location update(s)`
+          `[Background Task ${timestamp}] Processing ${locations.length} location(s)`,
+          {
+            locationCount: locations.length,
+          }
         );
 
-        for (const location of locations) {
-          try {
-            // Validate location data
-            if (
-              !location.coords ||
-              typeof location.coords.latitude !== "number" ||
-              typeof location.coords.longitude !== "number"
-            ) {
-              logger.warn(
-                "[Background Task] Invalid location data received - skipping",
+        // Process each location independently - if one fails, continue with others
+        const results = await Promise.allSettled(
+          locations.map(async (location, index) => {
+            try {
+              logger.debug(
+                `[Background Task ${timestamp}] Processing location ${
+                  index + 1
+                }/${locations.length}`,
                 {
-                  hasCoords: !!location.coords,
-                  latitudeType: typeof location.coords?.latitude,
-                  longitudeType: typeof location.coords?.longitude,
-                  rawData: location,
+                  latitude: location.coords.latitude,
+                  longitude: location.coords.longitude,
+                  accuracy: location.coords.accuracy,
+                  timestamp: location.timestamp,
                 }
               );
-              continue;
+
+              await sendLocationToServer(location);
+
+              logger.debug(
+                `[Background Task ${timestamp}] Successfully processed location ${
+                  index + 1
+                }`
+              );
+              return { success: true, index };
+            } catch (locationError: any) {
+              // Individual location send failed - log but don't crash task
+              logger.warn(
+                `[Background Task ${timestamp}] Failed to process location ${
+                  index + 1
+                }`,
+                {
+                  error: locationError.message || String(locationError),
+                  latitude: location.coords.latitude,
+                  longitude: location.coords.longitude,
+                  index,
+                }
+              );
+              return { success: false, index, error: locationError.message };
             }
+          })
+        );
 
-            logger.info("[Background Task] Processing location update", {
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-              heading: location.coords.heading ?? null,
-              accuracy: location.coords.accuracy ?? null,
-              speed: location.coords.speed ?? null,
-              timestamp: location.timestamp
-                ? new Date(location.timestamp).toISOString()
-                : null,
-            });
+        // Log summary of processing results
+        const successful = results.filter(
+          (r) => r.status === "fulfilled" && r.value.success
+        ).length;
+        const failed = results.length - successful;
 
-            // Send to server API (WebSocket is not available in background)
-            // This HTTP call will trigger the backend to notify socket server,
-            // ensuring dashboard continues to see driver location even when
-            // WebSocket connection is closed (which happens in background)
-            // #region agent log
-            fetch(
-              "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  location: "backgroundLocationTask.ts:270",
-                  message: "Calling sendLocationToServer",
-                  data: {
-                    lat: location.coords?.latitude,
-                    lng: location.coords?.longitude,
-                  },
-                  timestamp: Date.now(),
-                  sessionId: "debug-session",
-                  runId: "run1",
-                  hypothesisId: "B",
-                }),
-              }
-            ).catch(() => {});
-            // #endregion
-            await sendLocationToServer(location);
-            // #region agent log
-            fetch(
-              "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  location: "backgroundLocationTask.ts:272",
-                  message: "sendLocationToServer completed",
-                  data: {},
-                  timestamp: Date.now(),
-                  sessionId: "debug-session",
-                  runId: "run1",
-                  hypothesisId: "B",
-                }),
-              }
-            ).catch(() => {});
-            // #endregion
-          } catch (error: any) {
-            logger.error("[Background Task] Error processing location update", {
-              error: error.message,
-              stack: error.stack,
-              location: {
-                latitude: location.coords?.latitude,
-                longitude: location.coords?.longitude,
-              },
-            });
-            // Continue processing other locations even if one fails
-          }
+        if (failed > 0) {
+          logger.warn(
+            `[Background Task ${timestamp}] Processed ${locations.length} locations: ${successful} succeeded, ${failed} failed`
+          );
+        } else {
+          logger.info(
+            `[Background Task ${timestamp}] Successfully processed all ${locations.length} location(s)`
+          );
         }
 
+        const processingTime = Date.now() - taskStartTime;
         logger.debug(
-          `[Background Task] Finished processing ${locations.length} location update(s)`
+          `[Background Task ${timestamp}] Task completed in ${processingTime}ms`
         );
+      } else {
+        logger.debug(`[Background Task ${timestamp}] No data received in task`);
       }
-    );
-
-    logger.info("Background location task registered successfully");
-  } catch (error: any) {
-    logger.error("Failed to define background location task", error);
-  }
-} else {
-  logger.warn(
-    "TaskManager not available - background location tracking will not work"
-  );
+    } catch (taskError: any) {
+      // Catch-all for any unexpected errors - ensure task doesn't crash
+      logger.error(
+        `[Background Task ${timestamp}] Unexpected error in task handler`,
+        {
+          error: taskError.message || String(taskError),
+          stack: taskError.stack,
+          taskStartTime,
+        }
+      );
+      // Don't rethrow - allow task to continue running for future location updates
+    }
+  });
+  console.log(`[backgroundLocationTask] Task defined successfully`);
+  logger.info("Background location task registered and ready");
+} catch (error) {
+  console.error("[backgroundLocationTask] Failed to define task:", error);
+  logger.error("CRITICAL: Failed to define background location task", {
+    error: (error as any)?.message || String(error),
+    stack: (error as any)?.stack,
+  });
 }
 
-/**
- * Export function to check if task is registered
- * This is used to verify the task is ready before starting location updates
- */
 export async function isBackgroundLocationTaskRegistered(): Promise<boolean> {
-  if (!TaskManager || !TaskManager.isTaskRegisteredAsync) {
-    return false;
-  }
-
   try {
     return await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
   } catch (error) {
-    logger.error(
-      "Error checking if background location task is registered",
-      error
-    );
+    console.error("Error checking task registration:", error);
     return false;
   }
 }
 
-/**
- * No-op function for backward compatibility
- * WebSocket connections don't work in background tasks, so this is not used
- * but kept to avoid breaking existing code that calls it
- */
-export function setWebSocketConnection(_ws: WebSocket | null): void {
-  // WebSocket is not used in background tasks as connections close when app is backgrounded
-  // This function is kept for backward compatibility but does nothing
-}
+// Backward compatibility/placeholder
+export function setWebSocketConnection(_ws: any) {}

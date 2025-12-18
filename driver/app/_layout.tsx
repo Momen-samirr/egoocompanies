@@ -8,15 +8,9 @@ import { useFonts } from "expo-font";
 import { DriverProvider } from "@/contexts/DriverContext";
 import OfflineIndicator from "@/components/common/OfflineIndicator";
 import { logger } from "@/lib/logger";
-// Lazy import background location task to avoid initialization errors
-// The task will be registered when the module is actually used
-if (typeof require !== "undefined") {
-  try {
-    require("@/services/backgroundLocationTask");
-  } catch (error) {
-    logger.warn("Could not load background location task", error);
-  }
-}
+// Import background location task immediately to ensure it registers at module load time
+// This is required by Expo TaskManager
+import "@/services/backgroundLocationTask";
 
 export {
   // Catch any errors thrown by the Layout component.

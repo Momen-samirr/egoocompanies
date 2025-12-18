@@ -33,7 +33,9 @@ export interface UseWebSocketReturn {
  * Custom hook for WebSocket connection management
  * Handles connection, reconnection, and message sending
  */
-export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
+export function useWebSocket(
+  options: UseWebSocketOptions = {}
+): UseWebSocketReturn {
   const {
     onMessage,
     onOpen,
@@ -55,18 +57,23 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   const healthCheckInterval = 30000; // 30 seconds
 
   // Calculate exponential backoff delay
-  const getReconnectDelay = useCallback((attempt: number): number => {
-    const baseDelay = reconnectDelay;
-    const maxDelay = 60000; // Max 60 seconds
-    const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-    return delay;
-  }, [reconnectDelay]);
+  const getReconnectDelay = useCallback(
+    (attempt: number): number => {
+      const baseDelay = reconnectDelay;
+      const maxDelay = 60000; // Max 60 seconds
+      const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+      return delay;
+    },
+    [reconnectDelay]
+  );
 
   // Send ping to check connection health
   const sendPing = useCallback(() => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       try {
-        ws.current.send(JSON.stringify({ type: "ping", timestamp: Date.now() }));
+        ws.current.send(
+          JSON.stringify({ type: "ping", timestamp: Date.now() })
+        );
         logger.debug("WebSocket ping sent");
       } catch (error) {
         logger.error("Error sending WebSocket ping", error);
@@ -82,10 +89,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
     pingIntervalRef.current = setInterval(() => {
       const timeSinceLastPong = Date.now() - lastPongRef.current;
-      
+
       // If no pong received in 60 seconds, consider connection dead
       if (timeSinceLastPong > 60000) {
-        logger.warn("WebSocket health check failed - no pong received, reconnecting");
+        logger.warn(
+          "WebSocket health check failed - no pong received, reconnecting"
+        );
         if (ws.current) {
           ws.current.close();
         }
@@ -158,7 +167,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
         try {
           if (typeof e.data === "string") {
             const message = JSON.parse(e.data);
-            
+
             // Handle pong response
             if (message.type === "pong") {
               lastPongRef.current = Date.now();
@@ -206,18 +215,34 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
           onClose();
         }
 
-        // Attempt to reconnect if auto-reconnect is enabled and not manually disconnected
+        // Handle code 1006 (abnormal closure) - expected when app goes to background
+        if (e.code === 1006) {
+          logger.info(
+            "WebSocket disconnected with code 1006 (expected when app backgrounds) - will reconnect when app returns to foreground"
+          );
+          // Don't attempt to reconnect in background - wait for app to return to foreground
+          return;
+        }
+
+        // Only reconnect if app is in foreground (active state)
+        // Code 1006 is handled above and doesn't reconnect
+        const AppState = require("react-native").AppState;
+        const isAppActive = AppState.currentState === "active";
+
+        // Attempt to reconnect if auto-reconnect is enabled, app is active, and not manually disconnected
         if (
           autoReconnect &&
+          isAppActive &&
           !isManualDisconnectRef.current &&
           !wasClean &&
           e.code !== 1000 &&
           e.code !== 1001 &&
+          e.code !== 1006 && // Don't reconnect for 1006 - handled above
           reconnectAttemptsRef.current < maxReconnectAttempts
         ) {
           reconnectAttemptsRef.current++;
           const delay = getReconnectDelay(reconnectAttemptsRef.current - 1);
-          
+
           logger.info(`Will attempt to reconnect in ${delay / 1000} seconds`, {
             attempt: reconnectAttemptsRef.current,
             maxAttempts: maxReconnectAttempts,
@@ -225,7 +250,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
           });
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            logger.debug(`Attempting reconnection ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`);
+            logger.debug(
+              `Attempting reconnection ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`
+            );
             connectWebSocket();
           }, delay);
         } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
@@ -233,7 +260,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
             `Max reconnection attempts (${maxReconnectAttempts}) reached. Please check WebSocket server.`
           );
         } else if (wasClean) {
-          logger.info(`Connection closed cleanly (code ${e.code}). Not reconnecting.`);
+          logger.info(
+            `Connection closed cleanly (code ${e.code}). Not reconnecting.`
+          );
         }
       };
     } catch (error: any) {
@@ -241,7 +270,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       setConnected(false);
 
       // Retry connection with exponential backoff
-      if (autoReconnect && reconnectAttemptsRef.current < maxReconnectAttempts) {
+      if (
+        autoReconnect &&
+        reconnectAttemptsRef.current < maxReconnectAttempts
+      ) {
         reconnectAttemptsRef.current++;
         const delay = getReconnectDelay(reconnectAttemptsRef.current - 1);
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -249,37 +281,46 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
         }, delay);
       }
     }
-  }, [onMessage, onOpen, onClose, onError, autoReconnect, maxReconnectAttempts, getReconnectDelay, startHealthCheck, processMessageQueue]);
+  }, [
+    onMessage,
+    onOpen,
+    onClose,
+    onError,
+    autoReconnect,
+    maxReconnectAttempts,
+    getReconnectDelay,
+    startHealthCheck,
+    processMessageQueue,
+  ]);
 
-  const sendMessage = useCallback(
-    (message: WebSocketMessage): boolean => {
-      if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-        // Queue message for later if offline
-        logger.debug("WebSocket not connected - queueing message", { type: message.type });
-        messageQueueRef.current.push(message);
-        
-        // Limit queue size
-        if (messageQueueRef.current.length > 100) {
-          messageQueueRef.current.shift(); // Remove oldest message
-        }
-        
-        return false;
+  const sendMessage = useCallback((message: WebSocketMessage): boolean => {
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+      // Queue message for later if offline
+      logger.debug("WebSocket not connected - queueing message", {
+        type: message.type,
+      });
+      messageQueueRef.current.push(message);
+
+      // Limit queue size
+      if (messageQueueRef.current.length > 100) {
+        messageQueueRef.current.shift(); // Remove oldest message
       }
 
-      try {
-        const messageString = JSON.stringify(message);
-        ws.current.send(messageString);
-        logger.debug("WebSocket message sent", { type: message.type });
-        return true;
-      } catch (error) {
-        logger.error("Error sending WebSocket message", error);
-        // Queue message for retry
-        messageQueueRef.current.push(message);
-        return false;
-      }
-    },
-    []
-  );
+      return false;
+    }
+
+    try {
+      const messageString = JSON.stringify(message);
+      ws.current.send(messageString);
+      logger.debug("WebSocket message sent", { type: message.type });
+      return true;
+    } catch (error) {
+      logger.error("Error sending WebSocket message", error);
+      // Queue message for retry
+      messageQueueRef.current.push(message);
+      return false;
+    }
+  }, []);
 
   const reconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -340,4 +381,3 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     queueSize: messageQueueRef.current.length,
   };
 }
-

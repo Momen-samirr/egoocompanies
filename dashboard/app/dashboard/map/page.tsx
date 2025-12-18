@@ -229,6 +229,11 @@ export default function MapPage() {
           console.log(
             `📍 [Dashboard] Vehicle: ${data.driver?.vehicleType}, Bearing: ${data.driver?.bearing}`
           );
+          console.log(
+            `📍 [Dashboard] Timestamp: ${data.driver?.timestamp} (${new Date(
+              data.driver?.timestamp
+            ).toLocaleTimeString()})`
+          );
 
           setDrivers((prev) => {
             const updated = {
@@ -372,6 +377,99 @@ export default function MapPage() {
     return () => clearTimeout(timeoutId);
   }, [isConnected]);
 
+  // Periodic polling fallback: Fetch driver locations every 30 seconds
+  // This ensures updates are visible even if WebSocket messages are missed or delayed
+  useEffect(() => {
+    if (!isConnected) {
+      return;
+    }
+
+    const fetchDriversFromWebSocketServer = async () => {
+      try {
+        const wsUrl =
+          process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:8080";
+        // Convert WebSocket URL to HTTP URL
+        let httpUrl = wsUrl.replace(/^wss?:\/\//, "").replace(/\/$/, "");
+
+        // For local development, use http://, for production wss:// should map to https://
+        if (wsUrl.startsWith("wss://")) {
+          httpUrl = `https://${httpUrl}`;
+        } else {
+          httpUrl = `http://${httpUrl}`;
+        }
+
+        const apiUrl = `${httpUrl}/api/drivers`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        try {
+          const response = await fetch(apiUrl, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = await response.json();
+            const wsDrivers = data.drivers || {};
+
+            // Only update if we got new data (avoid unnecessary state updates)
+            setDrivers((prev) => {
+              // Check if any driver has a newer timestamp
+              let hasUpdates = false;
+              for (const [driverId, driver] of Object.entries(wsDrivers)) {
+                const existingDriver = prev[driverId];
+                if (
+                  !existingDriver ||
+                  (driver as DriverLocation).timestamp !==
+                    existingDriver.timestamp
+                ) {
+                  hasUpdates = true;
+                  break;
+                }
+              }
+
+              if (hasUpdates) {
+                console.log(
+                  `🔄 [Dashboard] Polling fallback: Updated ${
+                    Object.keys(wsDrivers).length
+                  } drivers`
+                );
+                return {
+                  ...prev,
+                  ...wsDrivers,
+                };
+              }
+              return prev;
+            });
+          }
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      } catch (error: any) {
+        // Silently fail - this is a fallback mechanism
+        if (error.name !== "AbortError") {
+          console.debug(
+            "[Dashboard] Polling fallback error (non-critical):",
+            error.message
+          );
+        }
+      }
+    };
+
+    // Poll every 30 seconds as a fallback
+    const intervalId = setInterval(fetchDriversFromWebSocketServer, 30000);
+
+    // Also fetch immediately
+    fetchDriversFromWebSocketServer();
+
+    return () => clearInterval(intervalId);
+  }, [isConnected]);
+
   // Fetch active rides from API
   useEffect(() => {
     const fetchActiveRides = async () => {
@@ -431,6 +529,32 @@ export default function MapPage() {
       setLocationError("Geolocation is not supported by your browser.");
     }
   }, []);
+
+  // Sync selectedDriver with latest driver data from drivers state
+  // This ensures the InfoWindow shows real-time updates (timestamp, location, etc.)
+  useEffect(() => {
+    if (selectedDriver && drivers[selectedDriver.id]) {
+      const latestDriver = drivers[selectedDriver.id];
+      // Only update if the data has actually changed to avoid unnecessary re-renders
+      if (
+        latestDriver.timestamp !== selectedDriver.timestamp ||
+        latestDriver.latitude !== selectedDriver.latitude ||
+        latestDriver.longitude !== selectedDriver.longitude ||
+        latestDriver.status !== selectedDriver.status
+      ) {
+        console.log(
+          `🔄 [Dashboard] Syncing selectedDriver with latest data for driver ${selectedDriver.id}`,
+          {
+            oldTimestamp: selectedDriver.timestamp,
+            newTimestamp: latestDriver.timestamp,
+            oldLocation: `${selectedDriver.latitude}, ${selectedDriver.longitude}`,
+            newLocation: `${latestDriver.latitude}, ${latestDriver.longitude}`,
+          }
+        );
+        setSelectedDriver(latestDriver);
+      }
+    }
+  }, [drivers, selectedDriver]);
 
   // Auto-fit map to show all drivers when they first appear
   // Only auto-fit once when drivers are first loaded, not on every filter change

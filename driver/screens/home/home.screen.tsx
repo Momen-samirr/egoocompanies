@@ -906,64 +906,9 @@ export default function HomeScreen() {
                 duration: 3000,
               }
             );
-          } else if (hasBackground && isOnRef.current === true && TaskManager) {
-            // Verify background location task is still running
-            try {
-              const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
-                BACKGROUND_LOCATION_TASK
-              );
-              const hasStarted =
-                await GeoLocation.hasStartedLocationUpdatesAsync(
-                  BACKGROUND_LOCATION_TASK
-                );
-              // #region agent log
-              fetch(
-                "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    location: "home.screen.tsx:877",
-                    message: "Background location task status check",
-                    data: { isTaskRegistered, hasStarted },
-                    timestamp: Date.now(),
-                    sessionId: "debug-session",
-                    runId: "run1",
-                    hypothesisId: "D",
-                  }),
-                }
-              ).catch(() => {});
-              // #endregion
-              console.log(
-                `[Debug] Background task status - registered: ${isTaskRegistered}, started: ${hasStarted}`
-              );
-            } catch (error: any) {
-              // #region agent log
-              fetch(
-                "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    location: "home.screen.tsx:881",
-                    message: "Error checking background task status",
-                    data: { error: error.message },
-                    timestamp: Date.now(),
-                    sessionId: "debug-session",
-                    runId: "run1",
-                    hypothesisId: "D",
-                  }),
-                }
-              ).catch(() => {});
-              // #endregion
-              console.error(
-                "Error checking background location task status:",
-                error
-              );
-            }
           } else if (hasBackground && isOnRef.current === true) {
             console.log(
-              "✅ Background location permission granted - tracking will continue"
+              "✅ Background location permission granted - tracking will continue managed by useLocationTracking hook"
             );
           }
         } else if (nextAppState === "active") {
@@ -1590,13 +1535,21 @@ export default function HomeScreen() {
           // 1009 = Message too big
           // 1011 = Internal server error
 
+          // Handle code 1006 (abnormal closure) - this is expected when app goes to background
           if (e.code === 1006) {
             console.log(
-              `⚠️ [WebSocket] Abnormal closure detected (code 1006) - this may happen when app goes to background`
+              `ℹ️ [WebSocket] Abnormal closure (code 1006) - expected when app goes to background`
             );
             console.log(
               `ℹ️ [WebSocket] Connection will be restored when app comes to foreground`
             );
+            console.log(
+              `ℹ️ [WebSocket] Location updates continue via HTTP API in background`
+            );
+            // Don't attempt to reconnect in background - wait for app to return to foreground
+            // The AppState handler will reconnect when app becomes active
+            setWsConnected(false);
+            return;
           }
 
           setWsConnected(false);
@@ -1610,13 +1563,17 @@ export default function HomeScreen() {
             return;
           }
 
-          // Attempt to reconnect if we haven't exceeded max attempts
-          // Code 1006 (abnormal closure) or other non-clean closures should reconnect
+          // Only reconnect if app is in foreground (active state)
+          // Code 1006 is handled above and doesn't reconnect
           // Code 1000 (normal closure) or 1001 (going away) typically shouldn't reconnect
+          const isAppActive =
+            require("react-native").AppState.currentState === "active";
           const shouldReconnect =
+            isAppActive &&
             !wasClean &&
             e.code !== 1000 &&
             e.code !== 1001 &&
+            e.code !== 1006 && // Don't reconnect for 1006 - handled separately
             wsReconnectAttemptsRef.current < maxReconnectAttempts;
 
           if (shouldReconnect) {
@@ -1704,12 +1661,16 @@ export default function HomeScreen() {
       console.log(`📱 [WebSocket] App state changed to: ${nextAppState}`);
 
       if (nextAppState === "background" || nextAppState === "inactive") {
-        // App went to background - keep WebSocket connected, don't cleanup
+        // App went to background - WebSocket will disconnect (code=1006) which is normal
+        // Don't attempt to keep it alive or reconnect - HTTP API will handle location updates
         console.log(
-          "📱 [WebSocket] App moved to background - keeping WebSocket connection alive"
+          "📱 [WebSocket] App moved to background - WebSocket disconnection expected (code=1006 is normal)"
         );
-        // Don't disconnect WebSocket - let it stay connected if possible
-        // The ping keep-alive mechanism will help maintain the connection
+        console.log(
+          "📱 [WebSocket] Location updates will continue via HTTP API in background"
+        );
+        // Note: WebSocket will disconnect when app backgrounds - this is expected behavior
+        // The background location task uses HTTP API, so location updates continue
       } else if (nextAppState === "active") {
         // App came to foreground - check WebSocket state and reconnect if needed
         console.log(
