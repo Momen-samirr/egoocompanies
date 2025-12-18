@@ -37,7 +37,9 @@
     "prisma": "^6.19.0",
     "ts-node-dev": "^2.0.0",
     "twilio": "^5.2.2",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "ioredis": "^5.3.2",
+    "bull": "^4.12.9"
   },
   "devDependencies": {
     "i": "^0.3.7",

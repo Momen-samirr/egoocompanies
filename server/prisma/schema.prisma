@@ -334,3 +334,18 @@ model AdminNotification {
   @@index([createdAt])
   @@index([documentType])
 }
+
+model DriverLocationHistory {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  driverId  String   @db.ObjectId
+  latitude  Float
+  longitude Float
+  heading   Float?
+  accuracy  Float?
+  speed     Float?
+  timestamp DateTime @default(now())
+  
+  @@index([driverId, timestamp])
+  @@index([timestamp])
+  @@index([driverId])
+}

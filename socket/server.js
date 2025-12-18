@@ -1,10 +1,118 @@
+// Load environment variables from .env file
+require("dotenv").config();
+
 const express = require("express");
 const http = require("http");
 const { WebSocketServer } = require("ws");
 const geolib = require("geolib");
 const jwt = require("jsonwebtoken");
+const Redis = require("ioredis");
+
+// Metrics collection (if enabled)
+const ENABLE_METRICS = process.env.ENABLE_METRICS !== "false";
+let metricsCollector = null;
+if (ENABLE_METRICS) {
+  try {
+    // Simple metrics collector (can be replaced with more sophisticated solution)
+    metricsCollector = {
+      updates: [],
+      latencies: [],
+      errors: 0,
+      totalUpdates: 0,
+      recordUpdate: function (latency) {
+        const now = Date.now();
+        this.updates.push(now);
+        this.latencies.push(latency);
+        this.totalUpdates++;
+        // Keep only last minute
+        const oneMinuteAgo = now - 60000;
+        this.updates = this.updates.filter((t) => t > oneMinuteAgo);
+        this.latencies = this.latencies.slice(-100);
+      },
+      recordError: function () {
+        this.errors++;
+      },
+      getMetrics: function () {
+        const now = Date.now();
+        const oneMinuteAgo = now - 60000;
+        const recentUpdates = this.updates.filter((t) => t > oneMinuteAgo);
+        const updatesPerSecond = recentUpdates.length / 60;
+        const averageLatency =
+          this.latencies.length > 0
+            ? this.latencies.reduce((a, b) => a + b, 0) / this.latencies.length
+            : 0;
+        const errorRate =
+          this.totalUpdates > 0 ? this.errors / this.totalUpdates : 0;
+
+        return {
+          updatesPerSecond: Math.round(updatesPerSecond * 100) / 100,
+          averageLatency: Math.round(averageLatency * 100) / 100,
+          errorRate: Math.round(errorRate * 10000) / 100,
+          totalUpdates: this.totalUpdates,
+          totalErrors: this.errors,
+        };
+      },
+    };
+    console.log("✅ Metrics collection enabled");
+  } catch (error) {
+    console.error("❌ Failed to initialize metrics:", error);
+    metricsCollector = null;
+  }
+}
 
 const app = express();
+
+// Redis configuration
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const REDIS_PASSWORD = process.env.REDIS_PASSWORD || null;
+const ENABLE_REDIS = process.env.ENABLE_REDIS !== "false"; // Default to true
+
+// Initialize Redis client
+let redis = null;
+if (ENABLE_REDIS) {
+  try {
+    redis = new Redis(REDIS_URL, {
+      password: REDIS_PASSWORD,
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        console.log(`🔄 Redis retry attempt ${times}, delay: ${delay}ms`);
+        return delay;
+      },
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      enableOfflineQueue: true,
+    });
+
+    redis.on("connect", () => {
+      console.log("✅ Redis connected successfully");
+    });
+
+    redis.on("ready", () => {
+      console.log("✅ Redis ready to accept commands");
+    });
+
+    redis.on("error", (err) => {
+      console.error("❌ Redis error:", err.message);
+      console.log("⚠️ Falling back to in-memory storage");
+    });
+
+    redis.on("close", () => {
+      console.log("⚠️ Redis connection closed");
+    });
+
+    redis.on("reconnecting", () => {
+      console.log("🔄 Redis reconnecting...");
+    });
+  } catch (error) {
+    console.error("❌ Failed to initialize Redis:", error.message);
+    console.log("⚠️ Falling back to in-memory storage");
+    redis = null;
+  }
+} else {
+  console.log(
+    "ℹ️ Redis disabled (ENABLE_REDIS=false), using in-memory storage"
+  );
+}
 
 // CORS configuration for HTTP API endpoints
 const allowedOrigins = [
@@ -58,10 +166,48 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
 // Store driver locations with additional info
-let drivers = {};
+let drivers = {}; // In-memory fallback
 let activeRides = {};
 // Store user connections by userId
 let userConnections = {};
+
+// Initialize Redis driver store
+const RedisDriverStore = require("./utils/redisDriverStore");
+const driverStore = new RedisDriverStore(redis, drivers);
+
+// Initialize Pub/Sub manager for multi-instance support
+const PubSubManager = require("./utils/pubsubManager");
+const instanceId = process.env.INSTANCE_ID || `instance-${Date.now()}`;
+const pubsubManager = new PubSubManager(redis, instanceId);
+
+// Set up Pub/Sub message handler
+pubsubManager.setMessageHandler((channel, data) => {
+  if (data.type === "locationUpdate") {
+    // Update driver location from other instance
+    updateDriverLocationAndBroadcast(data.driverId, data.locationData).catch(
+      (error) => {
+        console.error("Error processing Pub/Sub location update:", error);
+      }
+    );
+  } else if (data.type === "statusChange") {
+    // Handle status change from other instance
+    if (data.status === "inactive") {
+      driverStore.removeDriver(data.driverId);
+      delete drivers[data.driverId];
+      broadcastToAdmins({
+        type: "driverRemoved",
+        driverId: data.driverId,
+      });
+    }
+  }
+});
+
+// Initialize Pub/Sub on startup
+if (ENABLE_REDIS && redis) {
+  pubsubManager.initialize().catch((error) => {
+    console.error("Error initializing Pub/Sub:", error);
+  });
+}
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -338,39 +484,68 @@ const sendToUser = (userId, data) => {
 
 // Helper function to update driver location and broadcast to dashboard
 // This is used both by WebSocket messages and HTTP API calls
-const updateDriverLocationAndBroadcast = (driverId, locationData) => {
+const updateDriverLocationAndBroadcast = async (driverId, locationData) => {
+  const startTime = Date.now();
   const driverStatus = locationData.status || "active";
   const now = new Date().toISOString();
 
-  // Update driver location in memory
-  drivers[driverId] = {
-    id: driverId,
-    latitude: locationData.latitude,
-    longitude: locationData.longitude,
-    bearing:
-      locationData.heading !== null && locationData.heading !== undefined
-        ? locationData.heading
-        : null,
-    name: locationData.name || "Driver",
-    status: driverStatus,
-    vehicleType: locationData.vehicleType || "Car",
-    timestamp: now,
-    lastSeen: now, // Track when driver last sent update for cleanup
-  };
+  try {
+    const driverData = {
+      id: driverId,
+      latitude: locationData.latitude,
+      longitude: locationData.longitude,
+      bearing:
+        locationData.heading !== null && locationData.heading !== undefined
+          ? locationData.heading
+          : null,
+      name: locationData.name || "Driver",
+      status: driverStatus,
+      vehicleType: locationData.vehicleType || "Car",
+      timestamp: now,
+      lastSeen: now, // Track when driver last sent update for cleanup
+    };
 
-  console.log(
-    `✅ [Location Update] Updated driver location: ID=${driverId}, Status=${driverStatus}, Lat=${locationData.latitude}, Lng=${locationData.longitude}, LastSeen=${now}`
-  );
+    // Store in Redis (with in-memory fallback)
+    await driverStore.setDriver(driverId, driverData);
 
-  // Broadcast to all admin clients (dashboard)
-  const updateMessage = {
-    type: "driverLocationUpdate",
-    driver: drivers[driverId],
-  };
+    // Also update in-memory for backward compatibility
+    drivers[driverId] = driverData;
 
-  broadcastToAdmins(updateMessage);
+    console.log(
+      `✅ [Location Update] Updated driver location: ID=${driverId}, Status=${driverStatus}, Lat=${locationData.latitude}, Lng=${locationData.longitude}, LastSeen=${now}`
+    );
 
-  return drivers[driverId];
+    // Broadcast to all admin clients (dashboard)
+    const updateMessage = {
+      type: "driverLocationUpdate",
+      driver: driverData,
+    };
+
+    broadcastToAdmins(updateMessage);
+
+    // Publish to other instances via Pub/Sub
+    if (pubsubManager && pubsubManager.enabled) {
+      pubsubManager
+        .publishLocationUpdate(driverId, locationData)
+        .catch((error) => {
+          console.error("Error publishing location update:", error);
+        });
+    }
+
+    // Record metrics
+    if (metricsCollector) {
+      const latency = Date.now() - startTime;
+      metricsCollector.recordUpdate(latency);
+    }
+
+    return driverData;
+  } catch (error) {
+    // Record error in metrics
+    if (metricsCollector) {
+      metricsCollector.recordError();
+    }
+    throw error;
+  }
 };
 
 wss.on("connection", (ws, req) => {
@@ -471,8 +646,21 @@ wss.on("connection", (ws, req) => {
   ws.companyId = companyId;
   ws.companyDriverIds = companyDriverIds;
 
+  // Register connection with connection manager
+  if (isAdmin) {
+    connectionId = connectionManager.addConnection(ws, "admin", {
+      companyId,
+      companyDriverIds,
+    });
+  } else {
+    // Will be updated when we know if it's a driver or user
+    connectionId = connectionManager.addConnection(ws, "client", {});
+  }
+
   // Log connection details
+  const metrics = connectionManager.getMetrics();
   console.log(`📊 Current connections: ${wss.clients.size} total`);
+  console.log(`📊 Connection manager:`, metrics);
   console.log(`📊 Current drivers in memory: ${Object.keys(drivers).length}`);
 
   // Set up ping/pong keepalive to prevent connection timeouts
@@ -495,8 +683,10 @@ wss.on("connection", (ws, req) => {
     console.log(`📊 Current active rides: ${Object.keys(activeRides).length}`);
 
     // Send initial data after company drivers are loaded (if COMPANY user)
-    const sendInitialData = () => {
-      let driversToSend = drivers;
+    const sendInitialData = async () => {
+      // Load drivers from Redis/store
+      const allDrivers = await driverStore.getAllDrivers();
+      let driversToSend = allDrivers;
       let ridesToSend = activeRides;
 
       // Filter by company if COMPANY user
@@ -505,7 +695,7 @@ wss.on("connection", (ws, req) => {
         ws.companyDriverIds &&
         ws.companyDriverIds.length > 0
       ) {
-        driversToSend = filterDriversByCompany(drivers, ws.companyDriverIds);
+        driversToSend = filterDriversByCompany(allDrivers, ws.companyDriverIds);
         ridesToSend = filterRidesByCompany(activeRides, ws.companyDriverIds);
         console.log(
           `🔍 Filtered to ${Object.keys(driversToSend).length} drivers and ${
@@ -568,7 +758,7 @@ wss.on("connection", (ws, req) => {
     }
   }
 
-  ws.on("message", (message) => {
+  ws.on("message", async (message) => {
     try {
       const data = JSON.parse(message);
       console.log(
@@ -612,13 +802,14 @@ wss.on("connection", (ws, req) => {
           name: data.data.name || "Driver",
           status: driverStatus,
           vehicleType: data.data.vehicleType || "Car",
+        }).catch((error) => {
+          console.error(`❌ Error updating driver location:`, error);
         });
 
-        console.log(
-          `📊 [WebSocket] Total drivers in system: ${
-            Object.keys(drivers).length
-          }`
-        );
+        // Get driver count from store
+        driverStore.getDriverCount().then((count) => {
+          console.log(`📊 [WebSocket] Total drivers in system: ${count}`);
+        });
       }
 
       if (data.type === "requestRide" && data.role === "user") {
@@ -631,25 +822,43 @@ wss.on("connection", (ws, req) => {
 
         console.log("Requesting ride...");
         console.log(`User location: ${data.latitude}, ${data.longitude}`);
-        console.log(`Total drivers in system: ${Object.keys(drivers).length}`);
-        console.log("All drivers:", JSON.stringify(drivers, null, 2));
-        const nearbyDrivers = findNearbyDrivers(data.latitude, data.longitude);
-        console.log(`Found ${nearbyDrivers.length} nearby drivers`);
-        if (nearbyDrivers.length > 0) {
-          console.log(
-            "Nearby drivers:",
-            JSON.stringify(nearbyDrivers, null, 2)
-          );
-        }
-        ws.send(
-          JSON.stringify({ type: "nearbyDrivers", drivers: nearbyDrivers })
-        );
+        driverStore.getDriverCount().then((count) => {
+          console.log(`Total drivers in system: ${count}`);
+        });
+        findNearbyDrivers(data.latitude, data.longitude)
+          .then((nearbyDrivers) => {
+            console.log(`Found ${nearbyDrivers.length} nearby drivers`);
+            if (nearbyDrivers.length > 0) {
+              console.log(
+                "Nearby drivers:",
+                JSON.stringify(nearbyDrivers, null, 2)
+              );
+            }
+            ws.send(
+              JSON.stringify({ type: "nearbyDrivers", drivers: nearbyDrivers })
+            );
+          })
+          .catch((error) => {
+            console.error("Error finding nearby drivers:", error);
+            ws.send(JSON.stringify({ type: "nearbyDrivers", drivers: [] }));
+          });
       }
 
       // Handle user registration message
       if (data.type === "registerUser" && data.role === "user" && data.userId) {
         ws.userId = data.userId;
         userConnections[data.userId] = ws;
+
+        // Update connection manager
+        if (connectionId) {
+          const conn = connectionManager.getConnection(connectionId);
+          if (conn) {
+            conn.type = "user";
+            conn.metadata.userId = data.userId;
+            connectionManager.userConnections.set(data.userId, connectionId);
+          }
+        }
+
         console.log(`👤 User ${data.userId} registered for updates`);
         ws.send(
           JSON.stringify({
@@ -672,12 +881,13 @@ wss.on("connection", (ws, req) => {
           console.log(
             `🔄 [WebSocket] Driver ${data.driver} went inactive - removing from available drivers`
           );
-          delete drivers[data.driver];
-          console.log(
-            `📊 [WebSocket] Total drivers in system after removal: ${
-              Object.keys(drivers).length
-            }`
-          );
+          await driverStore.removeDriver(data.driver);
+          delete drivers[data.driver]; // Also remove from in-memory fallback
+          driverStore.getDriverCount().then((count) => {
+            console.log(
+              `📊 [WebSocket] Total drivers in system after removal: ${count}`
+            );
+          });
           // Broadcast removal to admin clients
           broadcastToAdmins({
             type: "driverRemoved",
@@ -720,6 +930,12 @@ wss.on("connection", (ws, req) => {
 
   ws.on("close", (code, reason) => {
     const reasonStr = reason ? reason.toString() : "No reason provided";
+
+    // Remove from connection manager
+    if (connectionId) {
+      connectionManager.removeConnection(connectionId);
+    }
+
     if (ws.isAdmin) {
       console.log(
         `👤 Admin client disconnected: code=${code}, reason="${reasonStr}"`
@@ -779,15 +995,19 @@ setInterval(() => {
 
 // Cleanup stale drivers that haven't sent updates for extended period
 // Runs every 2 minutes to remove drivers with lastSeen older than 10 minutes
+// Note: Redis TTL handles expiration automatically, but we still check in-memory fallback
 const CLEANUP_INTERVAL = 120000; // 2 minutes
 const STALE_DRIVER_THRESHOLD = 600000; // 10 minutes in milliseconds
 
-setInterval(() => {
+setInterval(async () => {
   const now = Date.now();
   const staleDriverIds = [];
 
+  // Get all drivers from store
+  const allDrivers = await driverStore.getAllDrivers();
+
   // Check all drivers for stale lastSeen timestamps
-  Object.entries(drivers).forEach(([driverId, driver]) => {
+  Object.entries(allDrivers).forEach(([driverId, driver]) => {
     if (driver.lastSeen) {
       const lastSeenTime = new Date(driver.lastSeen).getTime();
       const timeSinceLastSeen = now - lastSeenTime;
@@ -813,16 +1033,17 @@ setInterval(() => {
   });
 
   // Remove stale drivers and broadcast removal
-  staleDriverIds.forEach((driverId) => {
+  for (const driverId of staleDriverIds) {
     console.log(
       `🧹 Removing stale driver ${driverId} - no updates received for more than 10 minutes`
     );
-    delete drivers[driverId];
+    await driverStore.removeDriver(driverId);
+    delete drivers[driverId]; // Also remove from in-memory fallback
     broadcastToAdmins({
       type: "driverRemoved",
       driverId: driverId,
     });
-  });
+  }
 
   if (staleDriverIds.length > 0) {
     console.log(
@@ -831,11 +1052,14 @@ setInterval(() => {
   }
 }, CLEANUP_INTERVAL);
 
-const findNearbyDrivers = (userLat, userLon) => {
+const findNearbyDrivers = async (userLat, userLon) => {
   console.log(`🔍 Finding nearby drivers for location: ${userLat}, ${userLon}`);
-  console.log(`📊 Total drivers registered: ${Object.keys(drivers).length}`);
 
-  const nearbyDrivers = Object.entries(drivers)
+  // Get all drivers from store
+  const allDrivers = await driverStore.getAllDrivers();
+  console.log(`📊 Total drivers registered: ${Object.keys(allDrivers).length}`);
+
+  const nearbyDrivers = Object.entries(allDrivers)
     .filter(([id, driver]) => {
       console.log(`\n🚗 Checking driver ${id}:`);
       console.log(
@@ -888,16 +1112,27 @@ const findNearbyDrivers = (userLat, userLon) => {
 };
 
 // API endpoint to get current driver locations (for HTTP requests)
-app.get("/api/drivers", (req, res) => {
-  const driverCount = Object.keys(drivers).length;
-  console.log(
-    `📡 HTTP API: /api/drivers requested - returning ${driverCount} drivers`
-  );
-  res.json({
-    drivers,
-    count: driverCount,
-    timestamp: new Date().toISOString(),
-  });
+app.get("/api/drivers", async (req, res) => {
+  try {
+    const allDrivers = await driverStore.getAllDrivers();
+    const driverCount = Object.keys(allDrivers).length;
+    console.log(
+      `📡 HTTP API: /api/drivers requested - returning ${driverCount} drivers`
+    );
+    res.json({
+      drivers: allDrivers,
+      count: driverCount,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error getting drivers:", error);
+    res.status(500).json({
+      drivers: {},
+      count: 0,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // API endpoint to get active rides
@@ -935,9 +1170,95 @@ app.get("/api/stats", (req, res) => {
     activeRides: {
       count: Object.keys(activeRides).length,
     },
+    redis: {
+      enabled: ENABLE_REDIS,
+      connected: redis ? redis.status === "ready" : false,
+    },
+    connections: connectionManager.getMetrics(),
     timestamp: new Date().toISOString(),
   });
 });
+
+// API endpoint for Redis health check
+app.get("/api/health/redis", async (req, res) => {
+  if (!ENABLE_REDIS || !redis) {
+    return res.json({
+      status: "disabled",
+      message: "Redis is disabled",
+    });
+  }
+
+  try {
+    // Test Redis connection with PING
+    const result = await redis.ping();
+    const info = await redis.info("server");
+
+    res.json({
+      status: "healthy",
+      connected: redis.status === "ready",
+      ping: result,
+      info: {
+        redis_version: info.match(/redis_version:([^\r\n]+)/)?.[1] || "unknown",
+        uptime: info.match(/uptime_in_seconds:([^\r\n]+)/)?.[1] || "unknown",
+      },
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: "unhealthy",
+      error: error.message,
+    });
+  }
+});
+
+// API endpoint for metrics
+app.get("/api/metrics", async (req, res) => {
+  if (!ENABLE_METRICS || !metricsCollector) {
+    return res.json({
+      status: "disabled",
+      message: "Metrics collection is disabled",
+    });
+  }
+
+  try {
+    const metrics = metricsCollector.getMetrics();
+    const adminClients = Array.from(wss.clients).filter(
+      (client) => client.isAdmin
+    ).length;
+    const driverCount = await driverStore.getDriverCount();
+
+    res.json({
+      ...metrics,
+      activeDrivers: driverCount,
+      connectedAdmins: adminClients,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+});
+
+// Log metrics every 60 seconds
+if (ENABLE_METRICS && metricsCollector) {
+  setInterval(() => {
+    const metrics = metricsCollector.getMetrics();
+    const adminClients = Array.from(wss.clients).filter(
+      (client) => client.isAdmin
+    ).length;
+    driverStore.getDriverCount().then((driverCount) => {
+      console.log("📊 [Metrics]", {
+        updatesPerSecond: metrics.updatesPerSecond,
+        averageLatency: `${metrics.averageLatency}ms`,
+        errorRate: `${metrics.errorRate}%`,
+        activeDrivers: driverCount,
+        connectedAdmins: adminClients,
+        totalUpdates: metrics.totalUpdates,
+        totalErrors: metrics.totalErrors,
+      });
+    });
+  }, 60000); // Every 60 seconds
+}
 
 // API endpoint to notify user when ride is accepted (called from backend server)
 app.post("/api/notify-ride-accepted", (req, res) => {
@@ -1005,7 +1326,7 @@ app.post("/api/notify-ride-completed", (req, res) => {
 });
 
 // API endpoint to update driver location (called from backend server when app is in background)
-app.post("/api/update-driver-location", (req, res) => {
+app.post("/api/update-driver-location", async (req, res) => {
   try {
     const {
       driverId,
@@ -1029,20 +1350,28 @@ app.post("/api/update-driver-location", (req, res) => {
     );
 
     // Update driver location and broadcast to dashboard
-    const updatedDriver = updateDriverLocationAndBroadcast(driverId, {
-      latitude,
-      longitude,
-      heading: heading !== undefined ? heading : null,
-      name: name || "Driver",
-      status: status || "active",
-      vehicleType: vehicleType || "Car",
-    });
+    try {
+      const updatedDriver = await updateDriverLocationAndBroadcast(driverId, {
+        latitude,
+        longitude,
+        heading: heading !== undefined ? heading : null,
+        name: name || "Driver",
+        status: status || "active",
+        vehicleType: vehicleType || "Car",
+      });
 
-    res.json({
-      success: true,
-      driver: updatedDriver,
-      message: "Driver location updated and broadcasted to dashboard",
-    });
+      res.json({
+        success: true,
+        driver: updatedDriver,
+        message: "Driver location updated and broadcasted to dashboard",
+      });
+    } catch (error) {
+      console.error(`❌ Error updating driver location via HTTP API:`, error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update driver location",
+      });
+    }
   } catch (error) {
     console.error("Error updating driver location via HTTP API:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -1088,14 +1417,33 @@ app.post("/api/notify-document-upload", (req, res) => {
   }
 });
 
+// Load drivers from Redis on startup
+const loadDriversOnStartup = async () => {
+  try {
+    const loadedDrivers = await driverStore.getAllDrivers();
+    console.log(
+      `✅ Loaded ${
+        Object.keys(loadedDrivers).length
+      } drivers from Redis/store on startup`
+    );
+    // Also sync to in-memory fallback
+    Object.assign(drivers, loadedDrivers);
+  } catch (error) {
+    console.error("❌ Error loading drivers on startup:", error);
+  }
+};
+
 // Start the HTTP server (WebSocket is attached to it)
 server
-  .listen(PORT, () => {
+  .listen(PORT, async () => {
     console.log(`🚀 Server started on port ${PORT}`);
     console.log(`✅ HTTP API server is running`);
     console.log(`✅ WebSocket server is ready`);
     console.log(`\n📡 Connect WebSocket to: ws://localhost:${PORT}?role=admin`);
     console.log(`🌐 HTTP API available at: http://localhost:${PORT}/api\n`);
+
+    // Load drivers from Redis/store on startup
+    await loadDriversOnStartup();
   })
   .on("error", (error) => {
     if (error.code === "EADDRINUSE") {

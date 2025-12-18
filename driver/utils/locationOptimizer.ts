@@ -14,9 +14,9 @@ export interface LocationConfig {
  * 1 m/s ≈ 3.6 km/h
  */
 const SPEED_THRESHOLDS = {
-  FAST: 5.56,      // ~20 km/h - update every 2 seconds
-  MEDIUM: 1.39,    // ~5 km/h - update every 5 seconds
-  SLOW: 0,         // Stationary - update every 10 seconds
+  FAST: 5.56, // ~20 km/h - update every 2 seconds
+  MEDIUM: 1.39, // ~5 km/h - update every 5 seconds
+  SLOW: 0, // Stationary - update every 10 seconds
 };
 
 /**
@@ -24,13 +24,15 @@ const SPEED_THRESHOLDS = {
  * @param speed Speed in meters per second (m/s)
  * @returns Location configuration with optimized intervals
  */
-export const getLocationConfig = (speed: number | null | undefined): LocationConfig => {
+export const getLocationConfig = (
+  speed: number | null | undefined
+): LocationConfig => {
   // Default to balanced accuracy if speed is unknown
   if (speed === null || speed === undefined || isNaN(speed)) {
     return {
       accuracy: Location.Accuracy.Balanced,
-      timeInterval: 5000,      // 5 seconds default
-      distanceInterval: 10,    // 10 meters
+      timeInterval: 5000, // 5 seconds default
+      distanceInterval: 10, // 10 meters
     };
   }
 
@@ -38,8 +40,8 @@ export const getLocationConfig = (speed: number | null | undefined): LocationCon
   if (speed > SPEED_THRESHOLDS.FAST) {
     return {
       accuracy: Location.Accuracy.High,
-      timeInterval: 2000,       // 2 seconds - more frequent updates
-      distanceInterval: 20,     // 20 meters - larger distance threshold
+      timeInterval: 2000, // 2 seconds - more frequent updates
+      distanceInterval: 20, // 20 meters - larger distance threshold
     };
   }
 
@@ -47,16 +49,16 @@ export const getLocationConfig = (speed: number | null | undefined): LocationCon
   if (speed > SPEED_THRESHOLDS.MEDIUM) {
     return {
       accuracy: Location.Accuracy.Balanced,
-      timeInterval: 5000,       // 5 seconds
-      distanceInterval: 10,    // 10 meters
+      timeInterval: 5000, // 5 seconds
+      distanceInterval: 10, // 10 meters
     };
   }
 
   // Slow movement or stationary (< 5 km/h)
   return {
     accuracy: Location.Accuracy.Balanced,
-    timeInterval: 10000,        // 10 seconds - less frequent updates
-    distanceInterval: 5,       // 5 meters - smaller distance threshold
+    timeInterval: 10000, // 10 seconds - less frequent updates
+    distanceInterval: 5, // 5 meters - smaller distance threshold
   };
 };
 
@@ -90,12 +92,94 @@ export const calculateSpeed = (
 
   const a =
     Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c; // Distance in meters
 
   const speed = distance / timeDelta; // Speed in m/s
   return speed;
+};
+
+/**
+ * Adaptive distance threshold based on speed
+ * Faster movement = larger threshold (less frequent updates)
+ * Slower movement = smaller threshold (more frequent updates)
+ * @param speed Speed in meters per second (m/s)
+ * @param baseThreshold Base threshold in meters (default: 200)
+ * @returns Adaptive threshold in meters
+ */
+export const getAdaptiveThreshold = (
+  speed: number | null | undefined,
+  baseThreshold: number = 200
+): number => {
+  if (speed === null || speed === undefined || isNaN(speed)) {
+    return baseThreshold;
+  }
+
+  // Fast movement (> 20 km/h = 5.56 m/s): larger threshold
+  if (speed > 5.56) {
+    return baseThreshold * 2; // 400m for fast movement
+  }
+
+  // Medium movement (5-20 km/h = 1.39-5.56 m/s): standard threshold
+  if (speed > 1.39) {
+    return baseThreshold; // 200m
+  }
+
+  // Slow movement (< 5 km/h): smaller threshold for accuracy
+  return baseThreshold * 0.5; // 100m for slow movement
+};
+
+/**
+ * Enhanced location update decision with speed awareness
+ * @param lastLocation Last sent location with optional timestamp
+ * @param currentLocation Current location with optional timestamp
+ * @param threshold Base distance threshold in meters (default: 200)
+ * @returns True if update should be sent
+ */
+export const shouldSendLocationUpdateEnhanced = (
+  lastLocation: {
+    latitude: number;
+    longitude: number;
+    timestamp?: number;
+  } | null,
+  currentLocation: {
+    latitude: number;
+    longitude: number;
+    timestamp?: number;
+  },
+  threshold: number = 200
+): boolean => {
+  if (!lastLocation) {
+    return true; // Always send first location
+  }
+
+  // Calculate speed if timestamps available
+  const speed = calculateSpeed(lastLocation, currentLocation);
+  const adaptiveThreshold = getAdaptiveThreshold(speed, threshold);
+
+  // Calculate distance
+  const R = 6371e3; // Earth's radius in meters
+  const toRad = (x: number) => (x * Math.PI) / 180;
+
+  const lat1 = toRad(lastLocation.latitude);
+  const lat2 = toRad(currentLocation.latitude);
+  const deltaLat = toRad(currentLocation.latitude - lastLocation.latitude);
+  const deltaLon = toRad(currentLocation.longitude - lastLocation.longitude);
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c; // Distance in meters
+
+  return distance >= adaptiveThreshold;
 };
 
 /**
@@ -125,10 +209,12 @@ export const shouldSendLocationUpdate = (
 
   const a =
     Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c; // Distance in meters
 
   return distance >= threshold;
 };
-

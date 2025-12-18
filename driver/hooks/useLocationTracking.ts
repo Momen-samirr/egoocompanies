@@ -9,7 +9,21 @@ import {
   requestAllLocationPermissions,
   getLocationPermissionStatus,
 } from "@/utils/locationPermissions";
-import { shouldSendLocationUpdate } from "@/utils/locationOptimizer";
+import {
+  shouldSendLocationUpdate,
+  shouldSendLocationUpdateEnhanced,
+  calculateSpeed,
+} from "@/utils/locationOptimizer";
+import { locationFilter } from "@/utils/locationFilter";
+import {
+  LocationHistoryBuffer,
+  calculateHeadingFromHistory,
+} from "@/utils/headingCalculator";
+import {
+  queueLocationForOffline,
+  flushOfflineQueue,
+  isOnline,
+} from "@/services/offlineQueue";
 import { updateDriverLocation } from "@/services/locationService";
 import {
   BACKGROUND_LOCATION_TASK,
@@ -78,6 +92,8 @@ export function useLocationTracking(
   const backgroundLocationStartedRef = useRef(false);
   const monitoringIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const appStateSubscriptionRef = useRef<any>(null);
+  const locationHistoryRef = useRef(new LocationHistoryBuffer(5));
+  const networkCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keep ref in sync with isActive
   useEffect(() => {
@@ -134,7 +150,18 @@ export function useLocationTracking(
                 }
               }
             } catch (error: any) {
-              if (
+              // Check if it's a network error
+              const isNetworkError =
+                error.message?.includes("Network") ||
+                error.message?.includes("timeout") ||
+                error.code === "NETWORK_ERROR" ||
+                !error.response;
+
+              if (isNetworkError) {
+                // Queue for offline sending
+                logger.debug("Network error - queueing location for offline");
+                await queueLocationForOffline(location);
+              } else if (
                 error.response?.status === 400 &&
                 error.response?.data?.message?.includes("online")
               ) {
@@ -155,7 +182,19 @@ export function useLocationTracking(
           });
         }
       } catch (error: any) {
-        logger.error("Error sending location update", error);
+        // Check if it's a network error
+        const isNetworkError =
+          error.message?.includes("Network") ||
+          error.message?.includes("timeout") ||
+          error.code === "NETWORK_ERROR" ||
+          !error.response;
+
+        if (isNetworkError) {
+          logger.debug("Network error - queueing location for offline");
+          await queueLocationForOffline(location);
+        } else {
+          logger.error("Error sending location update", error);
+        }
       }
     },
     [sendToServer, sendToWebSocket]
@@ -307,15 +346,50 @@ export function useLocationTracking(
           mayShowUserSettingsDialog: true,
         },
         async (position) => {
-          const { latitude, longitude, heading } = position.coords;
-          const newLocation: Location = {
+          const { latitude, longitude, heading, accuracy } = position.coords;
+          const timestamp = position.timestamp || Date.now();
+
+          // Filter location for accuracy improvement
+          const filteredPoint = locationFilter.filter({
             latitude,
             longitude,
+            accuracy: accuracy || 50, // Default accuracy if not provided
+            timestamp,
+          });
+
+          // Calculate heading from history if GPS heading unavailable
+          let calculatedHeading = heading;
+          if (
+            (heading === null || heading === undefined || heading < 0) &&
+            locationHistoryRef.current.size() >= 2
+          ) {
+            const historyHeading =
+              locationHistoryRef.current.calculateHeading();
+            if (historyHeading !== null) {
+              calculatedHeading = historyHeading;
+              logger.debug(
+                `Calculated heading from history: ${calculatedHeading}°`
+              );
+            }
+          }
+
+          const newLocation: Location = {
+            latitude: filteredPoint.latitude,
+            longitude: filteredPoint.longitude,
             heading:
-              heading !== null && heading !== undefined && heading >= 0
-                ? heading
+              calculatedHeading !== null &&
+              calculatedHeading !== undefined &&
+              calculatedHeading >= 0
+                ? calculatedHeading
                 : undefined,
           };
+
+          // Add to location history for heading calculation
+          locationHistoryRef.current.add({
+            latitude: filteredPoint.latitude,
+            longitude: filteredPoint.longitude,
+            timestamp,
+          });
 
           // Always update current location for UI
           setCurrentLocation(newLocation);
@@ -325,14 +399,47 @@ export function useLocationTracking(
             onLocationUpdate(newLocation);
           }
 
-          // Check if we should send update
+          // Check if we should send update using enhanced adaptive thresholds
           const currentIsActive = isActiveRef.current;
           const currentLastSentLocation = lastSentLocationRef.current;
+
+          // Calculate speed for adaptive threshold
+          let speed: number | null = null;
+          if (
+            currentLastSentLocation &&
+            lastSentLocationRef.current &&
+            timestamp &&
+            lastSentLocationRef.current.heading !== undefined
+          ) {
+            speed = calculateSpeed(
+              {
+                latitude: currentLastSentLocation.latitude,
+                longitude: currentLastSentLocation.longitude,
+                timestamp: timestamp - 5000, // Approximate previous timestamp
+              },
+              {
+                latitude: newLocation.latitude,
+                longitude: newLocation.longitude,
+                timestamp,
+              }
+            );
+          }
+
           const shouldSend =
             firstLocationAfterActiveRef.current ||
-            shouldSendLocationUpdate(
-              currentLastSentLocation,
-              newLocation,
+            shouldSendLocationUpdateEnhanced(
+              currentLastSentLocation
+                ? {
+                    latitude: currentLastSentLocation.latitude,
+                    longitude: currentLastSentLocation.longitude,
+                    timestamp: timestamp - 5000,
+                  }
+                : null,
+              {
+                latitude: newLocation.latitude,
+                longitude: newLocation.longitude,
+                timestamp,
+              },
               distanceThreshold
             );
 
@@ -354,7 +461,9 @@ export function useLocationTracking(
               );
             } else {
               logger.debug(
-                `Location update skipped (change < ${distanceThreshold}m)`
+                `Location update skipped (adaptive threshold not met, speed: ${
+                  speed !== null ? `${speed.toFixed(2)} m/s` : "unknown"
+                })`
               );
             }
           }
@@ -386,6 +495,12 @@ export function useLocationTracking(
       monitoringIntervalRef.current = null;
     }
 
+    // Stop network check interval
+    if (networkCheckIntervalRef.current) {
+      clearInterval(networkCheckIntervalRef.current);
+      networkCheckIntervalRef.current = null;
+    }
+
     // Stop foreground watcher
     if (locationWatchSubscription.current) {
       locationWatchSubscription.current.remove();
@@ -413,6 +528,10 @@ export function useLocationTracking(
         logger.error("Error stopping background location tracking", error);
       }
     }
+
+    // Clear location history
+    locationHistoryRef.current.clear();
+    locationFilter.clear();
 
     backgroundLocationStartedRef.current = false;
     isTrackingRef.current = false;
@@ -531,6 +650,58 @@ export function useLocationTracking(
       }
     };
   }, [isActive, monitorBackgroundTracking]);
+
+  // Setup periodic network check and offline queue flush
+  useEffect(() => {
+    if (!isActive || !isTrackingRef.current) {
+      return;
+    }
+
+    // Check network and flush queue every 60 seconds
+    networkCheckIntervalRef.current = setInterval(async () => {
+      try {
+        const online = await isOnline();
+        if (online) {
+          // Try to flush offline queue
+          const flushedCount = await flushOfflineQueue();
+          if (flushedCount > 0) {
+            logger.info(`Flushed ${flushedCount} locations from offline queue`);
+          }
+        }
+      } catch (error) {
+        logger.error("Error checking network/flushing queue", error);
+      }
+    }, 60000); // Check every minute
+
+    // Also flush immediately when app comes to foreground
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === "active") {
+        try {
+          const flushedCount = await flushOfflineQueue();
+          if (flushedCount > 0) {
+            logger.info(
+              `Flushed ${flushedCount} locations from offline queue on app foreground`
+            );
+          }
+        } catch (error) {
+          logger.error("Error flushing queue on foreground", error);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
+    return () => {
+      if (networkCheckIntervalRef.current) {
+        clearInterval(networkCheckIntervalRef.current);
+        networkCheckIntervalRef.current = null;
+      }
+      subscription.remove();
+    };
+  }, [isActive]);
 
   // Start/stop tracking based on isActive
   useEffect(() => {

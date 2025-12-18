@@ -1324,7 +1324,7 @@ export const updateTripProgress = async (req: any, res: Response) => {
 // Update Captain Location (enhanced to check trip activation)
 export const updateCaptainLocation = async (req: any, res: Response) => {
   try {
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, heading, accuracy, speed } = req.body;
     const captainId = req.driver?.id;
 
     if (!captainId) {
@@ -1339,6 +1339,30 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
         success: false,
         message: "Latitude and longitude are required",
       });
+    }
+
+    // Optionally use message queue for processing (if enabled)
+    const USE_LOCATION_QUEUE = process.env.USE_LOCATION_QUEUE === "true";
+    if (USE_LOCATION_QUEUE) {
+      try {
+        const { queueLocationUpdate } = require("../services/locationQueue");
+        await queueLocationUpdate({
+          driverId: captainId,
+          latitude,
+          longitude,
+          heading,
+          accuracy,
+          speed,
+        });
+        // Return immediately - queue will process asynchronously
+        return res.status(200).json({
+          success: true,
+          message: "Location update queued successfully",
+        });
+      } catch (error: any) {
+        console.error("Error queueing location update:", error);
+        // Fall through to direct processing
+      }
     }
 
     // Check if captain is online - only process location updates if online
@@ -1408,6 +1432,49 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
             lastLongitude: longitude,
           },
         });
+      }
+    }
+
+    // Queue location history for batch insertion (if enabled)
+    const ENABLE_LOCATION_HISTORY =
+      process.env.ENABLE_LOCATION_HISTORY !== "false";
+    if (ENABLE_LOCATION_HISTORY) {
+      try {
+        const {
+          locationHistoryService,
+        } = require("../services/locationHistoryService");
+        locationHistoryService.queueLocation({
+          driverId: captainId,
+          latitude,
+          longitude,
+          heading: heading !== undefined ? heading : null,
+          accuracy: accuracy !== undefined ? accuracy : null,
+          speed: speed !== undefined ? speed : null,
+        });
+      } catch (error: any) {
+        // Don't fail the request if history service fails
+        console.log(
+          "⚠️ Location history service error (non-critical):",
+          error.message
+        );
+      }
+    }
+
+    // Record metrics (if enabled)
+    const ENABLE_METRICS = process.env.ENABLE_METRICS !== "false";
+    if (ENABLE_METRICS) {
+      try {
+        const { metricsCollector } = require("../utils/metrics");
+        const updateStartTime = Date.now();
+        // Calculate approximate latency (time to process request)
+        const latency = Date.now() - updateStartTime;
+        metricsCollector.recordUpdate(latency);
+      } catch (error: any) {
+        // Don't fail the request if metrics fail
+        console.log(
+          "⚠️ Metrics collection error (non-critical):",
+          error.message
+        );
       }
     }
 
