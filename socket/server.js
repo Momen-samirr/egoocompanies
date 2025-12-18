@@ -181,8 +181,77 @@ const instanceId = process.env.INSTANCE_ID || `instance-${Date.now()}`;
 const pubsubManager = new PubSubManager(redis, instanceId);
 
 // Initialize Connection Manager
-const ConnectionManager = require("./utils/connectionManager");
-const connectionManager = new ConnectionManager();
+let connectionManager;
+try {
+  const ConnectionManager = require("./utils/connectionManager");
+  connectionManager = new ConnectionManager();
+  console.log("✅ Connection Manager initialized successfully");
+} catch (error) {
+  console.error("❌ Failed to initialize Connection Manager:", error);
+  // Fallback: Create a minimal connection manager to prevent crashes
+  connectionManager = {
+    connections: new Map(),
+    driverConnections: new Map(),
+    adminConnections: new Set(),
+    userConnections: new Map(),
+    addConnection: function (ws, type, metadata = {}) {
+      const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      this.connections.set(id, {
+        id,
+        ws,
+        type,
+        metadata,
+        connectedAt: Date.now(),
+      });
+      if (type === "driver" && metadata.driverId) {
+        this.driverConnections.set(metadata.driverId, id);
+      } else if (type === "admin") {
+        this.adminConnections.add(id);
+      } else if (type === "user" && metadata.userId) {
+        this.userConnections.set(metadata.userId, id);
+      }
+      return id;
+    },
+    removeConnection: function (id) {
+      const conn = this.connections.get(id);
+      if (conn) {
+        if (conn.type === "driver" && conn.metadata.driverId) {
+          this.driverConnections.delete(conn.metadata.driverId);
+        } else if (conn.type === "admin") {
+          this.adminConnections.delete(id);
+        } else if (conn.type === "user" && conn.metadata.userId) {
+          this.userConnections.delete(conn.metadata.userId);
+        }
+        this.connections.delete(id);
+        return true;
+      }
+      return false;
+    },
+    getConnection: function (id) {
+      return this.connections.get(id);
+    },
+    getMetrics: function () {
+      return {
+        total: this.connections.size,
+        drivers: this.driverConnections.size,
+        admins: this.adminConnections.size,
+        users: this.userConnections.size,
+        byType: {
+          driver: Array.from(this.connections.values()).filter(
+            (c) => c.type === "driver"
+          ).length,
+          admin: Array.from(this.connections.values()).filter(
+            (c) => c.type === "admin"
+          ).length,
+          user: Array.from(this.connections.values()).filter(
+            (c) => c.type === "user"
+          ).length,
+        },
+      };
+    },
+  };
+  console.log("⚠️ Using fallback Connection Manager");
+}
 
 // Set up Pub/Sub message handler
 pubsubManager.setMessageHandler((channel, data) => {
