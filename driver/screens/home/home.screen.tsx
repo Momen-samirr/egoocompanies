@@ -853,12 +853,48 @@ export default function HomeScreen() {
         console.log(`📱 App state changed: ${nextAppState}`);
 
         if (nextAppState === "background" || nextAppState === "inactive") {
+          // #region agent log
+          fetch(
+            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                location: "home.screen.tsx:855",
+                message: "App moved to background",
+                data: { nextAppState, isOn: isOnRef.current },
+                timestamp: Date.now(),
+                sessionId: "debug-session",
+                runId: "run1",
+                hypothesisId: "D",
+              }),
+            }
+          ).catch(() => {});
+          // #endregion
           console.log(
             "📱 App moved to background - location tracking should continue if permissions are granted"
           );
 
           // Check if we have background permission
           const hasBackground = await hasBackgroundLocationPermission();
+          // #region agent log
+          fetch(
+            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                location: "home.screen.tsx:862",
+                message: "Background permission check",
+                data: { hasBackground, isOn: isOnRef.current },
+                timestamp: Date.now(),
+                sessionId: "debug-session",
+                runId: "run1",
+                hypothesisId: "D",
+              }),
+            }
+          ).catch(() => {});
+          // #endregion
           if (!hasBackground && isOnRef.current === true) {
             console.warn(
               "⚠️ App in background but background location permission not granted"
@@ -870,6 +906,61 @@ export default function HomeScreen() {
                 duration: 3000,
               }
             );
+          } else if (hasBackground && isOnRef.current === true && TaskManager) {
+            // Verify background location task is still running
+            try {
+              const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
+                BACKGROUND_LOCATION_TASK
+              );
+              const hasStarted =
+                await GeoLocation.hasStartedLocationUpdatesAsync(
+                  BACKGROUND_LOCATION_TASK
+                );
+              // #region agent log
+              fetch(
+                "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    location: "home.screen.tsx:877",
+                    message: "Background location task status check",
+                    data: { isTaskRegistered, hasStarted },
+                    timestamp: Date.now(),
+                    sessionId: "debug-session",
+                    runId: "run1",
+                    hypothesisId: "D",
+                  }),
+                }
+              ).catch(() => {});
+              // #endregion
+              console.log(
+                `[Debug] Background task status - registered: ${isTaskRegistered}, started: ${hasStarted}`
+              );
+            } catch (error: any) {
+              // #region agent log
+              fetch(
+                "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    location: "home.screen.tsx:881",
+                    message: "Error checking background task status",
+                    data: { error: error.message },
+                    timestamp: Date.now(),
+                    sessionId: "debug-session",
+                    runId: "run1",
+                    hypothesisId: "D",
+                  }),
+                }
+              ).catch(() => {});
+              // #endregion
+              console.error(
+                "Error checking background location task status:",
+                error
+              );
+            }
           } else if (hasBackground && isOnRef.current === true) {
             console.log(
               "✅ Background location permission granted - tracking will continue"
@@ -1373,7 +1464,7 @@ export default function HomeScreen() {
       const wsUrl = getWebSocketUrl();
       console.log(
         `🔌 [WebSocket] Attempting to connect to WebSocket: ${wsUrl} (Attempt ${
-          reconnectAttempts + 1
+          wsReconnectAttemptsRef.current + 1
         })`
       );
       console.log(`🔌 [WebSocket] Full connection details:`, {
@@ -1759,8 +1850,10 @@ export default function HomeScreen() {
       // Check if WebSocket is connected
       if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
         console.log(
-          "⚠️ [sendLocationToWebSocket] WebSocket not connected - cannot send location update"
+          "⚠️ [sendLocationToWebSocket] WebSocket not connected - location update will be sent via HTTP API by useLocationTracking hook instead"
         );
+        // Note: The useLocationTracking hook will send via HTTP API when WebSocket is unavailable
+        // This ensures location updates continue even when app is in background
         return;
       }
 
@@ -1784,10 +1877,11 @@ export default function HomeScreen() {
       try {
         ws.current.send(message);
         console.log(
-          "✅ [sendLocationToWebSocket] Location update sent via WebSocket",
+          "✅ [sendLocationToWebSocket] Location update sent via WebSocket (foreground mode)",
           {
             driverId: driverData.id,
             location: { lat: location.latitude, lng: location.longitude },
+            heading: location.heading ?? null,
           }
         );
       } catch (error: any) {

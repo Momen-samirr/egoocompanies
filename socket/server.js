@@ -585,7 +585,12 @@ const updateDriverLocationAndBroadcast = async (driverId, locationData) => {
     drivers[driverId] = driverData;
 
     console.log(
-      `✅ [Location Update] Updated driver location: ID=${driverId}, Status=${driverStatus}, Lat=${locationData.latitude}, Lng=${locationData.longitude}, LastSeen=${now}`
+      `✅ [Location Update] Updated driver location: ID=${driverId}, Status=${driverStatus}, Lat=${locationData.latitude}, Lng=${locationData.longitude}, LastSeen=${now}`,
+      {
+        source: locationData.source || "unknown", // Can be "websocket" or "http"
+        heading: locationData.heading ?? null,
+        vehicleType: locationData.vehicleType || "Car",
+      }
     );
 
     // Broadcast to all admin clients (dashboard)
@@ -1431,10 +1436,21 @@ app.post("/api/update-driver-location", async (req, res) => {
     }
 
     console.log(
-      `📡 [HTTP API] Location update received for driver ${driverId} (background update)`
+      `📡 [HTTP API] Location update received for driver ${driverId} (background/HTTP update)`,
+      {
+        latitude,
+        longitude,
+        heading: heading !== undefined ? heading : null,
+        name: name || "Driver",
+        status: status || "active",
+        vehicleType: vehicleType || "Car",
+        timestamp: new Date().toISOString(),
+      }
     );
 
     // Update driver location and broadcast to dashboard
+    // This ensures driver location is visible on dashboard even when WebSocket
+    // connection is closed (which happens when app is in background)
     try {
       const updatedDriver = await updateDriverLocationAndBroadcast(driverId, {
         latitude,
@@ -1445,13 +1461,21 @@ app.post("/api/update-driver-location", async (req, res) => {
         vehicleType: vehicleType || "Car",
       });
 
+      console.log(
+        `✅ [HTTP API] Driver ${driverId} location updated and broadcasted to dashboard (lastSeen: ${updatedDriver.lastSeen})`
+      );
+
       res.json({
         success: true,
         driver: updatedDriver,
         message: "Driver location updated and broadcasted to dashboard",
       });
     } catch (error) {
-      console.error(`❌ Error updating driver location via HTTP API:`, error);
+      console.error(`❌ [HTTP API] Error updating driver location:`, {
+        driverId,
+        error: error.message,
+        stack: error.stack,
+      });
       res.status(500).json({
         success: false,
         message: error.message || "Failed to update driver location",

@@ -132,13 +132,26 @@ export function useLocationTracking(
           const driverData = driverResponse.data.driver;
           const driverStatus = driverData.status || "active";
 
-          // Send to WebSocket if handler provided
+          // Send to WebSocket if handler provided (only works in foreground)
+          // In background, WebSocket is disconnected, so this will be skipped
           if (sendToWebSocket) {
+            logger.debug(
+              "[LocationTracking] Attempting to send location via WebSocket (foreground mode)"
+            );
             sendToWebSocket(location, driverData);
+          } else {
+            logger.debug(
+              "[LocationTracking] WebSocket handler not provided - location will be sent via HTTP API only"
+            );
           }
 
-          // Send to server for scheduled trips
+          // Send to server for scheduled trips (always via HTTP API)
+          // This HTTP call also triggers socket server notification via backend,
+          // ensuring dashboard sees driver location even when WebSocket is disconnected
           if (sendToServer) {
+            logger.debug(
+              "[LocationTracking] Sending location update via HTTP API (works in both foreground and background)"
+            );
             try {
               const response = await updateDriverLocation(location);
               if (response.success && response.activationChecks) {
@@ -177,10 +190,13 @@ export function useLocationTracking(
             }
           }
 
-          logger.debug("Location update sent", {
+          logger.info("Location update sent successfully", {
             driverId: driverData.id,
             latitude: location.latitude,
             longitude: location.longitude,
+            heading: location.heading ?? null,
+            method: sendToWebSocket ? "WebSocket + HTTP" : "HTTP only",
+            timestamp: new Date().toISOString(),
           });
         }
       } catch (error: any) {
@@ -285,7 +301,7 @@ export function useLocationTracking(
           // Start background location updates using task manager
           // This works even when the app is in the background
           try {
-            await GeoLocation.startLocationUpdatesAsync(
+            const startResult = await GeoLocation.startLocationUpdatesAsync(
               BACKGROUND_LOCATION_TASK,
               {
                 accuracy: GeoLocation.Accuracy.High,
@@ -309,6 +325,24 @@ export function useLocationTracking(
                 }),
               }
             );
+            // #region agent log
+            fetch(
+              "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  location: "useLocationTracking.ts:327",
+                  message: "Background location updates started",
+                  data: { result: JSON.stringify(startResult) },
+                  timestamp: Date.now(),
+                  sessionId: "debug-session",
+                  runId: "run1",
+                  hypothesisId: "D",
+                }),
+              }
+            ).catch(() => {});
+            // #endregion
             backgroundLocationStartedRef.current = true;
             logger.info("Background location tracking started successfully");
           } catch (error: any) {

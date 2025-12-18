@@ -1383,11 +1383,22 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
     }
 
     // CRITICAL FIX: Notify socket server so dashboard continues to show driver
-    // This ensures location updates from background app are visible on dashboard
+    // This ensures location updates from background app (via HTTP API) are visible on dashboard
+    // When app is in background, WebSocket is disconnected, so we use HTTP bridge
     try {
       const axios = require("axios");
       const SOCKET_SERVER_URL =
         process.env.SOCKET_SERVER_URL || "http://localhost:8080";
+
+      console.log(
+        `📡 [Backend] Forwarding location update to socket server via HTTP bridge for driver ${captainId}`,
+        {
+          latitude,
+          longitude,
+          heading: heading !== undefined ? heading : null,
+          status: captain.status || "active",
+        }
+      );
 
       await axios
         .post(`${SOCKET_SERVER_URL}/api/update-driver-location`, {
@@ -1399,16 +1410,28 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
           status: captain.status || "active",
           vehicleType: captain.vehicle_type || "Car",
         })
+        .then(() => {
+          console.log(
+            `✅ [Backend] Successfully forwarded location update to socket server for driver ${captainId}`
+          );
+        })
         .catch((error: any) => {
           // Don't fail the request if socket server is unavailable
-          console.log(
-            "⚠️ Could not notify socket server about location update:",
-            error.message
+          console.warn(
+            `⚠️ [Backend] Could not notify socket server about location update for driver ${captainId}:`,
+            {
+              error: error.message,
+              code: error.code,
+              status: error.response?.status,
+            }
           );
         });
-    } catch (socketError) {
+    } catch (socketError: any) {
       // Don't fail the request if socket notification fails
-      console.log("⚠️ Socket notification error (non-critical):", socketError);
+      console.warn("⚠️ [Backend] Socket notification error (non-critical):", {
+        error: socketError.message,
+        driverId: captainId,
+      });
     }
 
     // Update location in any active trip progress
