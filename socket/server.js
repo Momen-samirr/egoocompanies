@@ -839,6 +839,18 @@ wss.on("connection", (ws, req) => {
         data.type || "unknown"
       );
 
+      // Handle ping/pong keep-alive messages
+      if (data.type === "ping") {
+        // Respond with pong to keep connection alive
+        try {
+          ws.send(JSON.stringify({ type: "pong" }));
+          console.log("🏓 [WebSocket] Responded to ping with pong");
+        } catch (error) {
+          console.error("❌ [WebSocket] Error sending pong:", error);
+        }
+        return; // Don't process ping messages further
+      }
+
       // Log driver location updates in detail
       if (data.type === "locationUpdate" && data.role === "driver") {
         console.log(
@@ -1067,10 +1079,10 @@ setInterval(() => {
 }, PING_INTERVAL);
 
 // Cleanup stale drivers that haven't sent updates for extended period
-// Runs every 1 minute to remove drivers with lastSeen older than 3 minutes
+// Runs every 1 minute to remove drivers with lastSeen older than 5 minutes
 // Note: Redis TTL handles expiration automatically, but we still check in-memory fallback
 const CLEANUP_INTERVAL = 60000; // 1 minute - more frequent cleanup checks
-const STALE_DRIVER_THRESHOLD = 180000; // 3 minutes in milliseconds - reduced from 10 minutes for faster cleanup
+const STALE_DRIVER_THRESHOLD = 300000; // 5 minutes in milliseconds - provides buffer for temporary update gaps
 
 setInterval(async () => {
   const now = Date.now();
@@ -1108,7 +1120,7 @@ setInterval(async () => {
   // Remove stale drivers and broadcast removal
   for (const driverId of staleDriverIds) {
     console.log(
-      `🧹 Removing stale driver ${driverId} - no updates received for more than 3 minutes`
+      `🧹 Removing stale driver ${driverId} - no updates received for more than 5 minutes`
     );
     await driverStore.removeDriver(driverId);
     delete drivers[driverId]; // Also remove from in-memory fallback

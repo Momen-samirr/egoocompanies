@@ -62,6 +62,7 @@ import {
   setWebSocketConnection,
   BACKGROUND_LOCATION_TASK,
 } from "@/services/backgroundLocationTask";
+import { useLocationTracking } from "@/hooks/useLocationTracking";
 // Conditionally import TaskManager to avoid errors if native module isn't ready
 let TaskManager: any = null;
 try {
@@ -95,10 +96,13 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const ws = useRef<WebSocket | null>(null);
-  const locationWatchSubscription = useRef<any>(null);
   const isOnRef = useRef<any>(undefined); // Track isOn in ref so callbacks always have latest value
   const processedNotificationIds = useRef<Set<string>>(new Set()); // Track processed notification IDs to prevent duplicates
   const isProcessingNotification = useRef<boolean>(false); // Prevent concurrent notification processing
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null); // Keep-alive ping interval
+  const isComponentUnmountingRef = useRef<boolean>(false); // Track if component is unmounting vs app backgrounding
+  const wsReconnectAttemptsRef = useRef<number>(0); // Track reconnection attempts across re-renders
+  const wsAppStateSubscriptionRef = useRef<any>(null); // AppState subscription for WebSocket
 
   // Push notification registration state tracking
   const isRegisteringToken = useRef<boolean>(false); // Prevent concurrent token registrations
@@ -1323,10 +1327,45 @@ export default function HomeScreen() {
     }
   }
 
+  // Helper function to start ping keep-alive (shared across useEffects)
+  const startPingKeepAlive = useCallback(() => {
+    // Clear any existing ping interval
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+
+    // Send ping every 30 seconds to keep connection alive
+    pingIntervalRef.current = setInterval(() => {
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        try {
+          // Send JSON ping message (React Native WebSocket doesn't expose ping() method)
+          ws.current.send(JSON.stringify({ type: "ping" }));
+          console.log("🏓 [WebSocket] Sent ping to keep connection alive");
+        } catch (error) {
+          console.error("❌ [WebSocket] Error sending ping:", error);
+        }
+      } else {
+        // WebSocket not open, clear ping interval
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
+        }
+      }
+    }, 30000); // 30 seconds
+  }, []);
+
+  // Helper function to stop ping keep-alive (shared across useEffects)
+  const stopPingKeepAlive = useCallback(() => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+  }, []);
+
   // socket updates with automatic reconnection
   useEffect(() => {
     let reconnectTimeout: NodeJS.Timeout | null = null;
-    let reconnectAttempts = 0;
     const maxReconnectAttempts = 10;
     const reconnectDelay = 3000; // 3 seconds
 
@@ -1358,9 +1397,12 @@ export default function HomeScreen() {
           console.log("✅ [WebSocket] Driver status (isOn):", isOnRef.current);
           console.log("✅ [WebSocket] ReadyState:", ws.current?.readyState);
           setWsConnected(true);
-          reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+          wsReconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
           // Set WebSocket connection for background task
           setWebSocketConnection(ws.current);
+
+          // Start ping keep-alive mechanism
+          startPingKeepAlive();
 
           // If driver is already active and we have a location, send it immediately
           if (isOnRef.current && currentLocation) {
@@ -1386,6 +1428,15 @@ export default function HomeScreen() {
             // Check if this is a binary message (ping/pong)
             if (typeof e.data === "string") {
               const message = JSON.parse(e.data);
+
+              // Handle pong response for keep-alive
+              if (message.type === "pong") {
+                console.log(
+                  "🏓 [WebSocket] Received pong - connection is alive"
+                );
+                return;
+              }
+
               console.log(
                 "📨 [WebSocket] Received message:",
                 message.type || "unknown"
@@ -1430,7 +1481,11 @@ export default function HomeScreen() {
             wasClean,
             url: wsUrl,
             readyState: ws.current?.readyState,
+            isComponentUnmounting: isComponentUnmountingRef.current,
           });
+
+          // Stop ping keep-alive when connection closes
+          stopPingKeepAlive();
 
           // Common close codes:
           // 1000 = Normal closure
@@ -1445,18 +1500,24 @@ export default function HomeScreen() {
           // 1011 = Internal server error
 
           if (e.code === 1006) {
-            console.error(
-              `❌ [WebSocket] Abnormal closure detected - connection may have been refused or network issue`
+            console.log(
+              `⚠️ [WebSocket] Abnormal closure detected (code 1006) - this may happen when app goes to background`
             );
-            console.error(
-              `❌ [WebSocket] Check if server is running at: ${wsUrl}`
-            );
-            console.error(
-              `❌ [WebSocket] Verify firewall/network allows connection`
+            console.log(
+              `ℹ️ [WebSocket] Connection will be restored when app comes to foreground`
             );
           }
 
           setWsConnected(false);
+
+          // Only attempt to reconnect if component is not unmounting
+          // If component is unmounting, don't reconnect (cleanup will handle it)
+          if (isComponentUnmountingRef.current) {
+            console.log(
+              "ℹ️ [WebSocket] Component unmounting - not attempting reconnection"
+            );
+            return;
+          }
 
           // Attempt to reconnect if we haven't exceeded max attempts
           // Code 1006 (abnormal closure) or other non-clean closures should reconnect
@@ -1465,23 +1526,28 @@ export default function HomeScreen() {
             !wasClean &&
             e.code !== 1000 &&
             e.code !== 1001 &&
-            reconnectAttempts < maxReconnectAttempts;
+            wsReconnectAttemptsRef.current < maxReconnectAttempts;
 
           if (shouldReconnect) {
-            reconnectAttempts++;
+            wsReconnectAttemptsRef.current++;
             console.log(
               `🔄 Will attempt to reconnect in ${
                 reconnectDelay / 1000
-              } seconds... (${reconnectAttempts}/${maxReconnectAttempts})`
+              } seconds... (${
+                wsReconnectAttemptsRef.current
+              }/${maxReconnectAttempts})`
             );
 
             reconnectTimeout = setTimeout(() => {
-              console.log(
-                `🔄 Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts}...`
-              );
-              connectWebSocket();
+              // Check again if component is still mounted before reconnecting
+              if (!isComponentUnmountingRef.current) {
+                console.log(
+                  `🔄 Attempting reconnection ${wsReconnectAttemptsRef.current}/${maxReconnectAttempts}...`
+                );
+                connectWebSocket();
+              }
             }, reconnectDelay);
-          } else if (reconnectAttempts >= maxReconnectAttempts) {
+          } else if (wsReconnectAttemptsRef.current >= maxReconnectAttempts) {
             console.error(
               `❌ Max reconnection attempts (${maxReconnectAttempts}) reached. Please check WebSocket server.`
             );
@@ -1499,10 +1565,15 @@ export default function HomeScreen() {
         setWsConnected(false);
 
         // Retry connection
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
+        if (
+          wsReconnectAttemptsRef.current < maxReconnectAttempts &&
+          !isComponentUnmountingRef.current
+        ) {
+          wsReconnectAttemptsRef.current++;
           reconnectTimeout = setTimeout(() => {
-            connectWebSocket();
+            if (!isComponentUnmountingRef.current) {
+              connectWebSocket();
+            }
           }, reconnectDelay);
         }
       }
@@ -1512,11 +1583,23 @@ export default function HomeScreen() {
     connectWebSocket();
 
     return () => {
+      // Mark component as unmounting to prevent reconnections
+      isComponentUnmountingRef.current = true;
+
+      // Stop ping keep-alive
+      stopPingKeepAlive();
+
+      // Clear reconnection timeout
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
+
+      // Only cleanup WebSocket if component is actually unmounting
+      // Don't cleanup when app goes to background - preserve connection
       if (ws.current) {
-        console.log("🧹 Cleaning up WebSocket connection");
+        console.log(
+          "🧹 [WebSocket] Cleaning up WebSocket connection (component unmounting)"
+        );
         setWebSocketConnection(null); // Clear WebSocket from background task
         ws.current.close();
         ws.current = null;
@@ -1524,52 +1607,225 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Track previous isOn value to detect when driver becomes active
-  const prevIsOnRef = useRef<any>(undefined);
-
-  // Send initial location when WebSocket connects and driver is active
+  // AppState monitoring for WebSocket reconnection
   useEffect(() => {
-    console.log(
-      `🔄 Location send effect triggered: wsConnected=${wsConnected}, isOn=${isOn}, hasLocation=${!!currentLocation}`
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      console.log(`📱 [WebSocket] App state changed to: ${nextAppState}`);
+
+      if (nextAppState === "background" || nextAppState === "inactive") {
+        // App went to background - keep WebSocket connected, don't cleanup
+        console.log(
+          "📱 [WebSocket] App moved to background - keeping WebSocket connection alive"
+        );
+        // Don't disconnect WebSocket - let it stay connected if possible
+        // The ping keep-alive mechanism will help maintain the connection
+      } else if (nextAppState === "active") {
+        // App came to foreground - check WebSocket state and reconnect if needed
+        console.log(
+          "📱 [WebSocket] App moved to foreground - checking WebSocket connection"
+        );
+
+        // Check if WebSocket is connected
+        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+          console.log(
+            "🔄 [WebSocket] WebSocket not connected - attempting immediate reconnection"
+          );
+
+          // Reset reconnection attempts when app comes to foreground
+          wsReconnectAttemptsRef.current = 0;
+
+          // Attempt immediate reconnection
+          if (ws.current) {
+            // Close existing connection if it exists but isn't open
+            try {
+              ws.current.close();
+            } catch (error) {
+              console.error(
+                "❌ [WebSocket] Error closing existing connection:",
+                error
+              );
+            }
+            ws.current = null;
+          }
+
+          // Reconnect immediately
+          const wsUrl = getWebSocketUrl();
+          try {
+            console.log(`🔄 [WebSocket] Reconnecting to: ${wsUrl}`);
+            ws.current = new WebSocket(wsUrl);
+
+            ws.current.onopen = () => {
+              console.log(
+                "✅ [WebSocket] Reconnected successfully after app came to foreground"
+              );
+              setWsConnected(true);
+              wsReconnectAttemptsRef.current = 0;
+              // Set WebSocket connection for background task
+              setWebSocketConnection(ws.current);
+
+              // Start ping keep-alive mechanism
+              startPingKeepAlive();
+
+              // If driver is active and we have a location, send it immediately
+              if (isOnRef.current && currentLocation) {
+                console.log(
+                  "✅ [WebSocket] Driver is active - sending location after reconnection"
+                );
+                sendLocationUpdateWithRetry(currentLocation).then((success) => {
+                  if (success) {
+                    console.log(
+                      "✅ [WebSocket] Location sent after reconnection"
+                    );
+                  }
+                });
+              }
+            };
+
+            ws.current.onmessage = (e) => {
+              try {
+                if (typeof e.data === "string") {
+                  const message = JSON.parse(e.data);
+                  if (message.type === "pong") {
+                    console.log(
+                      "🏓 [WebSocket] Received pong - connection is alive"
+                    );
+                    return;
+                  }
+                }
+              } catch (error) {
+                // Ignore parse errors
+              }
+            };
+
+            ws.current.onerror = (e: any) => {
+              console.error("❌ [WebSocket] Reconnection error:", e);
+              setWsConnected(false);
+            };
+
+            ws.current.onclose = (e) => {
+              console.log(`🔌 [WebSocket] Reconnection closed: code=${e.code}`);
+              setWsConnected(false);
+
+              // Stop ping keep-alive
+              stopPingKeepAlive();
+
+              // Attempt to reconnect again if not unmounting
+              if (
+                !isComponentUnmountingRef.current &&
+                wsReconnectAttemptsRef.current < 10
+              ) {
+                wsReconnectAttemptsRef.current++;
+                setTimeout(() => {
+                  if (!isComponentUnmountingRef.current) {
+                    handleAppStateChange("active"); // Retry reconnection
+                  }
+                }, 3000);
+              }
+            };
+          } catch (error: any) {
+            console.error("❌ [WebSocket] Failed to reconnect:", error);
+            setWsConnected(false);
+          }
+        } else {
+          console.log(
+            "✅ [WebSocket] WebSocket already connected - no action needed"
+          );
+        }
+      }
+    };
+
+    // Subscribe to AppState changes
+    wsAppStateSubscriptionRef.current = AppState.addEventListener(
+      "change",
+      handleAppStateChange
     );
 
-    const driverJustBecameActive =
-      prevIsOnRef.current !== true && isOn === true;
-    prevIsOnRef.current = isOn;
-
-    if (driverJustBecameActive) {
-      console.log("🔄 [Location Send Effect] Driver just became active!");
-    }
-
-    if (wsConnected && isOn === true && currentLocation) {
-      // Send immediately if driver just became active or this is initial connection
-      if (driverJustBecameActive || !lastLocation) {
-        console.log(
-          "✅ [Location Send Effect] All conditions met - sending location with retry"
-        );
-        sendLocationUpdateWithRetry(currentLocation).then((success) => {
-          if (success) {
-            console.log(
-              "✅ [Location Send Effect] Location update sent successfully"
-            );
-          } else {
-            console.log(
-              "⚠️ [Location Send Effect] Location update will be retried automatically"
-            );
-          }
-        });
+    return () => {
+      // Cleanup AppState subscription
+      if (wsAppStateSubscriptionRef.current) {
+        wsAppStateSubscriptionRef.current.remove();
+        wsAppStateSubscriptionRef.current = null;
       }
-    } else {
-      if (!wsConnected)
-        console.log("⚠️ [Location Send Effect] WebSocket not connected");
-      if (isOn !== true)
+    };
+  }, [currentLocation, startPingKeepAlive, stopPingKeepAlive]);
+
+  // WebSocket callback for useLocationTracking hook
+  // This function sends location updates via WebSocket when hook receives location
+  const sendLocationToWebSocket = useCallback(
+    (
+      location: { latitude: number; longitude: number; heading?: number },
+      driverData: any
+    ) => {
+      // Check if WebSocket is connected
+      if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
         console.log(
-          `⚠️ [Location Send Effect] Driver not active (isOn=${isOn})`
+          "⚠️ [sendLocationToWebSocket] WebSocket not connected - cannot send location update"
         );
-      if (!currentLocation)
-        console.log("⚠️ [Location Send Effect] No current location yet");
+        return;
+      }
+
+      const driverStatus = driverData.status || "active";
+
+      // Send WebSocket message
+      const message = JSON.stringify({
+        type: "locationUpdate",
+        data: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          heading: location.heading !== undefined ? location.heading : null,
+          name: driverData.name || "Driver",
+          status: driverStatus,
+          vehicleType: driverData.vehicle_type || "Car",
+        },
+        role: "driver",
+        driver: driverData.id,
+      });
+
+      try {
+        ws.current.send(message);
+        console.log(
+          "✅ [sendLocationToWebSocket] Location update sent via WebSocket",
+          {
+            driverId: driverData.id,
+            location: { lat: location.latitude, lng: location.longitude },
+          }
+        );
+      } catch (error: any) {
+        console.error(
+          "❌ [sendLocationToWebSocket] Error sending WebSocket message:",
+          error
+        );
+      }
+    },
+    []
+  );
+
+  // Use useLocationTracking hook for continuous location updates
+  // This replaces the custom location tracking implementation
+  const {
+    currentLocation: trackedLocation,
+    lastSentLocation,
+    isTracking,
+    error: trackingError,
+    startTracking,
+    stopTracking,
+  } = useLocationTracking({
+    isActive: isOn === true,
+    onLocationUpdate: useCallback((location) => {
+      // Update local state for UI
+      setCurrentLocation(location);
+    }, []),
+    sendToServer: true, // Hook handles HTTP API calls for scheduled trips
+    sendToWebSocket: sendLocationToWebSocket, // Custom WebSocket callback
+    distanceThreshold: 200, // Same as previous implementation
+  });
+
+  // Sync tracked location with local state
+  useEffect(() => {
+    if (trackedLocation) {
+      setCurrentLocation(trackedLocation);
     }
-  }, [wsConnected, isOn, currentLocation]);
+  }, [trackedLocation]);
 
   // Memoize haversine distance calculation to avoid recreating function on every render
   const haversineDistance = useCallback((coords1: any, coords2: any) => {
@@ -1785,203 +2041,6 @@ export default function HomeScreen() {
 
     return false;
   };
-
-  useEffect(() => {
-    (async () => {
-      // Clean up previous subscription if it exists
-      if (locationWatchSubscription.current) {
-        locationWatchSubscription.current.remove();
-        locationWatchSubscription.current = null;
-      }
-
-      // Request all location permissions (foreground + background)
-      console.log("📍 Requesting location permissions...");
-      const { foreground, background } = await requestAllLocationPermissions();
-
-      if (!foreground) {
-        Toast.show("Please grant location permission to use this app!", {
-          type: "danger",
-        });
-        return;
-      }
-
-      if (!background) {
-        console.warn("⚠️ Background location permission not granted");
-        Toast.show(
-          "Background location is required for tracking when screen is off. Please enable it in Settings.",
-          {
-            type: "warning",
-            duration: 5000,
-          }
-        );
-      } else {
-        console.log("✅ Background location permission granted");
-      }
-
-      // Check permission status for logging
-      const permissionStatus = await getLocationPermissionStatus();
-      console.log("📍 Location permission status:", permissionStatus);
-
-      console.log(`📍 Setting up location watcher with isOn=${isOn}`);
-
-      // Track if this is the first location after driver becomes active
-      let firstLocationAfterActive = isOn === true;
-
-      // Check if background task is registered
-      if (TaskManager && TaskManager.isTaskRegisteredAsync) {
-        const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(
-          BACKGROUND_LOCATION_TASK
-        );
-        if (!isTaskRegistered) {
-          console.warn(
-            "⚠️ Background location task not registered - location updates may not work in background"
-          );
-        }
-      } else {
-        console.warn(
-          "⚠️ TaskManager not available - cannot check task registration"
-        );
-      }
-
-      // Start background location updates using task manager
-      // This works even when the app is in the background
-      if (isOn) {
-        try {
-          await GeoLocation.startLocationUpdatesAsync(
-            BACKGROUND_LOCATION_TASK,
-            {
-              accuracy: GeoLocation.Accuracy.High,
-              timeInterval: 5000, // 5 seconds
-              distanceInterval: 10, // 10 meters
-              foregroundService: {
-                notificationTitle: "Location Tracking Active",
-                notificationBody: "Tracking your location for ride requests",
-                notificationColor: "#10B981",
-              },
-              pausesUpdatesAutomatically: false,
-              showsBackgroundLocationIndicator: true,
-            }
-          );
-          console.log("✅ Background location tracking started");
-        } catch (error: any) {
-          console.error(
-            "❌ Error starting background location tracking:",
-            error
-          );
-        }
-      }
-
-      // Also set up a foreground watcher for immediate UI updates
-      // This provides faster updates when the app is in the foreground
-      const subscription = await GeoLocation.watchPositionAsync(
-        {
-          accuracy: GeoLocation.Accuracy.High,
-          timeInterval: 5000, // 5 seconds - better for background
-          distanceInterval: 10, // 10 meters - reduces battery drain
-          mayShowUserSettingsDialog: true,
-        },
-        async (position) => {
-          const { latitude, longitude, heading } = position.coords;
-          const newLocation = {
-            latitude,
-            longitude,
-            heading:
-              heading !== null && heading !== undefined && heading >= 0
-                ? heading
-                : undefined,
-          };
-
-          // Always update current location
-          setCurrentLocation(newLocation);
-
-          // Use ref to get latest isOn value (avoid stale closure)
-          const currentIsOn = isOnRef.current;
-          const currentWs = ws.current;
-
-          // Only send location update if driver is active and WebSocket is connected
-          if (
-            currentIsOn === true &&
-            currentWs &&
-            currentWs.readyState === WebSocket.OPEN
-          ) {
-            // Use optimized location update check
-            const currentLastLocation = lastLocation;
-            const shouldSend =
-              firstLocationAfterActive ||
-              shouldSendLocationUpdate(currentLastLocation, newLocation, 200);
-
-            if (shouldSend) {
-              const isFirstAfterActive = firstLocationAfterActive;
-              firstLocationAfterActive = false; // Reset flag after first send
-              setLastLocation(newLocation);
-              await sendLocationUpdate(newLocation);
-            } else {
-              // Even if location didn't change much, still update lastLocation
-              setLastLocation(newLocation);
-              console.log(`📍 Location update skipped (change < 200m)`);
-            }
-          } else {
-            // Update lastLocation even if not sending update
-            setLastLocation(newLocation);
-            if (currentIsOn !== true) {
-              console.log(
-                `📍 Location received but driver is inactive (isOn=${currentIsOn}) - not sending`
-              );
-            } else if (!currentWs || currentWs.readyState !== WebSocket.OPEN) {
-              console.log(
-                `📍 Location received but WebSocket not connected (readyState=${currentWs?.readyState}) - not sending`
-              );
-            }
-          }
-        }
-      );
-
-      locationWatchSubscription.current = subscription;
-
-      return () => {
-        // Stop foreground watcher
-        if (locationWatchSubscription.current) {
-          locationWatchSubscription.current.remove();
-          locationWatchSubscription.current = null;
-        }
-
-        // Stop background location updates if driver is inactive
-        if (!isOn) {
-          (async () => {
-            try {
-              if (TaskManager && TaskManager.isTaskRegisteredAsync) {
-                const isTaskRegistered =
-                  await TaskManager.isTaskRegisteredAsync(
-                    BACKGROUND_LOCATION_TASK
-                  );
-                if (isTaskRegistered) {
-                  const hasStarted =
-                    await GeoLocation.hasStartedLocationUpdatesAsync(
-                      BACKGROUND_LOCATION_TASK
-                    );
-                  if (hasStarted) {
-                    await GeoLocation.stopLocationUpdatesAsync(
-                      BACKGROUND_LOCATION_TASK
-                    );
-                    console.log("🛑 Background location tracking stopped");
-                  }
-                }
-              } else {
-                console.warn(
-                  "⚠️ TaskManager not available - cannot stop background location tracking"
-                );
-              }
-            } catch (error: any) {
-              console.error(
-                "❌ Error stopping background location tracking:",
-                error
-              );
-            }
-          })();
-        }
-      };
-    })();
-  }, [isOn]); // Re-run when isOn changes to start/stop sending location updates
 
   const getRecentRides = async () => {
     const accessToken = await AsyncStorage.getItem("accessToken");

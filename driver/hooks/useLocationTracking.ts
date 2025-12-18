@@ -289,7 +289,7 @@ export function useLocationTracking(
               BACKGROUND_LOCATION_TASK,
               {
                 accuracy: GeoLocation.Accuracy.High,
-                timeInterval: 15000, // 15 seconds - ensures minimum update interval
+                timeInterval: 10000, // 10 seconds - ensures minimum update interval for current "Last update" time
                 distanceInterval: 5, // 5 meters - more sensitive to movement
                 // Foreground service configuration for Android
                 foregroundService: {
@@ -304,7 +304,7 @@ export function useLocationTracking(
                 showsBackgroundLocationIndicator: true,
                 // Android-specific configuration
                 ...(Platform.OS === "android" && {
-                  deferredUpdatesInterval: 15000, // 15 seconds when stationary - ensures updates even when not moving
+                  deferredUpdatesInterval: 10000, // 10 seconds when stationary - ensures updates even when not moving
                   deferredUpdatesDistance: 5, // 5 meters when stationary - more sensitive
                 }),
               }
@@ -343,7 +343,7 @@ export function useLocationTracking(
       const subscription = await GeoLocation.watchPositionAsync(
         {
           accuracy: GeoLocation.Accuracy.High,
-          timeInterval: 5000, // 5 seconds
+          timeInterval: 10000, // 10 seconds - aligned with background updates for consistency
           distanceInterval: 10, // 10 meters
           mayShowUserSettingsDialog: true,
         },
@@ -646,10 +646,10 @@ export function useLocationTracking(
       return;
     }
 
-    // Check every 15 seconds if background tracking is still running - more frequent checks for faster issue detection
+    // Check every 10 seconds if background tracking is still running - more frequent checks for faster issue detection
     monitoringIntervalRef.current = setInterval(() => {
       monitorBackgroundTracking();
-    }, 15000);
+    }, 10000);
 
     return () => {
       if (monitoringIntervalRef.current) {
