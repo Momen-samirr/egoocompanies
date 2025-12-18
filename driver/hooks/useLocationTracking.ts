@@ -94,6 +94,8 @@ export function useLocationTracking(
   const appStateSubscriptionRef = useRef<any>(null);
   const locationHistoryRef = useRef(new LocationHistoryBuffer(5));
   const networkCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastHeartbeatLocationRef = useRef<Location | null>(null);
 
   // Keep ref in sync with isActive
   useEffect(() => {
@@ -287,8 +289,8 @@ export function useLocationTracking(
               BACKGROUND_LOCATION_TASK,
               {
                 accuracy: GeoLocation.Accuracy.High,
-                timeInterval: 5000, // 5 seconds
-                distanceInterval: 10, // 10 meters
+                timeInterval: 15000, // 15 seconds - ensures minimum update interval
+                distanceInterval: 5, // 5 meters - more sensitive to movement
                 // Foreground service configuration for Android
                 foregroundService: {
                   notificationTitle: "Location Tracking Active",
@@ -302,8 +304,8 @@ export function useLocationTracking(
                 showsBackgroundLocationIndicator: true,
                 // Android-specific configuration
                 ...(Platform.OS === "android" && {
-                  deferredUpdatesInterval: 10000, // 10 seconds when stationary
-                  deferredUpdatesDistance: 50, // 50 meters when stationary
+                  deferredUpdatesInterval: 15000, // 15 seconds when stationary - ensures updates even when not moving
+                  deferredUpdatesDistance: 5, // 5 meters when stationary - more sensitive
                 }),
               }
             );
@@ -501,6 +503,12 @@ export function useLocationTracking(
       networkCheckIntervalRef.current = null;
     }
 
+    // Stop heartbeat interval
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+
     // Stop foreground watcher
     if (locationWatchSubscription.current) {
       locationWatchSubscription.current.remove();
@@ -638,10 +646,10 @@ export function useLocationTracking(
       return;
     }
 
-    // Check every 30 seconds if background tracking is still running
+    // Check every 15 seconds if background tracking is still running - more frequent checks for faster issue detection
     monitoringIntervalRef.current = setInterval(() => {
       monitorBackgroundTracking();
-    }, 30000);
+    }, 15000);
 
     return () => {
       if (monitoringIntervalRef.current) {
@@ -702,6 +710,33 @@ export function useLocationTracking(
       subscription.remove();
     };
   }, [isActive]);
+
+  // Heartbeat mechanism: Send location update every 30 seconds even when stationary
+  // This ensures foreground updates continue even when driver is stationary and adaptive thresholds prevent normal updates
+  useEffect(() => {
+    if (!isActive || !isTrackingRef.current || !currentLocation) {
+      return;
+    }
+
+    // Send heartbeat every 30 seconds
+    heartbeatIntervalRef.current = setInterval(async () => {
+      const currentIsActive = isActiveRef.current;
+      const currentLoc = currentLocation;
+
+      if (currentIsActive && currentLoc) {
+        logger.debug("Sending heartbeat location update");
+        await sendLocationUpdate(currentLoc);
+        lastHeartbeatLocationRef.current = currentLoc;
+      }
+    }, 30000); // 30 seconds
+
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+    };
+  }, [isActive, currentLocation, sendLocationUpdate]);
 
   // Start/stop tracking based on isActive
   useEffect(() => {

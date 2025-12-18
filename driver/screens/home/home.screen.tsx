@@ -1333,13 +1333,22 @@ export default function HomeScreen() {
     const connectWebSocket = () => {
       const wsUrl = getWebSocketUrl();
       console.log(
-        `🔌 Attempting to connect to WebSocket: ${wsUrl} (Attempt ${
+        `🔌 [WebSocket] Attempting to connect to WebSocket: ${wsUrl} (Attempt ${
           reconnectAttempts + 1
         })`
       );
+      console.log(`🔌 [WebSocket] Full connection details:`, {
+        url: wsUrl,
+        platform: Platform.OS,
+        isOn: isOnRef.current,
+        hasCurrentLocation: !!currentLocation,
+      });
 
       try {
         ws.current = new WebSocket(wsUrl);
+        console.log(
+          `🔌 [WebSocket] WebSocket object created, readyState: ${ws.current?.readyState}`
+        );
 
         ws.current.onopen = () => {
           console.log(
@@ -1347,6 +1356,7 @@ export default function HomeScreen() {
           );
           console.log("✅ [WebSocket] URL:", wsUrl);
           console.log("✅ [WebSocket] Driver status (isOn):", isOnRef.current);
+          console.log("✅ [WebSocket] ReadyState:", ws.current?.readyState);
           setWsConnected(true);
           reconnectAttempts = 0; // Reset reconnect attempts on successful connection
           // Set WebSocket connection for background task
@@ -1362,6 +1372,10 @@ export default function HomeScreen() {
                 console.log(
                   "✅ [WebSocket] Initial location sent after connection"
                 );
+              } else {
+                console.warn(
+                  "⚠️ [WebSocket] Failed to send initial location after connection"
+                );
               }
             });
           }
@@ -1372,22 +1386,31 @@ export default function HomeScreen() {
             // Check if this is a binary message (ping/pong)
             if (typeof e.data === "string") {
               const message = JSON.parse(e.data);
-              console.log("📨 Received WebSocket message:", message);
+              console.log(
+                "📨 [WebSocket] Received message:",
+                message.type || "unknown"
+              );
               // Handle received location updates here
             } else {
               // Binary data - likely a ping/pong frame
               // React Native WebSocket automatically handles ping/pong
-              console.log("🏓 Received ping/pong frame");
+              console.log("🏓 [WebSocket] Received ping/pong frame");
             }
           } catch (error) {
-            console.error("❌ Error parsing WebSocket message:", error);
+            console.error("❌ [WebSocket] Error parsing message:", error);
           }
         };
 
         ws.current.onerror = (e: any) => {
-          const errorMsg = e.message || "Unknown error";
-          console.error(`❌ WebSocket error: ${errorMsg}`);
-          console.error("❌ Error details:", JSON.stringify(e, null, 2));
+          const errorMsg = e.message || e.toString() || "Unknown error";
+          console.error(`❌ [WebSocket] Connection error: ${errorMsg}`);
+          console.error(`❌ [WebSocket] Error type:`, typeof e);
+          console.error(`❌ [WebSocket] Error object:`, e);
+          console.error(
+            `❌ [WebSocket] Current readyState:`,
+            ws.current?.readyState
+          );
+          console.error(`❌ [WebSocket] Attempted URL: ${wsUrl}`);
           setWsConnected(false);
 
           // Don't immediately reconnect on error - wait for close event
@@ -1397,10 +1420,42 @@ export default function HomeScreen() {
         ws.current.onclose = (e) => {
           const wasClean = e.wasClean !== undefined ? e.wasClean : false;
           console.log(
-            `🔌 WebSocket closed: code=${e.code}, reason="${
+            `🔌 [WebSocket] Connection closed: code=${e.code}, reason="${
               e.reason || "No reason provided"
             }", wasClean=${wasClean}`
           );
+          console.log(`🔌 [WebSocket] Close event details:`, {
+            code: e.code,
+            reason: e.reason,
+            wasClean,
+            url: wsUrl,
+            readyState: ws.current?.readyState,
+          });
+
+          // Common close codes:
+          // 1000 = Normal closure
+          // 1001 = Going away
+          // 1006 = Abnormal closure (no close frame received)
+          // 1002 = Protocol error
+          // 1003 = Unsupported data
+          // 1005 = No status code
+          // 1007 = Invalid frame payload data
+          // 1008 = Policy violation
+          // 1009 = Message too big
+          // 1011 = Internal server error
+
+          if (e.code === 1006) {
+            console.error(
+              `❌ [WebSocket] Abnormal closure detected - connection may have been refused or network issue`
+            );
+            console.error(
+              `❌ [WebSocket] Check if server is running at: ${wsUrl}`
+            );
+            console.error(
+              `❌ [WebSocket] Verify firewall/network allows connection`
+            );
+          }
+
           setWsConnected(false);
 
           // Attempt to reconnect if we haven't exceeded max attempts

@@ -67,6 +67,16 @@ async function sendLocationToServer(
       {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
+        heading:
+          location.coords.heading !== undefined
+            ? location.coords.heading
+            : null,
+        accuracy:
+          location.coords.accuracy !== undefined
+            ? location.coords.accuracy
+            : null,
+        speed:
+          location.coords.speed !== undefined ? location.coords.speed : null,
       },
       {
         headers: {
@@ -79,6 +89,13 @@ async function sendLocationToServer(
     logger.debug("Background location update sent successfully", {
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
+      heading:
+        location.coords.heading !== undefined ? location.coords.heading : null,
+      accuracy:
+        location.coords.accuracy !== undefined
+          ? location.coords.accuracy
+          : null,
+      speed: location.coords.speed !== undefined ? location.coords.speed : null,
     });
   } catch (error: any) {
     // Handle specific error cases

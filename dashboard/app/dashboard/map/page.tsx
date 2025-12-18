@@ -168,20 +168,35 @@ export default function MapPage() {
       }
     };
 
-    ws.onerror = (error) => {
+    ws.onerror = (error: any) => {
       clearTimeout(connectionTimeout);
       console.error("❌ [Dashboard] WebSocket error:", error);
+      console.error("❌ [Dashboard] Error type:", typeof error);
+      console.error("❌ [Dashboard] Error details:", {
+        message: error?.message,
+        type: error?.type,
+        target: error?.target?.url,
+        readyState: ws?.readyState,
+        url: fullWsUrl.replace(token || "", "***"),
+      });
       console.error(
         "❌ [Dashboard] Failed to connect to:",
         fullWsUrl.replace(token || "", "***")
       );
+      console.error("❌ [Dashboard] WebSocket readyState:", ws?.readyState);
       console.error("❌ [Dashboard] Make sure the WebSocket server is running");
+      console.error(
+        "❌ [Dashboard] Check NEXT_PUBLIC_WEBSOCKET_URL in .env.local:",
+        process.env.NEXT_PUBLIC_WEBSOCKET_URL
+      );
       setIsConnected(false);
+      const errorMessage =
+        error?.message || error?.toString() || "Unknown error";
       setLocationError(
-        `WebSocket connection failed. Trying to connect to: ${fullWsUrl.replace(
+        `WebSocket connection failed: ${errorMessage}. Trying to connect to: ${fullWsUrl.replace(
           token || "",
           "***"
-        )}. Make sure the server is running.`
+        )}. Make sure the server is running and NEXT_PUBLIC_WEBSOCKET_URL is correct.`
       );
     };
 

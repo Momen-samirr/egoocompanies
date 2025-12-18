@@ -1394,7 +1394,7 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
           driverId: captainId,
           latitude,
           longitude,
-          heading: null, // Background updates don't include heading
+          heading: heading !== undefined ? heading : null, // Forward heading if available
           name: captain.name || "Driver",
           status: captain.status || "active",
           vehicleType: captain.vehicle_type || "Car",
