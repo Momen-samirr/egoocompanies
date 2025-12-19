@@ -116,7 +116,10 @@ export default function TripReplay({ tripId }: TripReplayProps) {
         // Build timeline events
         const events: TimelineEvent[] = [];
         locations.forEach((loc: LocationPoint, index: number) => {
-          if (loc.isCheckpointReached && loc.checkpointIndex !== null) {
+          if (
+            loc.isCheckpointReached &&
+            typeof loc.checkpointIndex === "number"
+          ) {
             const checkpoint = trip.points[loc.checkpointIndex];
             if (checkpoint) {
               events.push({
