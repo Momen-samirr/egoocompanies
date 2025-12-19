@@ -7,14 +7,27 @@ interface CardProps {
   className?: string;
   hover?: boolean;
   shadow?: "sm" | "md" | "lg";
+  onClick?: () => void;
 }
 
-export default function Card({ children, className = "", hover = false, shadow = "sm" }: CardProps) {
-  const shadowClass = shadow === "sm" ? "shadow-sm" : shadow === "md" ? "shadow-md" : "shadow-lg";
-  const hoverClass = hover ? "hover:shadow-md transition-all duration-200 hover:-translate-y-0.5" : "";
+export default function Card({
+  children,
+  className = "",
+  hover = false,
+  shadow = "sm",
+  onClick,
+}: CardProps) {
+  const shadowClass =
+    shadow === "sm" ? "shadow-sm" : shadow === "md" ? "shadow-md" : "shadow-lg";
+  const hoverClass = hover
+    ? "hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
+    : "";
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-200/60 ${shadowClass} ${hoverClass} ${className}`}>
+    <div
+      className={`bg-white rounded-xl border border-gray-200/60 ${shadowClass} ${hoverClass} ${className}`}
+      onClick={onClick}
+    >
       {children}
     </div>
   );
@@ -27,7 +40,9 @@ interface CardHeaderProps {
 
 export function CardHeader({ children, className = "" }: CardHeaderProps) {
   return (
-    <div className={`px-6 py-5 border-b border-gray-200/60 bg-gray-50/50 rounded-t-xl ${className}`}>
+    <div
+      className={`px-6 py-5 border-b border-gray-200/60 bg-gray-50/50 rounded-t-xl ${className}`}
+    >
       {children}
     </div>
   );
@@ -39,13 +54,14 @@ interface CardBodyProps {
   padding?: "standard" | "large" | "none";
 }
 
-export function CardBody({ children, className = "", padding = "standard" }: CardBodyProps) {
-  const paddingClass = padding === "standard" ? "p-6" : padding === "large" ? "p-8" : "";
-  return (
-    <div className={`${paddingClass} ${className}`}>
-      {children}
-    </div>
-  );
+export function CardBody({
+  children,
+  className = "",
+  padding = "standard",
+}: CardBodyProps) {
+  const paddingClass =
+    padding === "standard" ? "p-6" : padding === "large" ? "p-8" : "";
+  return <div className={`${paddingClass} ${className}`}>{children}</div>;
 }
 
 interface CardFooterProps {
@@ -55,9 +71,10 @@ interface CardFooterProps {
 
 export function CardFooter({ children, className = "" }: CardFooterProps) {
   return (
-    <div className={`px-6 py-4 border-t border-gray-200/60 bg-gray-50/50 rounded-b-xl ${className}`}>
+    <div
+      className={`px-6 py-4 border-t border-gray-200/60 bg-gray-50/50 rounded-b-xl ${className}`}
+    >
       {children}
     </div>
   );
 }
-
