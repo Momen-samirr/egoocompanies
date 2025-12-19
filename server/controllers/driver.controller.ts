@@ -1217,6 +1217,47 @@ export const updateTripProgress = async (req: any, res: Response) => {
       },
     });
 
+    // Record location in TripLocationHistory when checkpoint is reached
+    if (latitude && longitude) {
+      try {
+        // Calculate distance from route if we have the planned route
+        const plannedRoute = trip.points.map((p: any) => ({
+          latitude: p.latitude,
+          longitude: p.longitude,
+        }));
+
+        const { calculateDistanceFromRoute, detectRouteDeviation } =
+          await import("../utils/route-calculator");
+        const currentLocation = { latitude, longitude };
+        const distanceFromRoute = calculateDistanceFromRoute(
+          currentLocation,
+          plannedRoute
+        );
+        const deviation = detectRouteDeviation(
+          currentLocation,
+          plannedRoute,
+          100
+        );
+
+        await prisma.tripLocationHistory.create({
+          data: {
+            scheduledTripId: tripId,
+            driverId: captainId,
+            latitude,
+            longitude,
+            distanceFromRoute,
+            isRouteDeviation: deviation.isDeviated,
+            isCheckpointReached: true,
+            checkpointIndex: checkpointIndex,
+            timestamp: reachedAt,
+          },
+        });
+      } catch (error) {
+        console.error("Error recording checkpoint location:", error);
+        // Don't fail the request if location recording fails
+      }
+    }
+
     // Calculate timing difference for ARRIVAL trips
     let timing = null;
     if (trip.tripType === "ARRIVAL" && checkpoint.expectedTime) {

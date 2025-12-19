@@ -177,11 +177,37 @@ export default function TripNavigationScreen() {
 
   useEffect(() => {
     if (tripId) {
+      // Store active trip ID for location tracking
+      AsyncStorage.setItem("activeTripId", tripId).catch((error) => {
+        console.error("Error storing active trip ID:", error);
+      });
+
       fetchTrip();
       startLocationTracking();
       checkEmergencyUsageStatus();
     }
+
+    // Cleanup on unmount
+    return () => {
+      AsyncStorage.removeItem("activeTripId").catch((error) => {
+        console.error("Error removing active trip ID:", error);
+      });
+    };
   }, [tripId]);
+
+  // Clear active trip ID when trip is completed, cancelled, or force closed
+  useEffect(() => {
+    if (
+      trip &&
+      (trip.status === "COMPLETED" ||
+        trip.status === "CANCELLED" ||
+        trip.status === "FORCE_CLOSED")
+    ) {
+      AsyncStorage.removeItem("activeTripId").catch((error) => {
+        console.error("Error removing active trip ID:", error);
+      });
+    }
+  }, [trip?.status]);
 
   // Update navigation origin when current location changes
   useEffect(() => {
@@ -293,6 +319,9 @@ export default function TripNavigationScreen() {
         if (activeTrip) {
           // Check if trip has been force closed
           if (activeTrip.status === "FORCE_CLOSED") {
+            // Clear active trip ID
+            await AsyncStorage.removeItem("activeTripId");
+
             Toast.show("This trip has been force closed by admin", {
               type: "danger",
               duration: 5000,
@@ -625,6 +654,8 @@ export default function TripNavigationScreen() {
               }
 
               if (checkpoint.isFinalPoint) {
+                // Trip completed, clear active trip ID
+                await AsyncStorage.removeItem("activeTripId");
                 // Trip completed, go back to scheduled trips
                 setTimeout(() => {
                   router.push("/(tabs)/home");
@@ -679,6 +710,9 @@ export default function TripNavigationScreen() {
       );
 
       if (response.data.success) {
+        // Clear active trip ID
+        await AsyncStorage.removeItem("activeTripId");
+
         Toast.show("Trip emergency terminated successfully", {
           type: "success",
         });

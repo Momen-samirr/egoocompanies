@@ -21,6 +21,7 @@ import {
   uploadDriverDocument,
   getDriverDocuments,
 } from "../controllers/driver.controller";
+import { recordTripLocation } from "../controllers/trip-tracking.controller";
 import { isAuthenticatedDriver } from "../middleware/isAuthenticated";
 
 const driverRouter = express.Router();
@@ -70,6 +71,7 @@ driverRouter.post(
   isAuthenticatedDriver,
   updateCaptainLocation
 );
+driverRouter.post("/trip/location", isAuthenticatedDriver, recordTripLocation);
 
 // Emergency Termination
 driverRouter.get(

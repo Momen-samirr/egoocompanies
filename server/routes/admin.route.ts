@@ -51,6 +51,13 @@ import {
   markAllNotificationsAsRead,
 } from "../controllers/admin.controller";
 import {
+  getTripLocationHistory,
+  getTripLiveTracking,
+  getTripRouteAnalysis,
+  getTripAnalytics,
+  getActiveTripsLive,
+} from "../controllers/trip-tracking.controller";
+import {
   isAuthenticatedAdmin,
   isAdminUser,
 } from "../middleware/isAuthenticated";
@@ -224,6 +231,23 @@ adminRouter.post(
   isAuthenticatedAdmin,
   forceCloseTrip
 );
+adminRouter.get(
+  "/trips/:id/location-history",
+  isAuthenticatedAdmin,
+  getTripLocationHistory
+);
+adminRouter.get(
+  "/trips/:id/live-tracking",
+  isAuthenticatedAdmin,
+  getTripLiveTracking
+);
+adminRouter.get(
+  "/trips/:id/route-analysis",
+  isAuthenticatedAdmin,
+  getTripRouteAnalysis
+);
+adminRouter.get("/trips/:id/analytics", isAuthenticatedAdmin, getTripAnalytics);
+adminRouter.get("/trips/active/live", isAuthenticatedAdmin, getActiveTripsLive);
 
 // Emergency Logs
 adminRouter.get("/emergency-logs", isAuthenticatedAdmin, getEmergencyLogs);

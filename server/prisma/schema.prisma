@@ -188,6 +188,7 @@ model ScheduledTrip {
   activationChecks      TripActivationCheck[]
   ledgerEntries         ScheduledTripLedger[]
   statusHistory         TripStatusHistory[]          @relation("TripStatusHistory")
+  locationHistory       TripLocationHistory[]
 }
 
 model TripPoint {
@@ -348,4 +349,30 @@ model DriverLocationHistory {
   @@index([driverId, timestamp])
   @@index([timestamp])
   @@index([driverId])
+}
+
+model TripLocationHistory {
+  id                      String        @id @default(auto()) @map("_id") @db.ObjectId
+  scheduledTripId         String        @db.ObjectId
+  driverId                String        @db.ObjectId
+  latitude                Float
+  longitude               Float
+  heading                 Float?
+  accuracy                Float?
+  speed                   Float?         // Speed in m/s or km/h
+  distanceFromRoute       Float?        // Distance from planned route in meters
+  distanceFromNextCheckpoint Float?     // Distance to next checkpoint in meters
+  timestamp               DateTime      @default(now())
+  isCheckpointReached     Boolean       @default(false)
+  checkpointIndex         Int?          // Which checkpoint was reached at this location
+  isIdle                  Boolean       @default(false) // True if speed < threshold
+  isRouteDeviation        Boolean       @default(false) // True if deviated from route
+  
+  scheduledTrip           ScheduledTrip @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  
+  @@index([scheduledTripId, timestamp])
+  @@index([driverId, timestamp])
+  @@index([timestamp])
+  @@index([scheduledTripId, isRouteDeviation])
+  @@index([scheduledTripId, isCheckpointReached])
 }

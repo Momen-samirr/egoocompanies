@@ -379,6 +379,12 @@ wss.on("error", (error) => {
 // This will be updated when drivers are assigned to companies
 let companyDriversMap = {};
 
+// Store admin subscriptions to trips (admin connection ID -> Set of trip IDs)
+let adminTripSubscriptions = new Map();
+
+// Store active trips with their current status
+let activeTripsMap = {};
+
 // Function to fetch company driver IDs from the API
 const fetchCompanyDrivers = async (companyId) => {
   if (!companyId) return [];
@@ -444,6 +450,74 @@ const filterRidesByCompany = (ridesObj, companyDriverIds) => {
     }
   }
   return filtered;
+};
+
+// Broadcast trip location update to subscribed admins
+const broadcastTripLocationUpdate = (tripId, locationData) => {
+  let sentCount = 0;
+  const message = {
+    type: "tripLocationUpdate",
+    tripId,
+    ...locationData,
+  };
+
+  wss.clients.forEach((client) => {
+    if (client.isAdmin) {
+      // Check if admin is subscribed to this trip
+      const clientConnectionId = Array.from(
+        connectionManager.connections.entries()
+      ).find(([id, conn]) => conn.ws === client)?.[0];
+
+      if (clientConnectionId) {
+        const subscriptions = adminTripSubscriptions.get(clientConnectionId);
+        // If admin has subscriptions, only send if subscribed to this trip
+        // If no subscriptions, send to all admins (backward compatibility)
+        if (
+          !subscriptions ||
+          subscriptions.size === 0 ||
+          subscriptions.has(tripId)
+        ) {
+          if (client.readyState === 1) {
+            try {
+              client.send(JSON.stringify(message));
+              sentCount++;
+            } catch (error) {
+              console.error("Error sending trip location update:", error);
+            }
+          }
+        }
+      } else {
+        // Fallback: send to all admins if connection ID not found
+        if (client.readyState === 1) {
+          try {
+            client.send(JSON.stringify(message));
+            sentCount++;
+          } catch (error) {
+            console.error("Error sending trip location update:", error);
+          }
+        }
+      }
+    }
+  });
+
+  if (sentCount > 0) {
+    console.log(
+      `📡 [Trip Location] Broadcasted trip ${tripId} location update to ${sentCount} admin(s)`
+    );
+  }
+};
+
+// Broadcast trip alert to all admin clients
+const broadcastTripAlert = (alert) => {
+  const message = {
+    type: "tripAlert",
+    ...alert,
+  };
+
+  broadcastToAdmins(message);
+  console.log(
+    `🚨 [Trip Alert] Broadcasted alert for trip ${alert.tripId}: ${alert.alertType}`
+  );
 };
 
 // Broadcast driver locations to all admin clients
@@ -1013,6 +1087,56 @@ wss.on("connection", (ws, req) => {
           rides: activeRides,
         });
       }
+
+      // Handle trip location updates
+      if (data.type === "tripLocationUpdate" && data.role === "driver") {
+        const { tripId, location, speed, deviationStatus } = data;
+
+        console.log(
+          `📍 [WebSocket] Trip location update received: tripId=${tripId}, driver=${data.driver}`
+        );
+
+        // Broadcast to subscribed admins
+        broadcastTripLocationUpdate(tripId, {
+          driverId: data.driver,
+          location,
+          speed,
+          deviationStatus,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Handle admin subscription to trips
+      if (data.type === "subscribeToTrip" && ws.isAdmin) {
+        const { tripId } = data;
+        if (tripId && connectionId) {
+          if (!adminTripSubscriptions.has(connectionId)) {
+            adminTripSubscriptions.set(connectionId, new Set());
+          }
+          adminTripSubscriptions.get(connectionId).add(tripId);
+          console.log(`📡 [WebSocket] Admin subscribed to trip ${tripId}`);
+          ws.send(
+            JSON.stringify({
+              type: "tripSubscriptionConfirmed",
+              tripId,
+              message: "Subscribed to trip updates",
+            })
+          );
+        }
+      }
+
+      // Handle admin unsubscribe from trips
+      if (data.type === "unsubscribeFromTrip" && ws.isAdmin) {
+        const { tripId } = data;
+        if (
+          tripId &&
+          connectionId &&
+          adminTripSubscriptions.has(connectionId)
+        ) {
+          adminTripSubscriptions.get(connectionId).delete(tripId);
+          console.log(`📡 [WebSocket] Admin unsubscribed from trip ${tripId}`);
+        }
+      }
     } catch (error) {
       console.log("Failed to parse WebSocket message:", error);
     }
@@ -1024,6 +1148,8 @@ wss.on("connection", (ws, req) => {
     // Remove from connection manager
     if (connectionId) {
       connectionManager.removeConnection(connectionId);
+      // Clean up trip subscriptions
+      adminTripSubscriptions.delete(connectionId);
     }
 
     if (ws.isAdmin) {
@@ -1350,6 +1476,9 @@ if (ENABLE_METRICS && metricsCollector) {
   }, 60000); // Every 60 seconds
 }
 
+// Note: Active trips list will be updated when trips become active
+// and broadcasted via the trip location update mechanism
+
 // API endpoint to notify user when ride is accepted (called from backend server)
 app.post("/api/notify-ride-accepted", (req, res) => {
   try {
@@ -1483,6 +1612,70 @@ app.post("/api/update-driver-location", async (req, res) => {
     }
   } catch (error) {
     console.error("Error updating driver location via HTTP API:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// API endpoint to broadcast trip location update (called from backend server)
+app.post("/api/trip-location-update", (req, res) => {
+  try {
+    const { tripId, driverId, location, speed, deviationStatus } = req.body;
+
+    if (!tripId || !driverId || !location) {
+      return res.status(400).json({
+        success: false,
+        message: "tripId, driverId, and location are required",
+      });
+    }
+
+    console.log(
+      `📍 [HTTP API] Trip location update received for trip ${tripId}`
+    );
+
+    // Broadcast to subscribed admins
+    broadcastTripLocationUpdate(tripId, {
+      driverId,
+      location,
+      speed,
+      deviationStatus,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.json({
+      success: true,
+      message: "Trip location update broadcasted",
+    });
+  } catch (error) {
+    console.error("Error broadcasting trip location update:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// API endpoint to broadcast trip alert (called from backend server)
+app.post("/api/trip-alert", (req, res) => {
+  try {
+    const alert = req.body;
+
+    if (!alert.tripId || !alert.alertType) {
+      return res.status(400).json({
+        success: false,
+        message: "tripId and alertType are required",
+      });
+    }
+
+    console.log(
+      `🚨 [HTTP API] Trip alert received: tripId=${alert.tripId}, type=${alert.alertType}`
+    );
+
+    // Broadcast to all admins
+    broadcastTripAlert(alert);
+
+    res.json({
+      success: true,
+      message: "Trip alert broadcasted",
+    });
+  } catch (error) {
+    console.error("Error broadcasting trip alert:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

@@ -57,6 +57,16 @@ async function isDriverActive(): Promise<boolean> {
   }
 }
 
+// Get active trip ID from storage
+async function getActiveTripId(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem("activeTripId");
+  } catch (error) {
+    logger.error("Error getting active trip ID", error);
+    return null;
+  }
+}
+
 // Send location to server
 export async function sendLocationToServer(
   location: Location.LocationObject,
@@ -79,6 +89,8 @@ export async function sendLocationToServer(
     }
 
     const serverUri = getServerUri();
+
+    // Send general location update
     await axios.post(
       `${serverUri}/driver/update-location`,
       {
@@ -94,9 +106,49 @@ export async function sendLocationToServer(
       }
     );
 
+    // Check if driver has an active trip and send trip-specific location update
+    const activeTripId = await getActiveTripId();
+    if (activeTripId) {
+      try {
+        // Convert speed from m/s to km/h if needed
+        const speedKmh = location.coords.speed
+          ? location.coords.speed * 3.6 // Convert m/s to km/h
+          : null;
+
+        await axios.post(
+          `${serverUri}/driver/trip/location`,
+          {
+            tripId: activeTripId,
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            heading: location.coords.heading ?? null,
+            accuracy: location.coords.accuracy ?? null,
+            speed: speedKmh,
+          },
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            timeout: 15000,
+          }
+        );
+
+        logger.info("[Background] Trip location update sent", {
+          tripId: activeTripId,
+          timestamp: new Date().toISOString(),
+          coords: location.coords,
+        });
+      } catch (tripError: any) {
+        // Log but don't fail - trip location update is optional
+        logger.debug("[Background] Failed to send trip location update", {
+          tripId: activeTripId,
+          error: tripError.message,
+        });
+      }
+    }
+
     logger.info("[Background] Location update sent", {
       timestamp: new Date().toISOString(),
       coords: location.coords,
+      hasActiveTrip: !!activeTripId,
     });
   } catch (error: any) {
     // Enhanced error handling with detailed logging
