@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import api from "@/lib/api";
 import { Driver, Ride } from "@/types";
-import Card, { CardHeader, CardBody } from "@/components/common/Card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import StatusBadge from "@/components/common/StatusBadge";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import { ArrowLeftIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import DocumentViewer from "@/components/drivers/DocumentViewer";
@@ -89,7 +89,7 @@ export default function DriverDetailsPage() {
             Profile Information
           </h2>
         </CardHeader>
-        <CardBody>
+        <CardContent>
           <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <dt className="text-sm font-medium text-gray-500">Name</dt>
@@ -179,14 +179,14 @@ export default function DriverDetailsPage() {
               </dd>
             </div>
           </dl>
-        </CardBody>
+        </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <h2 className="text-xl font-semibold text-gray-900">Documents</h2>
         </CardHeader>
-        <CardBody>
+        <CardContent>
           <DocumentViewer
             driverId={driver.id}
             selfiePhoto={driver.selfiePhoto}
@@ -198,7 +198,7 @@ export default function DriverDetailsPage() {
             documentsVerified={driver.documentsVerified}
             documentsVerifiedAt={driver.documentsVerifiedAt}
           />
-        </CardBody>
+        </CardContent>
       </Card>
 
       {driver.rides && driver.rides.length > 0 && (
@@ -208,7 +208,7 @@ export default function DriverDetailsPage() {
               Ride History
             </h2>
           </CardHeader>
-          <CardBody padding="none">
+          <CardContent padding="none">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -261,7 +261,7 @@ export default function DriverDetailsPage() {
                 </tbody>
               </table>
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
       )}
     </div>

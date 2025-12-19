@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import Button from "./Button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface PaginationProps {
   currentPage: number;
@@ -65,9 +66,9 @@ export default function Pagination({
   };
 
   return (
-    <div className={`flex flex-col sm:flex-row items-center justify-between gap-4 ${className}`}>
+    <div className={cn("flex flex-col sm:flex-row items-center justify-between gap-4", className)}>
       <div className="flex items-center gap-4">
-        <div className="text-sm text-gray-700">
+        <div className="text-sm text-muted-foreground">
           Showing <span className="font-medium">{startItem}</span> to{" "}
           <span className="font-medium">{endItem}</span> of{" "}
           <span className="font-medium">{totalItems}</span> results
@@ -75,11 +76,11 @@ export default function Pagination({
 
         {onPageSizeChange && (
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-700">Show:</label>
+            <label className="text-sm text-muted-foreground">Show:</label>
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+              className="px-2 py-1 text-sm border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring bg-background"
             >
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>
@@ -93,12 +94,12 @@ export default function Pagination({
 
       <div className="flex items-center gap-2">
         <Button
-          variant="secondary"
+          variant="outline"
           size="sm"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          icon={ChevronLeftIcon}
         >
+          <ChevronLeft className="h-4 w-4 mr-1" />
           Previous
         </Button>
 
@@ -109,7 +110,7 @@ export default function Pagination({
                 return (
                   <span
                     key={`ellipsis-${index}`}
-                    className="px-2 text-gray-500"
+                    className="px-2 text-muted-foreground"
                   >
                     ...
                   </span>
@@ -123,11 +124,12 @@ export default function Pagination({
                 <button
                   key={pageNum}
                   onClick={() => onPageChange(pageNum)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  className={cn(
+                    "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
                     isActive
-                      ? "bg-indigo-600 text-white"
-                      : "text-gray-700 hover:bg-gray-100"
-                  }`}
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
                 >
                   {pageNum}
                 </button>
@@ -137,17 +139,15 @@ export default function Pagination({
         )}
 
         <Button
-          variant="secondary"
+          variant="outline"
           size="sm"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
-          icon={ChevronRightIcon}
-          iconPosition="right"
         >
           Next
+          <ChevronRight className="h-4 w-4 ml-1" />
         </Button>
       </div>
     </div>
   );
 }
-

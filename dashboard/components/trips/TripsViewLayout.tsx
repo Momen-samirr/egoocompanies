@@ -2,11 +2,11 @@
 
 import { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import Card, { CardBody } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import TripSearch from "@/components/trips/TripSearch";
 import TripFilters from "@/components/trips/TripFilters";
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { Plus } from "lucide-react";
 import { TripFilters as TripFiltersType } from "@/types/trip";
 
 interface TripsViewLayoutProps {
@@ -37,14 +37,12 @@ export default function TripsViewLayout({
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
+        <h1 className="text-3xl font-bold text-foreground">{title}</h1>
         <div className="flex items-center gap-3">
           {actions}
           {showCreateButton && (
-            <Button
-              onClick={() => router.push("/dashboard/trips/create")}
-              icon={PlusIcon}
-            >
+            <Button onClick={() => router.push("/dashboard/trips/create")}>
+              <Plus className="h-4 w-4 mr-2" />
               Create Trip
             </Button>
           )}
@@ -52,7 +50,7 @@ export default function TripsViewLayout({
       </div>
 
       <Card>
-        <CardBody>
+        <CardContent className="p-6">
           <div className="space-y-6">
             {/* Search */}
             <TripSearch
@@ -71,9 +69,8 @@ export default function TripsViewLayout({
             {/* Content */}
             {children}
           </div>
-        </CardBody>
+        </CardContent>
       </Card>
     </div>
   );
 }
-

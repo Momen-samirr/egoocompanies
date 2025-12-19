@@ -4,13 +4,25 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { getToken } from "@/lib/auth";
-import Card, { CardHeader, CardBody } from "@/components/common/Card";
-import LoadingSpinner from "@/components/common/LoadingSpinner";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
-  ExclamationTriangleIcon,
-  CheckCircleIcon,
-  ClockIcon,
-} from "@heroicons/react/24/outline";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Circle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ActiveTrip {
   id: string;
@@ -228,23 +240,26 @@ export default function OperationsDashboard() {
     return delayedTrips.find((delay) => delay.tripId === tripId);
   };
 
-  const getSeverityColor = (severity: string) => {
+  const getSeverityVariant = (severity: string): "default" | "destructive" | "secondary" => {
     switch (severity) {
       case "HIGH":
-        return "bg-red-100 text-red-800 border-red-300";
+        return "destructive";
       case "MEDIUM":
-        return "bg-orange-100 text-orange-800 border-orange-300";
+        return "secondary";
       case "LOW":
-        return "bg-yellow-100 text-yellow-800 border-yellow-300";
+        return "secondary";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-300";
+        return "secondary";
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" text="Loading operations dashboard..." />
+        <div className="space-y-4 w-full max-w-md">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
       </div>
     );
   }
@@ -254,92 +269,93 @@ export default function OperationsDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-foreground">
             Operations Dashboard
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Real-time monitoring of active trips
           </p>
         </div>
         <div className="flex items-center gap-4">
           <div
-            className={`flex items-center gap-2 ${
+            className={cn(
+              "flex items-center gap-2",
               isConnected ? "text-green-600" : "text-red-600"
-            }`}
+            )}
           >
-            <div
-              className={`w-3 h-3 rounded-full ${
-                isConnected ? "bg-green-500" : "bg-red-500"
-              } ${isConnected ? "animate-pulse" : ""}`}
+            <Circle
+              className={cn(
+                "h-3 w-3 fill-current",
+                isConnected && "animate-pulse"
+              )}
             />
             <span className="text-sm">
               {isConnected ? "Live" : "Disconnected"}
             </span>
           </div>
-          <select
-            value={filter}
-            onChange={(e) =>
-              setFilter(e.target.value as "all" | "delayed" | "on-time")
-            }
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-          >
-            <option value="all">All Trips</option>
-            <option value="delayed">Delayed Only</option>
-            <option value="on-time">On-Time Only</option>
-          </select>
+          <Select value={filter} onValueChange={(value) => setFilter(value as "all" | "delayed" | "on-time")}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter trips" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Trips</SelectItem>
+              <SelectItem value="delayed">Delayed Only</SelectItem>
+              <SelectItem value="on-time">On-Time Only</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardBody>
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Active Trips</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm text-muted-foreground">Active Trips</p>
+                <p className="text-2xl font-bold text-foreground">
                   {activeTrips.length}
                 </p>
               </div>
-              <ClockIcon className="h-8 w-8 text-blue-500" />
+              <Clock className="h-8 w-8 text-primary" />
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardBody>
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Delayed Trips</p>
-                <p className="text-2xl font-bold text-red-600">
+                <p className="text-sm text-muted-foreground">Delayed Trips</p>
+                <p className="text-2xl font-bold text-destructive">
                   {delayedTrips.length}
                 </p>
               </div>
-              <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
+              <AlertTriangle className="h-8 w-8 text-destructive" />
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardBody>
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">On-Time Trips</p>
+                <p className="text-sm text-muted-foreground">On-Time Trips</p>
                 <p className="text-2xl font-bold text-green-600">
                   {activeTrips.length - delayedTrips.length}
                 </p>
               </div>
-              <CheckCircleIcon className="h-8 w-8 text-green-500" />
+              <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardBody>
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">On-Time Rate</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm text-muted-foreground">On-Time Rate</p>
+                <p className="text-2xl font-bold text-foreground">
                   {activeTrips.length > 0
                     ? Math.round(
                         ((activeTrips.length - delayedTrips.length) /
@@ -350,70 +366,65 @@ export default function OperationsDashboard() {
                   %
                 </p>
               </div>
-              <CheckCircleIcon className="h-8 w-8 text-gray-400" />
+              <CheckCircle className="h-8 w-8 text-muted-foreground" />
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
       </div>
 
       {/* Delayed Trips Alert Banner */}
       {delayedTrips.length > 0 && (
-        <Card className="border-red-300 bg-red-50">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
-              <h2 className="text-lg font-semibold text-red-900">
-                Delayed Trips ({delayedTrips.length})
-              </h2>
-            </div>
-          </CardHeader>
-          <CardBody>
-            <div className="space-y-2">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-5 w-5" />
+          <AlertTitle>Delayed Trips ({delayedTrips.length})</AlertTitle>
+          <AlertDescription>
+            <div className="space-y-2 mt-2">
               {delayedTrips.map((delay) => (
                 <div
                   key={delay.tripId}
-                  className="flex items-center justify-between p-3 bg-white rounded border border-red-200"
+                  className="flex items-center justify-between p-3 bg-background rounded border border-destructive/20"
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-semibold border ${getSeverityColor(
-                          delay.severity
-                        )}`}
+                      <Badge
+                        variant={getSeverityVariant(delay.severity)}
+                        className="text-xs"
                       >
                         {delay.severity}
-                      </span>
-                      <span className="font-semibold text-gray-900">
+                      </Badge>
+                      <span className="font-semibold text-foreground">
                         {delay.tripName}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       Checkpoint: {delay.checkpointName} - Expected delay:{" "}
                       {delay.delayMinutes} minutes
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Expected: {delay.expectedTime.toLocaleTimeString()} | ETA:{" "}
                       {delay.estimatedArrival.toLocaleTimeString()}
                     </p>
                   </div>
-                  <button
+                  <Button
                     onClick={() =>
                       router.push(`/dashboard/trips/${delay.tripId}`)
                     }
-                    className="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                    variant="destructive"
+                    size="sm"
+                    className="ml-4"
                   >
                     View Details
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
-          </CardBody>
-        </Card>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Active Trips List */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <h2 className="text-lg font-semibold text-foreground mb-4">
           Active Trips ({filteredTrips.length})
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -422,37 +433,37 @@ export default function OperationsDashboard() {
             return (
               <Card
                 key={trip.id}
-                className={`cursor-pointer hover:shadow-md transition-shadow ${
-                  delay ? "border-red-300" : ""
-                }`}
+                className={cn(
+                  "cursor-pointer hover:shadow-md transition-shadow",
+                  delay && "border-destructive"
+                )}
                 onClick={() => router.push(`/dashboard/trips/${trip.id}`)}
               >
-                <CardBody>
+                <CardContent className="p-6">
                   <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900">{trip.name}</h3>
+                    <h3 className="font-semibold text-foreground">{trip.name}</h3>
                     {delay && (
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-semibold border ${getSeverityColor(
-                          delay.severity
-                        )}`}
+                      <Badge
+                        variant={getSeverityVariant(delay.severity)}
+                        className="text-xs"
                       >
                         {delay.delayMinutes}m late
-                      </span>
+                      </Badge>
                     )}
                   </div>
 
                   <div className="space-y-2 text-sm">
                     <div>
-                      <span className="text-gray-500">Captain: </span>
-                      <span className="text-gray-900">
+                      <span className="text-muted-foreground">Captain: </span>
+                      <span className="text-foreground">
                         {trip.assignedCaptain?.name || "Unassigned"}
                       </span>
                     </div>
 
                     {trip.nextCheckpoint && (
                       <div>
-                        <span className="text-gray-500">Next: </span>
-                        <span className="text-gray-900">
+                        <span className="text-muted-foreground">Next: </span>
+                        <span className="text-foreground">
                           {trip.nextCheckpoint.name}
                         </span>
                       </div>
@@ -460,8 +471,8 @@ export default function OperationsDashboard() {
 
                     {trip.eta?.minutes && (
                       <div>
-                        <span className="text-gray-500">ETA: </span>
-                        <span className="text-gray-900 font-semibold">
+                        <span className="text-muted-foreground">ETA: </span>
+                        <span className="text-foreground font-semibold">
                           {trip.eta.minutes} min
                         </span>
                         {trip.eta.method === "google_maps" && (
@@ -474,15 +485,15 @@ export default function OperationsDashboard() {
 
                     {trip.currentLocation?.speed && (
                       <div>
-                        <span className="text-gray-500">Speed: </span>
-                        <span className="text-gray-900">
+                        <span className="text-muted-foreground">Speed: </span>
+                        <span className="text-foreground">
                           {trip.currentLocation.speed.toFixed(1)} km/h
                         </span>
                       </div>
                     )}
 
                     {trip.progress?.lastLocationUpdate && (
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         Last update:{" "}
                         {new Date(
                           trip.progress.lastLocationUpdate
@@ -490,7 +501,7 @@ export default function OperationsDashboard() {
                       </div>
                     )}
                   </div>
-                </CardBody>
+                </CardContent>
               </Card>
             );
           })}
@@ -498,13 +509,13 @@ export default function OperationsDashboard() {
 
         {filteredTrips.length === 0 && (
           <Card>
-            <CardBody>
+            <CardContent className="p-6">
               <div className="text-center py-8">
-                <p className="text-gray-500">
+                <p className="text-muted-foreground">
                   No trips match the selected filter
                 </p>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         )}
       </div>

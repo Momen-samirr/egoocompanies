@@ -2057,11 +2057,11 @@ export const createScheduledTrip = async (req: any, res: Response) => {
             let expectedTimeValue = null;
             if (point.expectedTime) {
               // expectedTime comes as "HH:MM" format, combine with tripDate
-              // Store without "Z" suffix so it's interpreted in server timezone
-              // This ensures the time stored represents the local time entered by the user
+              // Create date string without "Z" - JavaScript will interpret as LOCAL time
+              // When stored in MongoDB via Prisma, it will be converted to UTC
+              // When comparing with reachedAt (also UTC), .getTime() ensures correct comparison
+              // Note: This assumes server timezone matches user's intended timezone
               const [hours, minutes] = point.expectedTime.split(":");
-              // Create date string without "Z" - will be interpreted in server timezone
-              // Both expectedTime and reachedAt will be compared in UTC (via getTime())
               const dateTimeString = `${tripDate}T${hours.padStart(
                 2,
                 "0"

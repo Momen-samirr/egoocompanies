@@ -47,39 +47,24 @@ export default function TripTimeline({
       return null;
     }
 
-    // FIX: Handle timezone mismatch for existing trips stored with old format
-    // Same logic as server-side fix
-    const initialDifferenceMs = reachedAt.getTime() - expectedTime.getTime();
-    const initialMinutes = Math.round(initialDifferenceMs / (1000 * 60));
-
-    // Detect timezone bug: if showing "early" by > 1 hour, try adjusting
-    if (initialMinutes < -60) {
-      // getTimezoneOffset() returns negative for timezones ahead of UTC
-      // To convert from UTC (stored) to local (correct), subtract the absolute offset
-      const serverOffsetMinutes = new Date().getTimezoneOffset();
-      const correctionMs = Math.abs(serverOffsetMinutes) * 60 * 1000;
-      const adjustedExpectedTime = new Date(
-        expectedTime.getTime() - correctionMs
-      );
-      const adjustedDifferenceMs =
-        reachedAt.getTime() - adjustedExpectedTime.getTime();
-      const adjustedMinutes = Math.round(adjustedDifferenceMs / (1000 * 60));
-
-      // If adjusted difference is reasonable, use it
-      if (adjustedMinutes >= -60 && adjustedMinutes <= 120) {
-        console.warn(
-          "[TripTimeline] ⚠️ Detected timezone mismatch, applying correction"
-        );
-        expectedTime = adjustedExpectedTime;
-      }
-    }
-
     // Calculate difference in milliseconds
     // getTime() returns milliseconds since epoch (UTC), so this comparison is timezone-independent
+    // Both dates are stored as UTC timestamps, so direct comparison is correct
     const differenceMs = reachedAt.getTime() - expectedTime.getTime();
     const minutes = Math.round(differenceMs / (1000 * 60));
 
-    // Validate difference is reasonable (warn if > 24 hours, likely timezone bug)
+    // Debug logging to help diagnose timing issues
+    console.log("[TripTimeline] Timing calculation:", {
+      expectedTime: expectedTime.toISOString(),
+      expectedLocal: expectedTime.toLocaleString(),
+      reachedAt: reachedAt.toISOString(),
+      reachedLocal: reachedAt.toLocaleString(),
+      differenceMs,
+      minutes,
+      hours: (minutes / 60).toFixed(2),
+    });
+
+    // Validate difference is reasonable (warn if > 24 hours, likely data issue)
     const hoursDifference = Math.abs(minutes) / 60;
     if (hoursDifference > 24) {
       console.warn(
@@ -89,16 +74,17 @@ export default function TripTimeline({
           hours: hoursDifference.toFixed(2),
           expectedTime: expectedTime.toISOString(),
           reachedAt: reachedAt.toISOString(),
-          message: "This may indicate a timezone conversion issue",
+          message: "This may indicate a data storage issue",
         }
       );
     }
 
-    // Consider "on-time" if within 1 minute
-    if (Math.abs(minutes) <= 1) {
+    // Consider "on-time" if within 5 minutes (realistic tolerance for real-world delays)
+    if (Math.abs(minutes) <= 5) {
       return { status: "on-time", minutes: 0 };
     }
 
+    // Return early or late status with absolute minutes difference
     return {
       status: minutes < 0 ? "early" : "late",
       minutes: Math.abs(minutes),

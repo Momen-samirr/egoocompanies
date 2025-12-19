@@ -2,11 +2,20 @@
 
 import { ScheduledTrip } from "@/types/trip";
 import {
-  ChevronUpIcon,
-  ChevronDownIcon,
-  BarsArrowUpIcon,
-} from "@heroicons/react/24/outline";
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
+} from "lucide-react";
 import TripsTableRow from "./TripsTableRow";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 interface SortIndicatorProps {
   field: string;
@@ -20,12 +29,12 @@ const SortIndicator = ({
   direction,
 }: SortIndicatorProps) => {
   if (activeField !== field) {
-    return <BarsArrowUpIcon className="h-4 w-4 text-gray-400" />;
+    return <ArrowUpDown className="h-4 w-4 text-muted-foreground" />;
   }
   return direction === "asc" ? (
-    <ChevronUpIcon className="h-4 w-4 text-indigo-600" />
+    <ChevronUp className="h-4 w-4 text-primary" />
   ) : (
-    <ChevronDownIcon className="h-4 w-4 text-indigo-600" />
+    <ChevronDown className="h-4 w-4 text-primary" />
   );
 };
 
@@ -53,7 +62,7 @@ export default function TripsTable({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-600">Loading trips...</div>
+        <div className="text-muted-foreground">Loading trips...</div>
       </div>
     );
   }
@@ -61,18 +70,18 @@ export default function TripsTable({
   if (trips.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">No trips found</p>
+        <p className="text-muted-foreground">No trips found</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto -mx-6 px-6">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gradient-to-b from-gray-50 via-gray-50 to-gray-100/80 border-b-2 border-gray-200">
-          <tr>
-            <th
-              className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
+    <div className="overflow-x-auto rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={() => handleSort("name")}
             >
               <div className="flex items-center gap-2">
@@ -83,12 +92,10 @@ export default function TripsTable({
                   direction={sortDirection}
                 />
               </div>
-            </th>
-            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-              Company
-            </th>
-            <th
-              className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
+            </TableHead>
+            <TableHead>Company</TableHead>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={() => handleSort("date")}
             >
               <div className="flex items-center gap-2">
@@ -99,15 +106,11 @@ export default function TripsTable({
                   direction={sortDirection}
                 />
               </div>
-            </th>
-            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-              Price
-            </th>
-            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-              Net Amount
-            </th>
-            <th
-              className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
+            </TableHead>
+            <TableHead>Price</TableHead>
+            <TableHead>Net Amount</TableHead>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={() => handleSort("captain")}
             >
               <div className="flex items-center gap-2">
@@ -118,9 +121,9 @@ export default function TripsTable({
                   direction={sortDirection}
                 />
               </div>
-            </th>
-            <th
-              className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
+            </TableHead>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={() => handleSort("checkpoints")}
             >
               <div className="flex items-center gap-2">
@@ -131,9 +134,9 @@ export default function TripsTable({
                   direction={sortDirection}
                 />
               </div>
-            </th>
-            <th
-              className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 transition-colors group"
+            </TableHead>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={() => handleSort("status")}
             >
               <div className="flex items-center gap-2">
@@ -144,13 +147,11 @@ export default function TripsTable({
                   direction={sortDirection}
                 />
               </div>
-            </th>
-            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200/60">
+            </TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {trips.map((trip, index) => (
             <TripsTableRow
               key={trip.id}
@@ -159,8 +160,8 @@ export default function TripsTable({
               onDelete={onDelete}
             />
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

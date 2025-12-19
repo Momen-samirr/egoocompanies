@@ -3,20 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ScheduledTrip } from "@/types/trip";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import StatusBadge from "@/components/common/StatusBadge";
 import StatusChangeModal from "./StatusChangeModal";
 import TripEditModal from "./TripEditModal";
 import TripQuickView from "./TripQuickView";
-import {
-  EyeIcon,
-  PencilIcon,
-  TrashIcon,
-  ArrowPathIcon,
-} from "@heroicons/react/24/outline";
+import { Eye, Pencil, Trash2, RotateCcw, Film } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { deriveTripFinance, formatCurrency } from "@/lib/utils/tripFinance";
 import { useQueryClient } from "@tanstack/react-query";
+import { TableCell, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 interface TripsTableRowProps {
   trip: ScheduledTrip;
@@ -24,7 +22,11 @@ interface TripsTableRowProps {
   onDelete?: (id: string) => void;
 }
 
-export default function TripsTableRow({ trip, index, onDelete }: TripsTableRowProps) {
+export default function TripsTableRow({
+  trip,
+  index,
+  onDelete,
+}: TripsTableRowProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
@@ -50,91 +52,110 @@ export default function TripsTableRow({ trip, index, onDelete }: TripsTableRowPr
 
   return (
     <>
-      <tr
-        key={trip.id}
-        className={`transition-all duration-150 ${
-          index % 2 === 0
-            ? "bg-white hover:bg-indigo-50/40"
-            : "bg-gray-50/30 hover:bg-indigo-50/40"
-        }`}
+      <TableRow
+        className={cn(
+          "transition-all duration-150",
+          index % 2 === 0 ? "bg-background" : "bg-muted/30"
+        )}
       >
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="text-sm font-semibold text-gray-900">{trip.name}</div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="text-sm text-gray-900">
+        <TableCell className="whitespace-nowrap">
+          <div className="text-sm font-semibold text-foreground">
+            {trip.name}
+          </div>
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
+          <div className="text-sm text-foreground">
             {trip.company?.name || (
-              <span className="text-gray-400 italic">No company</span>
+              <span className="text-muted-foreground italic">No company</span>
             )}
           </div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="text-sm font-medium text-gray-900">
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
+          <div className="text-sm font-medium text-foreground">
             {new Date(trip.tripDate).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
               year: "numeric",
             })}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5">
+          <div className="text-xs text-muted-foreground mt-0.5">
             {new Date(trip.scheduledTime).toLocaleTimeString("en-US", {
               hour: "numeric",
               minute: "2-digit",
               hour12: true,
             })}
           </div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-muted-foreground/70 mt-1">
             {formatDistanceToNow(new Date(trip.scheduledTime), {
               addSuffix: true,
             })}
           </div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="text-sm font-semibold text-gray-900">
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
+          <div className="text-sm font-semibold text-foreground">
             ${trip.price?.toFixed(2) ?? "0.00"}
           </div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
           <div
-            className={`text-sm font-semibold ${
+            className={cn(
+              "text-sm font-semibold",
               netIsPositive ? "text-emerald-600" : "text-rose-600"
-            }`}
+            )}
           >
             {formatCurrency(finance.netAmount)}
           </div>
-          <div className="text-xs text-gray-500">{finance.ruleLabel}</div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="text-sm font-medium text-gray-900">
+          <div className="text-xs text-muted-foreground">
+            {finance.ruleLabel}
+          </div>
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
+          <div className="text-sm font-medium text-foreground">
             {trip.assignedCaptain?.name || (
-              <span className="text-gray-400 italic font-normal">Not assigned</span>
+              <span className="text-muted-foreground italic font-normal">
+                Not assigned
+              </span>
             )}
           </div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            {trip.points?.length || 0} checkpoint{trip.points?.length !== 1 ? "s" : ""}
-          </span>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
+          <Badge variant="outline" className="text-xs">
+            {trip.points?.length || 0} checkpoint
+            {trip.points?.length !== 1 ? "s" : ""}
+          </Badge>
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
           <StatusBadge status={trip.status} size="sm" />
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
           <div className="flex items-center gap-2">
+            {trip.status === "COMPLETED" && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() =>
+                  router.push(`/dashboard/trips/${trip.id}?tab=replay`)
+                }
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Film className="h-4 w-4 mr-1" />
+                Replay
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
-              icon={EyeIcon}
               onClick={() => setIsQuickViewOpen(true)}
             >
+              <Eye className="h-4 w-4 mr-1" />
               View
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              icon={ArrowPathIcon}
               onClick={() => setIsStatusModalOpen(true)}
             >
+              <RotateCcw className="h-4 w-4 mr-1" />
               Status
             </Button>
             {(trip.status === "SCHEDULED" ||
@@ -144,26 +165,26 @@ export default function TripsTableRow({ trip, index, onDelete }: TripsTableRowPr
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={PencilIcon}
                   onClick={() => setIsEditModalOpen(true)}
                 >
+                  <Pencil className="h-4 w-4 mr-1" />
                   Edit
                 </Button>
                 {(trip.status === "SCHEDULED" || trip.status === "FAILED") && (
                   <Button
-                    variant="danger"
+                    variant="destructive"
                     size="sm"
-                    icon={TrashIcon}
                     onClick={() => handleDelete(trip.id)}
                   >
+                    <Trash2 className="h-4 w-4 mr-1" />
                     Delete
                   </Button>
                 )}
               </>
             )}
           </div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
 
       {/* Modals */}
       <StatusChangeModal
@@ -193,4 +214,3 @@ export default function TripsTableRow({ trip, index, onDelete }: TripsTableRowPr
     </>
   );
 }
-

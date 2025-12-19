@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
-import Button from "./Button";
+import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface ExportButtonProps {
   onClick: () => void;
@@ -16,15 +17,14 @@ export default function ExportButton({
 }: ExportButtonProps) {
   return (
     <Button
-      variant="secondary"
+      variant="outline"
       size="sm"
-      icon={ArrowDownTrayIcon}
       onClick={onClick}
       disabled={disabled}
-      className={className}
+      className={cn(className)}
     >
+      <Download className="h-4 w-4 mr-2" />
       Export CSV
     </Button>
   );
 }
-

@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { Ride, Pagination } from "@/types";
-import Card, { CardBody } from "@/components/common/Card";
+import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "@/components/common/StatusBadge";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import EmptyState from "@/components/common/EmptyState";
 import { EyeIcon } from "@heroicons/react/24/outline";
@@ -50,7 +50,7 @@ export default function RidesPage() {
       </div>
 
       <Card>
-        <CardBody>
+        <CardContent>
           <div className="mb-4">
             <select
               value={statusFilter}
@@ -112,7 +112,10 @@ export default function RidesPage() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200/60">
                     {rides.map((ride) => (
-                      <tr key={ride.id} className="hover:bg-indigo-50/30 transition-colors duration-150">
+                      <tr
+                        key={ride.id}
+                        className="hover:bg-indigo-50/30 transition-colors duration-150"
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(ride.cratedAt).toLocaleDateString()}
                         </td>
@@ -120,11 +123,17 @@ export default function RidesPage() {
                           {ride.user?.name || ride.user?.phone_number || "N/A"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {ride.driver?.name || ride.driver?.phone_number || "N/A"}
+                          {ride.driver?.name ||
+                            ride.driver?.phone_number ||
+                            "N/A"}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
-                          <div className="font-medium">{ride.currentLocationName}</div>
-                          <div className="text-xs text-gray-400">→ {ride.destinationLocationName}</div>
+                          <div className="font-medium">
+                            {ride.currentLocationName}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            → {ride.destinationLocationName}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {ride.distance}
@@ -140,7 +149,9 @@ export default function RidesPage() {
                             variant="ghost"
                             size="sm"
                             icon={EyeIcon}
-                            onClick={() => router.push(`/dashboard/rides/${ride.id}`)}
+                            onClick={() =>
+                              router.push(`/dashboard/rides/${ride.id}`)
+                            }
                           >
                             View
                           </Button>
@@ -154,13 +165,13 @@ export default function RidesPage() {
               {pagination && pagination.pages > 1 && (
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm text-gray-700">
-                    Showing {((page - 1) * pagination.limit) + 1} to{" "}
+                    Showing {(page - 1) * pagination.limit + 1} to{" "}
                     {Math.min(page * pagination.limit, pagination.total)} of{" "}
                     {pagination.total} results
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
                       onClick={() => setPage(page - 1)}
                       disabled={page === 1}
@@ -168,7 +179,7 @@ export default function RidesPage() {
                       Previous
                     </Button>
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
                       onClick={() => setPage(page + 1)}
                       disabled={page >= pagination.pages}
@@ -180,9 +191,8 @@ export default function RidesPage() {
               )}
             </>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
     </div>
   );
 }
-

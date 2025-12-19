@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
-import Card, { CardHeader, CardBody } from "@/components/common/Card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import StatusBadge from "@/components/common/StatusBadge";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import TripTimeline from "@/components/trips/TripTimeline";
 import TripLiveTracking from "@/components/trips/TripLiveTracking";
@@ -110,18 +110,52 @@ interface ScheduledTrip {
 export default function TripDetailsPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const tripId = params.id as string;
   const [trip, setTrip] = useState<ScheduledTrip | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForceCloseModal, setShowForceCloseModal] = useState(false);
   const [forceClosing, setForceClosing] = useState(false);
+
+  // Initialize activeTab from URL parameter or default to "overview"
+  const tabFromUrl = searchParams.get("tab");
+  const validTabs: Array<
+    "overview" | "live" | "replay" | "route" | "analytics" | "alerts"
+  > = ["overview", "live", "replay", "route", "analytics", "alerts"];
+  const initialTab =
+    tabFromUrl && validTabs.includes(tabFromUrl as any)
+      ? (tabFromUrl as
+          | "overview"
+          | "live"
+          | "replay"
+          | "route"
+          | "analytics"
+          | "alerts")
+      : "overview";
+
   const [activeTab, setActiveTab] = useState<
     "overview" | "live" | "replay" | "route" | "analytics" | "alerts"
-  >("overview");
+  >(initialTab);
 
   useEffect(() => {
     fetchTrip();
   }, [tripId]);
+
+  // Sync activeTab with URL parameter when it changes
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && validTabs.includes(tabFromUrl as any)) {
+      setActiveTab(
+        tabFromUrl as
+          | "overview"
+          | "live"
+          | "replay"
+          | "route"
+          | "analytics"
+          | "alerts"
+      );
+    }
+  }, [searchParams]);
 
   const fetchTrip = async () => {
     try {
@@ -215,14 +249,14 @@ export default function TripDetailsPage() {
                 View Live Tracking
               </Button>
               <Button
-                variant="secondary"
+                variant="outline"
                 icon={PencilIcon}
                 onClick={() => router.push(`/dashboard/trips/${tripId}/edit`)}
               >
                 Edit Trip
               </Button>
               <Button
-                variant="danger"
+                variant="destructive"
                 onClick={() => setShowForceCloseModal(true)}
                 disabled={forceClosing}
               >
@@ -233,7 +267,7 @@ export default function TripDetailsPage() {
           {(trip.status === "SCHEDULED" || trip.status === "FAILED") && (
             <>
               <Button
-                variant="secondary"
+                variant="outline"
                 icon={PencilIcon}
                 onClick={() => router.push(`/dashboard/trips/${tripId}/edit`)}
               >
@@ -247,7 +281,11 @@ export default function TripDetailsPage() {
                   Assign Captain
                 </Button>
               )}
-              <Button variant="danger" icon={TrashIcon} onClick={handleDelete}>
+              <Button
+                variant="destructive"
+                icon={TrashIcon}
+                onClick={handleDelete}
+              >
                 Delete
               </Button>
             </>
@@ -340,7 +378,7 @@ export default function TripDetailsPage() {
                   Trip Information
                 </h2>
               </CardHeader>
-              <CardBody>
+              <CardContent>
                 <dl className="space-y-4">
                   <div>
                     <dt className="text-sm font-medium text-gray-500">
@@ -462,7 +500,7 @@ export default function TripDetailsPage() {
                     </>
                   )}
                 </dl>
-              </CardBody>
+              </CardContent>
             </Card>
 
             {/* Checkpoints Timeline */}
@@ -472,14 +510,14 @@ export default function TripDetailsPage() {
                   Checkpoints
                 </h2>
               </CardHeader>
-              <CardBody>
+              <CardContent>
                 <TripTimeline
                   checkpoints={trip.points}
                   currentPointIndex={trip.progress?.currentPointIndex}
                   status={trip.status}
                   tripType={trip.tripType}
                 />
-              </CardBody>
+              </CardContent>
             </Card>
           </div>
 
@@ -491,7 +529,7 @@ export default function TripDetailsPage() {
                   Status Change History
                 </h2>
               </CardHeader>
-              <CardBody>
+              <CardContent>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -560,7 +598,7 @@ export default function TripDetailsPage() {
                     </tbody>
                   </table>
                 </div>
-              </CardBody>
+              </CardContent>
             </Card>
           )}
 
@@ -690,14 +728,14 @@ export default function TripDetailsPage() {
               </ul>
               <div className="flex gap-3 justify-end">
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => setShowForceCloseModal(false)}
                   disabled={forceClosing}
                 >
                   Cancel
                 </Button>
                 <Button
-                  variant="danger"
+                  variant="destructive"
                   onClick={handleForceClose}
                   loading={forceClosing}
                   disabled={forceClosing}

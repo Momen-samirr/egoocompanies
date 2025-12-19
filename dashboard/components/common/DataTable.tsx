@@ -3,7 +3,16 @@
 import { ReactNode } from "react";
 import LoadingSpinner from "./LoadingSpinner";
 import EmptyState from "./EmptyState";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export interface Column<T> {
   key: string;
@@ -66,71 +75,60 @@ export default function DataTable<T extends { id: string }>({
     <div className="space-y-4">
       {searchable && onSearch && (
         <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-          </div>
-          <input
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
             type="text"
             placeholder={searchPlaceholder}
             onChange={(e) => onSearch(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            className="pl-10"
           />
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
               {columns.map((column) => (
-                <th
-                  key={column.key}
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  {column.label}
-                </th>
+                <TableHead key={column.key}>{column.label}</TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {data.map((item) => (
-              <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+              <TableRow key={item.id}>
                 {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                  >
+                  <TableCell key={column.key}>
                     {column.render ? column.render(item) : (item as any)[column.key]}
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {pagination && pagination.pages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 sm:px-6">
+        <div className="flex items-center justify-between px-4 py-3 border-t">
           <div className="flex-1 flex justify-between sm:hidden">
             <button
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page === 1}
-              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="relative inline-flex items-center px-4 py-2 border border-input text-sm font-medium rounded-md text-foreground bg-background hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
             <button
               onClick={() => pagination.onPageChange(pagination.page + 1)}
               disabled={pagination.page >= pagination.pages}
-              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ml-3 relative inline-flex items-center px-4 py-2 border border-input text-sm font-medium rounded-md text-foreground bg-background hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
             </button>
           </div>
           <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-gray-700">
+              <p className="text-sm text-muted-foreground">
                 Showing <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> to{" "}
                 <span className="font-medium">
                   {Math.min(pagination.page * pagination.limit, pagination.total)}
@@ -143,17 +141,17 @@ export default function DataTable<T extends { id: string }>({
                 <button
                   onClick={() => pagination.onPageChange(pagination.page - 1)}
                   disabled={pagination.page === 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-input bg-background text-sm font-medium text-muted-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Previous
                 </button>
-                <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                <span className="relative inline-flex items-center px-4 py-2 border border-input bg-background text-sm font-medium text-foreground">
                   Page {pagination.page} of {pagination.pages}
                 </span>
                 <button
                   onClick={() => pagination.onPageChange(pagination.page + 1)}
                   disabled={pagination.page >= pagination.pages}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-input bg-background text-sm font-medium text-muted-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>
@@ -165,4 +163,3 @@ export default function DataTable<T extends { id: string }>({
     </div>
   );
 }
-

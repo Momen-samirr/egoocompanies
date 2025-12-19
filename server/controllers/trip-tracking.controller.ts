@@ -1,6 +1,7 @@
 require("dotenv").config();
 import { Request, Response } from "express";
 import prisma from "../utils/prisma";
+import axios from "axios";
 import {
   calculateDistanceFromRoute,
   calculateDistanceToCheckpoint,
@@ -721,6 +722,135 @@ export const getActiveTripsLive = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch active trips",
+    });
+  }
+};
+
+/**
+ * Get road distance and time from driver's current location to next checkpoint
+ * GET /api/v1/admin/trips/:id/road-distance
+ */
+export const getRoadDistanceToNextCheckpoint = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude } = req.query;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        message: "latitude and longitude query parameters are required",
+      });
+    }
+
+    const trip = await prisma.scheduledTrip.findUnique({
+      where: { id },
+      include: {
+        points: {
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    // Find next unreached checkpoint
+    const nextCheckpoint = trip.points.find((p) => !p.reachedAt);
+
+    if (!nextCheckpoint) {
+      return res.status(404).json({
+        success: false,
+        message: "No unreached checkpoint found",
+      });
+    }
+
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        message: "Google Maps API key not configured",
+      });
+    }
+
+    try {
+      const origin = `${latitude},${longitude}`;
+      const destination = `${nextCheckpoint.latitude},${nextCheckpoint.longitude}`;
+
+      const response = await axios.get(
+        "https://maps.googleapis.com/maps/api/distancematrix/json",
+        {
+          params: {
+            origins: origin,
+            destinations: destination,
+            key: apiKey,
+            mode: "driving",
+            departure_time: "now",
+            units: "metric",
+          },
+          timeout: 5000,
+        }
+      );
+
+      if (response.data.status !== "OK") {
+        return res.status(500).json({
+          success: false,
+          message: `Google Maps API error: ${response.data.status}`,
+        });
+      }
+
+      const element = response.data.rows[0]?.elements[0];
+
+      if (!element || element.status !== "OK") {
+        return res.status(500).json({
+          success: false,
+          message: `Google Maps API element error: ${
+            element?.status || "UNKNOWN"
+          }`,
+        });
+      }
+
+      const distanceInMeters = element.distance?.value;
+      const durationInSeconds =
+        element.duration_in_traffic?.value || element.duration?.value;
+
+      if (!distanceInMeters || !durationInSeconds) {
+        return res.status(500).json({
+          success: false,
+          message: "Missing distance or duration from Google Maps API",
+        });
+      }
+
+      res.json({
+        success: true,
+        distance: distanceInMeters, // meters
+        duration: durationInSeconds, // seconds
+        checkpoint: {
+          id: nextCheckpoint.id,
+          name: nextCheckpoint.name,
+          latitude: nextCheckpoint.latitude,
+          longitude: nextCheckpoint.longitude,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error calling Google Maps API:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch road distance",
+      });
+    }
+  } catch (error: any) {
+    console.error("Error getting road distance:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get road distance",
     });
   }
 };

@@ -12,8 +12,8 @@ import NotificationFilters from "@/components/notifications/NotificationFilters"
 import Pagination from "@/components/common/Pagination";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import EmptyState from "@/components/common/EmptyState";
-import Button from "@/components/common/Button";
-import Card, { CardBody } from "@/components/common/Card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { CheckIcon } from "@heroicons/react/24/outline";
 
 export default function NotificationsPage() {
@@ -80,7 +80,7 @@ export default function NotificationsPage() {
             onClick={handleMarkAllAsRead}
             disabled={isMarkingAllAsRead}
             icon={CheckIcon}
-            variant="secondary"
+            variant="outline"
           >
             {isMarkingAllAsRead ? "Marking..." : "Mark All as Read"}
           </Button>
@@ -94,7 +94,7 @@ export default function NotificationsPage() {
       />
 
       <Card>
-        <CardBody>
+        <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner />
@@ -111,7 +111,7 @@ export default function NotificationsPage() {
               </div>
               <Button
                 onClick={() => window.location.reload()}
-                variant="secondary"
+                variant="outline"
               >
                 Retry
               </Button>
@@ -184,7 +184,7 @@ export default function NotificationsPage() {
               )}
             </>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
     </div>
   );

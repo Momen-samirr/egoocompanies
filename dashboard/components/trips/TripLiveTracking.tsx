@@ -379,12 +379,56 @@ export default function TripLiveTracking({
     };
   }, [tripId]);
 
-  // Calculate trip progress
+  // Periodically fetch trip details to update checkpoint status
   useEffect(() => {
-    if (trackingData?.progress && checkpoints.length > 0) {
-      const progress =
-        (trackingData.progress.currentPointIndex / checkpoints.length) * 100;
-      setTripProgress(progress);
+    const fetchTripDetails = async () => {
+      try {
+        const tripResponse = await api.get(`/admin/trips/${tripId}`);
+        const trip = tripResponse.data.trip;
+
+        if (trip.points && trip.points.length > 0) {
+          const points = trip.points.map((p: any) => ({
+            id: p.id,
+            name: p.name || `Point ${p.order + 1}`,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            order: p.order,
+            isFinalPoint: p.isFinalPoint || false,
+            reachedAt: p.reachedAt,
+          }));
+
+          setCheckpoints(points);
+        }
+      } catch (error) {
+        console.error("Error fetching updated trip details:", error);
+      }
+    };
+
+    // Fetch every 10 seconds to update checkpoint status
+    const interval = setInterval(fetchTripDetails, 10000);
+
+    return () => clearInterval(interval);
+  }, [tripId]);
+
+  // Calculate trip progress based on checkpoints reached
+  useEffect(() => {
+    if (checkpoints.length > 0) {
+      // Method 1: Use progress.currentPointIndex if available
+      if (trackingData?.progress?.currentPointIndex !== undefined) {
+        const progress =
+          (trackingData.progress.currentPointIndex / checkpoints.length) * 100;
+        setTripProgress(Math.min(progress, 100));
+      }
+      // Method 2: Calculate based on checkpoints reached (fallback)
+      else {
+        const reachedCount = checkpoints.filter(
+          (cp) => cp.reachedAt !== null && cp.reachedAt !== undefined
+        ).length;
+        const progress = (reachedCount / checkpoints.length) * 100;
+        setTripProgress(Math.min(progress, 100));
+      }
+    } else {
+      setTripProgress(0);
     }
   }, [trackingData, checkpoints]);
 

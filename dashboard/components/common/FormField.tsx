@@ -2,6 +2,9 @@
 
 import { ReactNode } from "react";
 import { FieldError } from "react-hook-form";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
 
 interface FormFieldProps {
   label?: string;
@@ -21,27 +24,26 @@ export default function FormField({
   className = "",
 }: FormFieldProps) {
   return (
-    <div className={className}>
+    <div className={cn("space-y-2", className)}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <Label>
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
-        </label>
+          {required && <span className="text-destructive ml-1">*</span>}
+        </Label>
       )}
 
       {children}
 
       {hint && !error && (
-        <p className="mt-1.5 text-sm text-gray-500">{hint}</p>
+        <p className="text-sm text-muted-foreground">{hint}</p>
       )}
 
       {error && (
-        <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
-          <span>⚠</span>
+        <p className="text-sm text-destructive flex items-center gap-1">
+          <AlertCircle className="h-4 w-4" />
           <span>{error.message}</span>
         </p>
       )}
     </div>
   );
 }
-

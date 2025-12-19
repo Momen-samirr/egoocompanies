@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import FormField from "@/components/common/FormField";
 import { ScheduledTripStatus } from "@/types/trip";
 import api from "@/lib/api";
@@ -150,13 +150,17 @@ export default function StatusChangeModal({
           <div className="flex gap-3 justify-end p-6 border-t border-gray-200">
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               onClick={handleClose}
               disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>
+            <Button
+              type="submit"
+              loading={isSubmitting}
+              disabled={isSubmitting}
+            >
               {isSubmitting ? "Changing..." : "Change Status"}
             </Button>
           </div>
@@ -165,4 +169,3 @@ export default function StatusChangeModal({
     </div>
   );
 }
-

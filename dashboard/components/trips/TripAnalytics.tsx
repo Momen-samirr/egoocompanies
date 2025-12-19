@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import Card, { CardHeader, CardBody } from "@/components/common/Card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import {
   LineChart,
   Line,
@@ -127,44 +127,44 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
-          <CardBody>
+          <CardContent>
             <div className="text-sm text-gray-500">Average Speed</div>
             <div className="text-2xl font-semibold">
               {analytics.averageSpeed.toFixed(1)} km/h
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
         <Card>
-          <CardBody>
+          <CardContent>
             <div className="text-sm text-gray-500">Max Speed</div>
             <div className="text-2xl font-semibold">
               {analytics.maxSpeed.toFixed(1)} km/h
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
         <Card>
-          <CardBody>
+          <CardContent>
             <div className="text-sm text-gray-500">Total Idle Time</div>
             <div className="text-2xl font-semibold">
               {analytics.totalIdleTime.toFixed(1)} min
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
         <Card>
-          <CardBody>
+          <CardContent>
             <div className="text-sm text-gray-500">Route Adherence</div>
             <div className="text-2xl font-semibold">
               {analytics.routeAdherence.toFixed(1)}%
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
         <Card>
-          <CardBody>
+          <CardContent>
             <div className="text-sm text-gray-500">Total Distance</div>
             <div className="text-2xl font-semibold">
               {(analytics.totalDistance / 1000).toFixed(2)} km
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
       </div>
 
@@ -174,7 +174,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
           <CardHeader>
             <h3 className="text-lg font-semibold">Speed Over Time</h3>
           </CardHeader>
-          <CardBody>
+          <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={speedData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -203,7 +203,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
                 />
               </LineChart>
             </ResponsiveContainer>
-          </CardBody>
+          </CardContent>
         </Card>
       )}
 
@@ -213,7 +213,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
           <CardHeader>
             <h3 className="text-lg font-semibold">Checkpoint Timing</h3>
           </CardHeader>
-          <CardBody>
+          <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={checkpointData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -237,7 +237,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
                 <Bar dataKey="actual" fill="#10B981" name="Actual" />
               </BarChart>
             </ResponsiveContainer>
-          </CardBody>
+          </CardContent>
         </Card>
       )}
 
@@ -247,7 +247,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
           <CardHeader>
             <h3 className="text-lg font-semibold">Idle Time Segments</h3>
           </CardHeader>
-          <CardBody>
+          <CardContent>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -280,7 +280,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
                 </tbody>
               </table>
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
       )}
 
@@ -290,7 +290,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
           <CardHeader>
             <h3 className="text-lg font-semibold">Checkpoint Details</h3>
           </CardHeader>
-          <CardBody>
+          <CardContent>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -346,7 +346,7 @@ export default function TripAnalytics({ tripId }: TripAnalyticsProps) {
                 </tbody>
               </table>
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
       )}
     </div>

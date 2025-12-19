@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import EmptyState from "@/components/common/EmptyState";
 import { PlusIcon } from "@heroicons/react/24/outline";
@@ -82,7 +82,7 @@ export default function TripTemplatesPage() {
 
       {/* Search */}
       <Card>
-        <CardBody>
+        <CardContent>
           <input
             type="text"
             value={searchQuery}
@@ -93,7 +93,7 @@ export default function TripTemplatesPage() {
             placeholder="Search templates..."
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
           />
-        </CardBody>
+        </CardContent>
       </Card>
 
       {/* Templates Grid */}

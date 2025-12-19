@@ -8,7 +8,7 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import api from "@/lib/api";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 
 interface DocumentInfo {
   url?: string;
@@ -422,7 +422,7 @@ export default function DocumentViewer({
                 {document.uploaded && document.status !== "approved" && (
                   <div className="p-3 bg-gray-50 border-t border-gray-200 flex gap-2">
                     <Button
-                      variant="primary"
+                      variant="default"
                       size="sm"
                       onClick={() => handleApprove(doc.key)}
                       disabled={loading[doc.key]}
@@ -430,7 +430,7 @@ export default function DocumentViewer({
                       {loading[doc.key] ? "..." : "Approve"}
                     </Button>
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
                       onClick={() => openRejectionModal(doc.key)}
                       disabled={loading[doc.key]}
@@ -534,7 +534,7 @@ export default function DocumentViewer({
             />
             <div className="flex gap-3 mt-4">
               <Button
-                variant="primary"
+                variant="default"
                 onClick={handleReject}
                 disabled={loading[rejectionModal.documentType]}
               >
@@ -543,7 +543,7 @@ export default function DocumentViewer({
                   : "Confirm Reject"}
               </Button>
               <Button
-                variant="secondary"
+                variant="outline"
                 onClick={() =>
                   setRejectionModal({
                     open: false,

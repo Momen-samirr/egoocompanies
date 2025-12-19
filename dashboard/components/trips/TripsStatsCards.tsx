@@ -1,6 +1,7 @@
 "use client";
 
-import Card, { CardBody } from "@/components/common/Card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useTrips, TripView } from "@/hooks/useTrips";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import Link from "next/link";
@@ -20,12 +21,12 @@ export default function TripsStatsCards({ view }: TripsStatsCardsProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map((i) => (
           <Card key={i}>
-            <CardBody>
-              <div className="animate-pulse space-y-3">
-                <div className="h-4 bg-gray-200 rounded w-1/2" />
-                <div className="h-8 bg-gray-200 rounded" />
+            <CardContent className="p-6">
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-8 w-full" />
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         ))}
       </div>
@@ -36,14 +37,19 @@ export default function TripsStatsCards({ view }: TripsStatsCardsProps) {
 
   return (
     <Card>
-      <CardBody>
+      <CardContent className="p-6">
         <div className="text-center">
-          <p className="text-sm text-gray-500 uppercase tracking-wide mb-2">
-            Total {view === "all" ? "Trips" : view.charAt(0).toUpperCase() + view.slice(1) + " Trips"}
+          <p className="text-sm text-muted-foreground uppercase tracking-wide mb-2">
+            Total{" "}
+            {view === "all"
+              ? "Trips"
+              : view.charAt(0).toUpperCase() + view.slice(1) + " Trips"}
           </p>
-          <p className="text-4xl font-bold text-gray-900">{total.toLocaleString()}</p>
+          <p className="text-4xl font-bold text-foreground">
+            {total.toLocaleString()}
+          </p>
         </div>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
@@ -111,12 +117,12 @@ export function OverviewStats({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <Card key={i}>
-            <CardBody>
-              <div className="animate-pulse space-y-3">
-                <div className="h-4 bg-gray-200 rounded w-1/2" />
-                <div className="h-8 bg-gray-200 rounded" />
+            <CardContent className="p-6">
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-8 w-full" />
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         ))}
       </div>
@@ -128,16 +134,19 @@ export function OverviewStats({
       {stats.map((stat) => (
         <Link key={stat.label} href={stat.href}>
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardBody>
+            <CardContent className="p-6">
               <div className="text-center">
-                <p className="text-sm text-gray-500 uppercase tracking-wide mb-2">{stat.label}</p>
-                <p className="text-3xl font-bold text-gray-900">{stat.value.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground uppercase tracking-wide mb-2">
+                  {stat.label}
+                </p>
+                <p className="text-3xl font-bold text-foreground">
+                  {stat.value.toLocaleString()}
+                </p>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </Link>
       ))}
     </div>
   );
 }
-

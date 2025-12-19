@@ -1,15 +1,11 @@
 "use client";
 
 import { TripTemplate } from "@/types/trip";
-import Card, { CardBody } from "@/components/common/Card";
-import {
-  MapPinIcon,
-  BuildingOfficeIcon,
-  UserIcon,
-} from "@heroicons/react/24/outline";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { MapPin, Building2, User, Pencil, Trash2, Plus } from "lucide-react";
 import Link from "next/link";
-import Button from "@/components/common/Button";
-import { PencilIcon, TrashIcon, PlusIcon } from "@heroicons/react/24/outline";
 
 interface TripTemplateCardProps {
   template: TripTemplate;
@@ -22,34 +18,34 @@ export default function TripTemplateCard({
 }: TripTemplateCardProps) {
   return (
     <Card className="hover:shadow-md transition-shadow">
-      <CardBody>
+      <CardContent className="p-6">
         <div className="flex justify-between items-start">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-foreground">
                 {template.name}
               </h3>
-              <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
+              <Badge variant="outline" className="text-xs">
                 {template.tripType}
-              </span>
+              </Badge>
             </div>
 
             {template.description && (
-              <p className="text-sm text-gray-600 mb-3">
+              <p className="text-sm text-muted-foreground mb-3">
                 {template.description}
               </p>
             )}
 
-            <div className="space-y-2 text-sm text-gray-600">
+            <div className="space-y-2 text-sm text-muted-foreground">
               {template.company && (
                 <div className="flex items-center gap-2">
-                  <BuildingOfficeIcon className="h-4 w-4" />
+                  <Building2 className="h-4 w-4" />
                   <span>{template.company.name}</span>
                 </div>
               )}
 
               <div className="flex items-center gap-2">
-                <MapPinIcon className="h-4 w-4" />
+                <MapPin className="h-4 w-4" />
                 <span>
                   {template.points.length} checkpoint
                   {template.points.length !== 1 ? "s" : ""}
@@ -58,13 +54,13 @@ export default function TripTemplateCard({
 
               {template.assignedCaptain && (
                 <div className="flex items-center gap-2">
-                  <UserIcon className="h-4 w-4" />
+                  <User className="h-4 w-4" />
                   <span>{template.assignedCaptain.name}</span>
                 </div>
               )}
 
               {template.price !== undefined && template.price !== null && (
-                <div className="text-sm font-medium text-gray-900">
+                <div className="text-sm font-medium text-foreground">
                   Price: ${template.price.toFixed(2)}
                 </div>
               )}
@@ -75,20 +71,21 @@ export default function TripTemplateCard({
             <Link
               href={`/dashboard/trips/templates/${template.id}/create-trips`}
             >
-              <Button variant="primary" size="sm" icon={PlusIcon}>
+              <Button variant="default" size="sm">
+                <Plus className="h-4 w-4 mr-1" />
                 Create Trips
               </Button>
             </Link>
             <Link href={`/dashboard/trips/templates/${template.id}`}>
-              <Button variant="secondary" size="sm" icon={PencilIcon}>
+              <Button variant="outline" size="sm">
+                <Pencil className="h-4 w-4 mr-1" />
                 Edit
               </Button>
             </Link>
             {onDelete && (
               <Button
-                variant="danger"
+                variant="destructive"
                 size="sm"
-                icon={TrashIcon}
                 onClick={() => {
                   if (
                     confirm("Are you sure you want to delete this template?")
@@ -97,12 +94,13 @@ export default function TripTemplateCard({
                   }
                 }}
               >
+                <Trash2 className="h-4 w-4 mr-1" />
                 Delete
               </Button>
             )}
           </div>
         </div>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }

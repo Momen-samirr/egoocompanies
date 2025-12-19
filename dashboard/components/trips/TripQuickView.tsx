@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import StatusBadge from "@/components/common/StatusBadge";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import { ScheduledTrip } from "@/types/trip";
@@ -127,11 +127,17 @@ export default function TripQuickView({
                       <p className="text-sm font-semibold text-gray-900">
                         {trip.assignedCaptain.name}
                       </p>
-                      <p className="text-xs text-gray-500">{trip.assignedCaptain.phone_number}</p>
-                      <p className="text-xs text-gray-500">{trip.assignedCaptain.email}</p>
+                      <p className="text-xs text-gray-500">
+                        {trip.assignedCaptain.phone_number}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {trip.assignedCaptain.email}
+                      </p>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-400 italic">No captain assigned</p>
+                    <p className="text-sm text-gray-400 italic">
+                      No captain assigned
+                    </p>
                   )}
                 </div>
 
@@ -176,12 +182,12 @@ export default function TripQuickView({
           {/* Footer */}
           {trip && (
             <div className="flex gap-3 justify-end p-6 border-t border-gray-200 sticky bottom-0 bg-white">
-              <Button variant="secondary" onClick={onClose}>
+              <Button variant="outline" onClick={onClose}>
                 Close
               </Button>
               {onEdit && (
                 <Button
-                  variant="primary"
+                  variant="default"
                   onClick={() => {
                     onEdit();
                     onClose();
@@ -191,7 +197,7 @@ export default function TripQuickView({
                 </Button>
               )}
               <Button
-                variant="primary"
+                variant="default"
                 onClick={() => {
                   router.push(`/dashboard/trips/${tripId}`);
                   onClose();
@@ -206,4 +212,3 @@ export default function TripQuickView({
     </>
   );
 }
-

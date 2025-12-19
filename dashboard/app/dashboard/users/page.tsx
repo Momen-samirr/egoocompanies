@@ -4,11 +4,20 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { User, Pagination } from "@/types";
-import Card, { CardBody } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import EmptyState from "@/components/common/EmptyState";
-import { EyeIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { Eye, Search } from "lucide-react";
 
 export default function UsersPage() {
   const router = useRouter();
@@ -51,23 +60,21 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Users Management</h1>
+        <h1 className="text-3xl font-bold text-foreground">Users Management</h1>
       </div>
 
       <Card>
-        <CardBody>
+        <CardContent className="p-6">
           <form onSubmit={handleSearch} className="mb-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
                   type="text"
                   placeholder="Search by name, email, or phone..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 sm:text-sm"
+                  className="pl-10"
                 />
               </div>
               <Button type="submit">Search</Button>
@@ -85,85 +92,73 @@ export default function UsersPage() {
             />
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200/60">
-                  <thead className="bg-gradient-to-b from-gray-50 to-gray-100/50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Phone
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Email
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Total Rides
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Rating
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Joined
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200/60">
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Total Rides</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>Joined</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {users.map((user) => (
-                      <tr key={user.id} className="hover:bg-indigo-50/30 transition-colors duration-150">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium">
                           {user.name || "N/A"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {user.phone_number}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        </TableCell>
+                        <TableCell>{user.phone_number}</TableCell>
+                        <TableCell className="text-muted-foreground">
                           {user.email || "N/A"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {user.totalRides}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        </TableCell>
+                        <TableCell>{user.totalRides}</TableCell>
+                        <TableCell>
                           <span className="inline-flex items-center">
                             {user.ratings.toFixed(1)}
-                            <svg className="h-4 w-4 text-yellow-400 ml-1" fill="currentColor" viewBox="0 0 20 20">
+                            <svg
+                              className="h-4 w-4 text-yellow-400 ml-1"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
                               <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                             </svg>
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
                           {new Date(user.cratedAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        </TableCell>
+                        <TableCell>
                           <Button
                             variant="ghost"
                             size="sm"
-                            icon={EyeIcon}
-                            onClick={() => router.push(`/dashboard/users/${user.id}`)}
+                            onClick={() =>
+                              router.push(`/dashboard/users/${user.id}`)
+                            }
                           >
+                            <Eye className="h-4 w-4 mr-1" />
                             View
                           </Button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
               {pagination && pagination.pages > 1 && (
                 <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-gray-700">
-                    Showing {((page - 1) * pagination.limit) + 1} to{" "}
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(page - 1) * pagination.limit + 1} to{" "}
                     {Math.min(page * pagination.limit, pagination.total)} of{" "}
                     {pagination.total} results
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
                       onClick={() => setPage(page - 1)}
                       disabled={page === 1}
@@ -171,7 +166,7 @@ export default function UsersPage() {
                       Previous
                     </Button>
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
                       onClick={() => setPage(page + 1)}
                       disabled={page >= pagination.pages}
@@ -183,9 +178,8 @@ export default function UsersPage() {
               )}
             </>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
     </div>
   );
 }
-

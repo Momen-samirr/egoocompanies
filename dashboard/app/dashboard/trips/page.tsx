@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import { PlusIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
 import { ScheduledTrip, TripFinanceSummary } from "@/types/trip";
@@ -119,7 +119,7 @@ export default function ScheduledTripsOverviewPage() {
         <h1 className="text-3xl font-bold text-gray-900">Scheduled Trips</h1>
         <div className="flex gap-3">
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={() => router.push("/dashboard/trips/templates")}
           >
             Templates
@@ -170,7 +170,7 @@ export default function ScheduledTripsOverviewPage() {
             </Link>
           </div>
         </CardHeader>
-        <CardBody>
+        <CardContent>
           {recentTripsLoading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" text="Loading recent trips..." />
@@ -245,14 +245,14 @@ export default function ScheduledTripsOverviewPage() {
               </table>
             </div>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link href="/dashboard/trips/upcoming">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardBody>
+            <CardContent>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">
@@ -264,12 +264,12 @@ export default function ScheduledTripsOverviewPage() {
                 </div>
                 <ArrowRightIcon className="h-6 w-6 text-gray-400" />
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </Link>
         <Link href="/dashboard/trips/active">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardBody>
+            <CardContent>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">
@@ -281,12 +281,12 @@ export default function ScheduledTripsOverviewPage() {
                 </div>
                 <ArrowRightIcon className="h-6 w-6 text-gray-400" />
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </Link>
         <Link href="/dashboard/trips/completed">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardBody>
+            <CardContent>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">
@@ -298,7 +298,7 @@ export default function ScheduledTripsOverviewPage() {
                 </div>
                 <ArrowRightIcon className="h-6 w-6 text-gray-400" />
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </Link>
       </div>

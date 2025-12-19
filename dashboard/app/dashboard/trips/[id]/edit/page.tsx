@@ -8,8 +8,8 @@ import api from "@/lib/api";
 import { useTripForm } from "@/hooks/useTripForm";
 import LocationPicker from "@/components/trips/LocationPicker";
 import FormField from "@/components/common/FormField";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import {
   PlusIcon,
@@ -328,7 +328,7 @@ export default function EditTripPage() {
           )}
         </div>
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={() => router.push(`/dashboard/trips/${tripId}`)}
           disabled={isSubmitting}
         >
@@ -352,7 +352,7 @@ export default function EditTripPage() {
                 Enter the trip name, date, and scheduled time
               </p>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <div className="space-y-4">
                 <FormField
                   label="Trip Name"
@@ -473,7 +473,7 @@ export default function EditTripPage() {
                   </FormField>
                 </div>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Section 2: Assignment */}
@@ -486,7 +486,7 @@ export default function EditTripPage() {
                 Assign a captain to this trip
               </p>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <FormField
                 label="Assign Captain"
                 required
@@ -504,7 +504,7 @@ export default function EditTripPage() {
                   ))}
                 </select>
               </FormField>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Section 3: Route Planning */}
@@ -529,7 +529,7 @@ export default function EditTripPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               {form.formState.errors.points && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-600">
@@ -584,7 +584,7 @@ export default function EditTripPage() {
                           </Button>
                           <Button
                             type="button"
-                            variant="danger"
+                            variant="destructive"
                             size="sm"
                             icon={TrashIcon}
                             onClick={() => removeCheckpoint(index)}
@@ -719,7 +719,7 @@ export default function EditTripPage() {
                           </div>
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             icon={PlusIcon}
                             onClick={() => {
@@ -835,16 +835,16 @@ export default function EditTripPage() {
                   );
                 })}
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Section 4: Actions */}
           <Card>
-            <CardBody>
+            <CardContent>
               <div className="flex justify-end gap-3">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => router.push(`/dashboard/trips/${tripId}`)}
                   disabled={isSubmitting}
                 >
@@ -858,7 +858,7 @@ export default function EditTripPage() {
                   {isSubmitting ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </div>
       </form>

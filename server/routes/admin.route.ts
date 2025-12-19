@@ -56,6 +56,7 @@ import {
   getTripRouteAnalysis,
   getTripAnalytics,
   getActiveTripsLive,
+  getRoadDistanceToNextCheckpoint,
 } from "../controllers/trip-tracking.controller";
 import {
   isAuthenticatedAdmin,
@@ -245,6 +246,11 @@ adminRouter.get(
   "/trips/:id/route-analysis",
   isAuthenticatedAdmin,
   getTripRouteAnalysis
+);
+adminRouter.get(
+  "/trips/:id/road-distance",
+  isAuthenticatedAdmin,
+  getRoadDistanceToNextCheckpoint
 );
 adminRouter.get("/trips/:id/analytics", isAuthenticatedAdmin, getTripAnalytics);
 adminRouter.get("/trips/active/live", isAuthenticatedAdmin, getActiveTripsLive);

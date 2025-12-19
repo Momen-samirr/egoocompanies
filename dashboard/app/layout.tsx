@@ -1,17 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { ThemeProvider } from "@/lib/providers/ThemeProvider";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Egoo Admin Dashboard",
@@ -24,34 +14,39 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: "#fff",
-              color: "#374151",
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-            },
-            success: {
-              iconTheme: {
-                primary: "#10b981",
-                secondary: "#fff",
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          storageKey="dashboard-theme"
+        >
+          {children}
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: "hsl(var(--card))",
+                color: "hsl(var(--card-foreground))",
+                boxShadow: "var(--shadow-md)",
               },
-            },
-            error: {
-              iconTheme: {
-                primary: "#ef4444",
-                secondary: "#fff",
+              success: {
+                iconTheme: {
+                  primary: "hsl(var(--primary))",
+                  secondary: "hsl(var(--primary-foreground))",
+                },
               },
-            },
-          }}
-        />
+              error: {
+                iconTheme: {
+                  primary: "hsl(var(--destructive))",
+                  secondary: "hsl(var(--destructive-foreground))",
+                },
+              },
+            }}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );

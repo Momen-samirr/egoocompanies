@@ -21,12 +21,19 @@ interface TripsViewProps {
   title: string;
 }
 
-type SortField = "name" | "date" | "captain" | "checkpoints" | "status" | "createdAt";
+type SortField =
+  | "name"
+  | "date"
+  | "captain"
+  | "checkpoints"
+  | "status"
+  | "createdAt";
 type SortDirection = "asc" | "desc";
 
 export default function TripsView({ view, title }: TripsViewProps) {
   const router = useRouter();
-  const { filters, updateFilter, clearFilters, hasActiveFilters } = useTripFilters();
+  const { filters, updateFilter, clearFilters, hasActiveFilters } =
+    useTripFilters();
   const { page, pageSize, goToPage, changePageSize } = useTripPagination();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -56,7 +63,10 @@ export default function TripsView({ view, title }: TripsViewProps) {
 
   const handleFilterChange = (newFilters: typeof filters) => {
     Object.keys(newFilters).forEach((key) => {
-      updateFilter(key as keyof typeof filters, newFilters[key as keyof typeof filters]);
+      updateFilter(
+        key as keyof typeof filters,
+        newFilters[key as keyof typeof filters]
+      );
     });
     goToPage(1);
   };
@@ -72,7 +82,10 @@ export default function TripsView({ view, title }: TripsViewProps) {
       toast.error("No trips to export");
       return;
     }
-    exportTripsToCSV(trips, `trips-${view}-${new Date().toISOString().split("T")[0]}.csv`);
+    exportTripsToCSV(
+      trips,
+      `trips-${view}-${new Date().toISOString().split("T")[0]}.csv`
+    );
     toast.success("Trips exported successfully");
   };
 
@@ -109,7 +122,11 @@ export default function TripsView({ view, title }: TripsViewProps) {
           </div>
         ) : trips.length === 0 ? (
           <EmptyState
-            title={hasActiveFilters ? "No trips match your filters" : `No ${title.toLowerCase()} found`}
+            title={
+              hasActiveFilters
+                ? "No trips match your filters"
+                : `No ${title.toLowerCase()} found`
+            }
             description={
               hasActiveFilters
                 ? "Try adjusting your filters to see more results"
@@ -154,4 +171,3 @@ export default function TripsView({ view, title }: TripsViewProps) {
     </div>
   );
 }
-

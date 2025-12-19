@@ -11,8 +11,8 @@ import api from "@/lib/api";
 import LocationPicker from "@/components/trips/LocationPicker";
 import CaptainSelector from "@/components/trips/CaptainSelector";
 import FormField from "@/components/common/FormField";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   PlusIcon,
   TrashIcon,
@@ -259,7 +259,7 @@ export default function CreateTemplatePage() {
           </p>
         </div>
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={() => router.back()}
           disabled={form.formState.isSubmitting}
         >
@@ -276,7 +276,7 @@ export default function CreateTemplatePage() {
                 Basic Information
               </h2>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <div className="space-y-4">
                 <FormField
                   label="Template Name"
@@ -377,7 +377,7 @@ export default function CreateTemplatePage() {
                   />
                 </FormField>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Assignment */}
@@ -391,7 +391,7 @@ export default function CreateTemplatePage() {
                 template
               </p>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <FormField
                 label="Assign Captain"
                 hint="Optional - can be assigned later"
@@ -412,7 +412,7 @@ export default function CreateTemplatePage() {
                   )}
                 />
               </FormField>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Route Planning */}
@@ -437,7 +437,7 @@ export default function CreateTemplatePage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               {form.formState.errors.points && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-600">
@@ -492,7 +492,7 @@ export default function CreateTemplatePage() {
                           </Button>
                           <Button
                             type="button"
-                            variant="danger"
+                            variant="destructive"
                             size="sm"
                             icon={TrashIcon}
                             onClick={() => removeCheckpoint(index)}
@@ -627,7 +627,7 @@ export default function CreateTemplatePage() {
                           </div>
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             icon={PlusIcon}
                             onClick={() => {
@@ -743,16 +743,16 @@ export default function CreateTemplatePage() {
                   );
                 })}
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Actions */}
           <Card>
-            <CardBody>
+            <CardContent>
               <div className="flex justify-end gap-3">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => router.back()}
                   disabled={form.formState.isSubmitting}
                 >
@@ -768,7 +768,7 @@ export default function CreateTemplatePage() {
                     : "Create Template"}
                 </Button>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </div>
       </form>

@@ -7,7 +7,7 @@ import {
   ScheduledTripStatus,
 } from "@/types/trip";
 import { FunnelIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import {
   generateWeekOptions,

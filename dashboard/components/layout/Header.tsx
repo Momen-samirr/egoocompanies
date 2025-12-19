@@ -2,9 +2,21 @@
 
 import { usePathname } from "next/navigation";
 import Breadcrumbs from "@/components/common/Breadcrumbs";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { Search } from "lucide-react";
 import { ReactNode } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { ThemeToggle } from "./ThemeToggle";
 
 function getBreadcrumbs(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
@@ -49,43 +61,57 @@ export default function Header({ children }: HeaderProps) {
   const breadcrumbs = getBreadcrumbs(pathname);
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-      <div className="px-4 lg:px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 flex-1">
-            {children}
-            <div className="flex-1">
-              {breadcrumbs.length > 0 ? (
-                <Breadcrumbs items={breadcrumbs} />
-              ) : (
-                <h1 className="text-xl lg:text-2xl font-semibold text-gray-900">
-                  Dashboard Overview
-                </h1>
-              )}
-            </div>
+    <header className="sticky top-0 z-10 border-b bg-card shadow-sm">
+      <div className="flex h-16 items-center gap-4 px-4 lg:px-6">
+        <div className="flex items-center gap-4 flex-1">
+          <SidebarTrigger />
+          {children}
+          <div className="flex-1">
+            {breadcrumbs.length > 0 ? (
+              <Breadcrumbs items={breadcrumbs} />
+            ) : (
+              <h1 className="text-xl lg:text-2xl font-semibold text-foreground">
+                Dashboard Overview
+              </h1>
+            )}
           </div>
-          <div className="flex items-center space-x-2 lg:space-x-4">
-            <div className="relative hidden md:block">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search..."
-                className="block w-48 lg:w-64 pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <NotificationBell />
-            <div className="flex items-center space-x-2 lg:space-x-3">
-              <div className="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
-                A
-              </div>
-              <div className="hidden md:block">
-                <p className="text-sm font-medium text-gray-900">Admin</p>
-                <p className="text-xs text-gray-500">admin@ridewave.com</p>
-              </div>
-            </div>
+        </div>
+        <div className="flex items-center gap-2 lg:gap-4">
+          <div className="relative hidden md:block">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search..."
+              className="w-48 lg:w-64 pl-10"
+            />
           </div>
+          <ThemeToggle />
+          <NotificationBell />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 lg:gap-3 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    A
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden md:block text-left">
+                  <p className="text-sm font-medium text-foreground">Admin</p>
+                  <p className="text-xs text-muted-foreground">
+                    admin@ridewave.com
+                  </p>
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>Profile</DropdownMenuItem>
+              <DropdownMenuItem>Settings</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>Logout</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

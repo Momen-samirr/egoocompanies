@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import FormField from "@/components/common/FormField";
 import { ScheduledTrip } from "@/types/trip";
 import api from "@/lib/api";
@@ -111,9 +111,7 @@ export default function TripEditModal({
       }
     } catch (error: any) {
       console.error("Error updating trip:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to update trip"
-      );
+      toast.error(error.response?.data?.message || "Failed to update trip");
     } finally {
       setIsSubmitting(false);
     }
@@ -141,7 +139,9 @@ export default function TripEditModal({
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                 required
                 disabled={isSubmitting}
@@ -153,7 +153,9 @@ export default function TripEditModal({
                 <input
                   type="date"
                   value={formData.tripDate}
-                  onChange={(e) => setFormData({ ...formData, tripDate: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, tripDate: e.target.value })
+                  }
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                   required
                   disabled={isSubmitting}
@@ -164,7 +166,9 @@ export default function TripEditModal({
                 <input
                   type="time"
                   value={formData.scheduledTime}
-                  onChange={(e) => setFormData({ ...formData, scheduledTime: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, scheduledTime: e.target.value })
+                  }
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                   required
                   disabled={isSubmitting}
@@ -175,7 +179,9 @@ export default function TripEditModal({
             <FormField label="Company" required>
               <select
                 value={formData.companyId}
-                onChange={(e) => setFormData({ ...formData, companyId: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, companyId: e.target.value })
+                }
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                 required
                 disabled={isSubmitting || loading}
@@ -193,7 +199,10 @@ export default function TripEditModal({
               <select
                 value={formData.assignedCaptainId}
                 onChange={(e) =>
-                  setFormData({ ...formData, assignedCaptainId: e.target.value })
+                  setFormData({
+                    ...formData,
+                    assignedCaptainId: e.target.value,
+                  })
                 }
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                 disabled={isSubmitting || loading}
@@ -214,7 +223,10 @@ export default function TripEditModal({
                 min="0"
                 value={formData.price}
                 onChange={(e) =>
-                  setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })
+                  setFormData({
+                    ...formData,
+                    price: parseFloat(e.target.value) || 0,
+                  })
                 }
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                 required
@@ -226,13 +238,17 @@ export default function TripEditModal({
           <div className="flex gap-3 justify-end p-6 border-t border-gray-200 sticky bottom-0 bg-white">
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               onClick={onClose}
               disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>
+            <Button
+              type="submit"
+              loading={isSubmitting}
+              disabled={isSubmitting}
+            >
               {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </div>
@@ -241,4 +257,3 @@ export default function TripEditModal({
     </div>
   );
 }
-

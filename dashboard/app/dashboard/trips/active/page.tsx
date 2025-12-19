@@ -12,9 +12,9 @@ import {
   InfoWindow,
 } from "@react-google-maps/api";
 import { MapIcon, TableCellsIcon } from "@heroicons/react/24/outline";
-import Button from "@/components/common/Button";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import Card, { CardBody } from "@/components/common/Card";
+import { Card, CardContent } from "@/components/ui/card";
 
 const mapContainerStyle = {
   width: "100%",
@@ -136,7 +136,7 @@ export default function ActiveTripsPage() {
             <Button
               onClick={() => setViewMode("table")}
               icon={TableCellsIcon}
-              variant="secondary"
+              variant="outline"
             >
               Table View
             </Button>
@@ -268,7 +268,7 @@ export default function ActiveTripsPage() {
               onClick={() => router.push(`/dashboard/trips/${trip.id}`)}
             >
               <Card className="hover:shadow-md transition-shadow">
-                <CardBody>
+                <CardContent>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-gray-900">
@@ -282,7 +282,7 @@ export default function ActiveTripsPage() {
                       <div className="w-3 h-3 bg-green-500 rounded-full" />
                     )}
                   </div>
-                </CardBody>
+                </CardContent>
               </Card>
             </div>
           ))}

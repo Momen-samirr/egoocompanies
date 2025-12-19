@@ -11,8 +11,8 @@ import api from "@/lib/api";
 import LocationPicker from "@/components/trips/LocationPicker";
 import CaptainSelector from "@/components/trips/CaptainSelector";
 import FormField from "@/components/common/FormField";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import {
   PlusIcon,
@@ -296,7 +296,7 @@ export default function EditTemplatePage() {
           </p>
         </div>
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={() => router.back()}
           disabled={form.formState.isSubmitting}
         >
@@ -313,7 +313,7 @@ export default function EditTemplatePage() {
                 Basic Information
               </h2>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <div className="space-y-4">
                 <FormField
                   label="Template Name"
@@ -414,7 +414,7 @@ export default function EditTemplatePage() {
                   />
                 </FormField>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Assignment */}
@@ -428,7 +428,7 @@ export default function EditTemplatePage() {
                 template
               </p>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <FormField
                 label="Assign Captain"
                 hint="Optional - can be assigned later"
@@ -449,7 +449,7 @@ export default function EditTemplatePage() {
                   )}
                 />
               </FormField>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Route Planning - Same as create page */}
@@ -474,7 +474,7 @@ export default function EditTemplatePage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               {form.formState.errors.points && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-600">
@@ -529,7 +529,7 @@ export default function EditTemplatePage() {
                           </Button>
                           <Button
                             type="button"
-                            variant="danger"
+                            variant="destructive"
                             size="sm"
                             icon={TrashIcon}
                             onClick={() => removeCheckpoint(index)}
@@ -664,7 +664,7 @@ export default function EditTemplatePage() {
                           </div>
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             icon={PlusIcon}
                             onClick={() => {
@@ -780,16 +780,16 @@ export default function EditTemplatePage() {
                   );
                 })}
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Actions */}
           <Card>
-            <CardBody>
+            <CardContent>
               <div className="flex justify-end gap-3">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => router.back()}
                   disabled={form.formState.isSubmitting}
                 >
@@ -805,7 +805,7 @@ export default function EditTemplatePage() {
                     : "Update Template"}
                 </Button>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </div>
       </form>

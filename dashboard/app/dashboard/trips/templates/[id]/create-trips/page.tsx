@@ -5,8 +5,8 @@ import { useRouter, useParams } from "next/navigation";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import FormField from "@/components/common/FormField";
 import LocationPicker from "@/components/trips/LocationPicker";
@@ -83,7 +83,7 @@ export default function CreateTripsFromTemplatePage() {
         // Set default name based on template
         const defaultName = fetchedTemplate.name;
         form.setValue("trips.0.name", defaultName);
-        
+
         // Initialize checkpoint locations for first trip
         if (fetchedTemplate.points) {
           fetchedTemplate.points.forEach((point: any, index: number) => {
@@ -122,7 +122,7 @@ export default function CreateTripsFromTemplatePage() {
       price: undefined,
       pointOverrides: [],
     });
-    
+
     // Initialize checkpoint locations for new trip
     if (template?.points) {
       template.points.forEach((point: any, index: number) => {
@@ -156,13 +156,15 @@ export default function CreateTripsFromTemplatePage() {
     checkpointIndex: number,
     field: keyof CheckpointOverride
   ) => {
-    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[checkpointIndex];
+    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[
+      checkpointIndex
+    ];
     if (override && override[field] !== undefined) {
       return override[field];
     }
     const templatePoint = template?.points[checkpointIndex];
     if (!templatePoint) return undefined;
-    
+
     switch (field) {
       case "name":
         return templatePoint.name;
@@ -180,12 +182,16 @@ export default function CreateTripsFromTemplatePage() {
   };
 
   const isCheckpointModified = (tripIndex: number, checkpointIndex: number) => {
-    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[checkpointIndex];
+    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[
+      checkpointIndex
+    ];
     return override && Object.keys(override).length > 0 && !override.removed;
   };
 
   const isCheckpointRemoved = (tripIndex: number, checkpointIndex: number) => {
-    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[checkpointIndex];
+    const override = form.watch(`trips.${tripIndex}.pointOverrides`)?.[
+      checkpointIndex
+    ];
     return override?.removed === true;
   };
 
@@ -194,41 +200,49 @@ export default function CreateTripsFromTemplatePage() {
     checkpointIndex: number,
     updates: Partial<CheckpointOverride>
   ) => {
-    const currentOverrides = form.getValues(`trips.${tripIndex}.pointOverrides`) || [];
+    const currentOverrides =
+      form.getValues(`trips.${tripIndex}.pointOverrides`) || [];
     const newOverrides = [...currentOverrides];
-    
+
     // Ensure array is long enough
     while (newOverrides.length <= checkpointIndex) {
       newOverrides.push(undefined as any);
     }
-    
+
     // Merge updates with existing override
     const existingOverride = newOverrides[checkpointIndex] || {};
     newOverrides[checkpointIndex] = {
       ...existingOverride,
       ...updates,
     };
-    
+
     form.setValue(`trips.${tripIndex}.pointOverrides`, newOverrides);
   };
 
-  const resetCheckpointToTemplate = (tripIndex: number, checkpointIndex: number) => {
-    const currentOverrides = form.getValues(`trips.${tripIndex}.pointOverrides`) || [];
+  const resetCheckpointToTemplate = (
+    tripIndex: number,
+    checkpointIndex: number
+  ) => {
+    const currentOverrides =
+      form.getValues(`trips.${tripIndex}.pointOverrides`) || [];
     const newOverrides = [...currentOverrides];
-    
+
     // Remove the override at this index to use template defaults
     // Keep array aligned with template points by index
     if (newOverrides[checkpointIndex]) {
       delete newOverrides[checkpointIndex];
     }
-    
+
     // Clean up trailing undefined entries but keep array aligned
     while (newOverrides.length > 0 && !newOverrides[newOverrides.length - 1]) {
       newOverrides.pop();
     }
-    
-    form.setValue(`trips.${tripIndex}.pointOverrides`, newOverrides.length > 0 ? newOverrides : []);
-    
+
+    form.setValue(
+      `trips.${tripIndex}.pointOverrides`,
+      newOverrides.length > 0 ? newOverrides : []
+    );
+
     // Reset location
     if (template?.points[checkpointIndex]) {
       const point = template.points[checkpointIndex];
@@ -282,20 +296,23 @@ export default function CreateTripsFromTemplatePage() {
         {
           trips: data.trips.map((trip) => {
             // Filter out undefined entries from pointOverrides but keep array aligned
-            const cleanedOverrides = (trip.pointOverrides || []).map((override, index) => {
-              if (!override || Object.keys(override).length === 0) {
-                return undefined;
+            const cleanedOverrides = (trip.pointOverrides || []).map(
+              (override, index) => {
+                if (!override || Object.keys(override).length === 0) {
+                  return undefined;
+                }
+                return override;
               }
-              return override;
-            });
-            
+            );
+
             return {
               name: trip.name,
               tripDate: trip.tripDate,
               scheduledTime: trip.scheduledTime,
               assignedCaptainId: trip.assignedCaptainId || undefined,
               price: trip.price || undefined,
-              pointOverrides: cleanedOverrides.length > 0 ? cleanedOverrides : [],
+              pointOverrides:
+                cleanedOverrides.length > 0 ? cleanedOverrides : [],
             };
           }),
         }
@@ -348,7 +365,7 @@ export default function CreateTripsFromTemplatePage() {
           </p>
         </div>
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={() => router.back()}
           disabled={submitting}
         >
@@ -370,7 +387,7 @@ export default function CreateTripsFromTemplatePage() {
               </div>
               <Button
                 type="button"
-                variant="secondary"
+                variant="outline"
                 size="sm"
                 icon={PlusIcon}
                 onClick={addTrip}
@@ -379,7 +396,7 @@ export default function CreateTripsFromTemplatePage() {
               </Button>
             </div>
           </CardHeader>
-          <CardBody>
+          <CardContent>
             <div className="space-y-4">
               {fields.map((field, index) => (
                 <div
@@ -393,7 +410,7 @@ export default function CreateTripsFromTemplatePage() {
                     {fields.length > 1 && (
                       <Button
                         type="button"
-                        variant="danger"
+                        variant="destructive"
                         size="sm"
                         icon={TrashIcon}
                         onClick={() => remove(index)}
@@ -470,7 +487,9 @@ export default function CreateTripsFromTemplatePage() {
                     <FormField
                       label="Assign Captain"
                       hint="Optional - can be assigned later. Search by phone number, name, or email."
-                      error={form.formState.errors.trips?.[index]?.assignedCaptainId}
+                      error={
+                        form.formState.errors.trips?.[index]?.assignedCaptainId
+                      }
                     >
                       <Controller
                         control={form.control}
@@ -503,16 +522,17 @@ export default function CreateTripsFromTemplatePage() {
                       <p>
                         <strong>Checkpoints:</strong> {template.points.length}
                         {(() => {
-                          const modifiedCount = template.points.filter((_, cpIndex) =>
-                            isCheckpointModified(index, cpIndex)
+                          const modifiedCount = template.points.filter(
+                            (_, cpIndex) => isCheckpointModified(index, cpIndex)
                           ).length;
-                          const removedCount = template.points.filter((_, cpIndex) =>
-                            isCheckpointRemoved(index, cpIndex)
+                          const removedCount = template.points.filter(
+                            (_, cpIndex) => isCheckpointRemoved(index, cpIndex)
                           ).length;
                           if (modifiedCount > 0 || removedCount > 0) {
                             return (
                               <span className="ml-2 text-indigo-600">
-                                ({modifiedCount} modified, {removedCount} removed)
+                                ({modifiedCount} modified, {removedCount}{" "}
+                                removed)
                               </span>
                             );
                           }
@@ -522,9 +542,13 @@ export default function CreateTripsFromTemplatePage() {
                     </div>
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
-                      icon={expandedTrips.has(index) ? ChevronUpIcon : ChevronDownIcon}
+                      icon={
+                        expandedTrips.has(index)
+                          ? ChevronUpIcon
+                          : ChevronDownIcon
+                      }
                       onClick={() => toggleTripExpanded(index)}
                     >
                       {expandedTrips.has(index) ? "Hide" : "Edit"} Checkpoints
@@ -539,7 +563,7 @@ export default function CreateTripsFromTemplatePage() {
                         </h4>
                         <Button
                           type="button"
-                          variant="secondary"
+                          variant="outline"
                           size="sm"
                           onClick={() => {
                             // Reset all checkpoints to template
@@ -556,7 +580,10 @@ export default function CreateTripsFromTemplatePage() {
                       <div className="space-y-4">
                         {template.points.map((templatePoint, cpIndex) => {
                           const isRemoved = isCheckpointRemoved(index, cpIndex);
-                          const isModified = isCheckpointModified(index, cpIndex);
+                          const isModified = isCheckpointModified(
+                            index,
+                            cpIndex
+                          );
                           const locationKey = `${index}-${cpIndex}`;
                           const location = checkpointLocations.get(locationKey);
 
@@ -597,26 +624,31 @@ export default function CreateTripsFromTemplatePage() {
                                   {!isRemoved && (
                                     <Button
                                       type="button"
-                                      variant="danger"
+                                      variant="destructive"
                                       size="sm"
                                       onClick={() => {
                                         // Check if this would be the last checkpoint
-                                        const remainingCount = template.points.filter(
-                                          (_, idx) =>
-                                            idx === cpIndex ||
-                                            !isCheckpointRemoved(index, idx)
-                                        ).length;
-                                        
+                                        const remainingCount =
+                                          template.points.filter(
+                                            (_, idx) =>
+                                              idx === cpIndex ||
+                                              !isCheckpointRemoved(index, idx)
+                                          ).length;
+
                                         if (remainingCount <= 1) {
                                           toast.error(
                                             "Cannot remove the last checkpoint. At least one checkpoint is required."
                                           );
                                           return;
                                         }
-                                        
-                                        updateCheckpointOverride(index, cpIndex, {
-                                          removed: true,
-                                        });
+
+                                        updateCheckpointOverride(
+                                          index,
+                                          cpIndex,
+                                          {
+                                            removed: true,
+                                          }
+                                        );
                                       }}
                                     >
                                       Remove
@@ -625,12 +657,16 @@ export default function CreateTripsFromTemplatePage() {
                                   {isRemoved && (
                                     <Button
                                       type="button"
-                                      variant="secondary"
+                                      variant="outline"
                                       size="sm"
                                       onClick={() => {
-                                        updateCheckpointOverride(index, cpIndex, {
-                                          removed: false,
-                                        });
+                                        updateCheckpointOverride(
+                                          index,
+                                          cpIndex,
+                                          {
+                                            removed: false,
+                                          }
+                                        );
                                       }}
                                     >
                                       Restore
@@ -642,7 +678,10 @@ export default function CreateTripsFromTemplatePage() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => {
-                                        resetCheckpointToTemplate(index, cpIndex);
+                                        resetCheckpointToTemplate(
+                                          index,
+                                          cpIndex
+                                        );
                                       }}
                                     >
                                       Reset
@@ -665,7 +704,8 @@ export default function CreateTripsFromTemplatePage() {
                                           ) as string) || ""
                                         }
                                         onChange={(e) => {
-                                          const templateName = templatePoint.name;
+                                          const templateName =
+                                            templatePoint.name;
                                           if (e.target.value !== templateName) {
                                             updateCheckpointOverride(
                                               index,
@@ -708,7 +748,9 @@ export default function CreateTripsFromTemplatePage() {
                                           onChange={(e) => {
                                             const templateTime =
                                               templatePoint.expectedTime || "";
-                                            if (e.target.value !== templateTime) {
+                                            if (
+                                              e.target.value !== templateTime
+                                            ) {
                                               updateCheckpointOverride(
                                                 index,
                                                 cpIndex,
@@ -719,10 +761,14 @@ export default function CreateTripsFromTemplatePage() {
                                                 form.getValues(
                                                   `trips.${index}.pointOverrides`
                                                 ) || [];
-                                              const newOverrides = [...overrides];
+                                              const newOverrides = [
+                                                ...overrides,
+                                              ];
                                               if (newOverrides[cpIndex]) {
-                                                const { expectedTime, ...rest } =
-                                                  newOverrides[cpIndex];
+                                                const {
+                                                  expectedTime,
+                                                  ...rest
+                                                } = newOverrides[cpIndex];
                                                 newOverrides[cpIndex] = rest;
                                               }
                                               form.setValue(
@@ -750,7 +796,9 @@ export default function CreateTripsFromTemplatePage() {
                                           onChange={(e) => {
                                             const templateTime =
                                               templatePoint.expectedTime || "";
-                                            if (e.target.value !== templateTime) {
+                                            if (
+                                              e.target.value !== templateTime
+                                            ) {
                                               updateCheckpointOverride(
                                                 index,
                                                 cpIndex,
@@ -761,10 +809,14 @@ export default function CreateTripsFromTemplatePage() {
                                                 form.getValues(
                                                   `trips.${index}.pointOverrides`
                                                 ) || [];
-                                              const newOverrides = [...overrides];
+                                              const newOverrides = [
+                                                ...overrides,
+                                              ];
                                               if (newOverrides[cpIndex]) {
-                                                const { expectedTime, ...rest } =
-                                                  newOverrides[cpIndex];
+                                                const {
+                                                  expectedTime,
+                                                  ...rest
+                                                } = newOverrides[cpIndex];
                                                 newOverrides[cpIndex] = rest;
                                               }
                                               form.setValue(
@@ -826,7 +878,7 @@ export default function CreateTripsFromTemplatePage() {
                                       </div>
                                       <Button
                                         type="button"
-                                        variant="secondary"
+                                        variant="outline"
                                         size="sm"
                                         icon={PlusIcon}
                                         onClick={() => {
@@ -839,12 +891,16 @@ export default function CreateTripsFromTemplatePage() {
                                               name?: string;
                                               employeeId?: string;
                                             }>) || [];
-                                          updateCheckpointOverride(index, cpIndex, {
-                                            employees: [
-                                              ...currentEmployees,
-                                              { name: "", employeeId: "" },
-                                            ],
-                                          });
+                                          updateCheckpointOverride(
+                                            index,
+                                            cpIndex,
+                                            {
+                                              employees: [
+                                                ...currentEmployees,
+                                                { name: "", employeeId: "" },
+                                              ],
+                                            }
+                                          );
                                         }}
                                       >
                                         Add Employee
@@ -863,116 +919,142 @@ export default function CreateTripsFromTemplatePage() {
                                         }>) || [];
                                       return employees.length > 0 ? (
                                         <div className="space-y-2">
-                                          {employees.map((employee, empIndex) => (
-                                            <div
-                                              key={empIndex}
-                                              className="flex gap-2 items-start p-3 bg-white border border-gray-200 rounded-lg"
-                                            >
-                                              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                <div>
-                                                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                    Employee Name (Optional)
-                                                  </label>
-                                                  <input
-                                                    type="text"
-                                                    value={employee.name || ""}
-                                                    onChange={(e) => {
-                                                      const currentEmployees =
-                                                        (getCheckpointValue(
+                                          {employees.map(
+                                            (employee, empIndex) => (
+                                              <div
+                                                key={empIndex}
+                                                className="flex gap-2 items-start p-3 bg-white border border-gray-200 rounded-lg"
+                                              >
+                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                  <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                      Employee Name (Optional)
+                                                    </label>
+                                                    <input
+                                                      type="text"
+                                                      value={
+                                                        employee.name || ""
+                                                      }
+                                                      onChange={(e) => {
+                                                        const currentEmployees =
+                                                          (getCheckpointValue(
+                                                            index,
+                                                            cpIndex,
+                                                            "employees"
+                                                          ) as Array<{
+                                                            name?: string;
+                                                            employeeId?: string;
+                                                          }>) || [];
+                                                        const newEmployees = [
+                                                          ...currentEmployees,
+                                                        ];
+                                                        newEmployees[empIndex] =
+                                                          {
+                                                            ...newEmployees[
+                                                              empIndex
+                                                            ],
+                                                            name: e.target
+                                                              .value,
+                                                          };
+                                                        updateCheckpointOverride(
                                                           index,
                                                           cpIndex,
-                                                          "employees"
-                                                        ) as Array<{
-                                                          name?: string;
-                                                          employeeId?: string;
-                                                        }>) || [];
-                                                      const newEmployees = [
-                                                        ...currentEmployees,
-                                                      ];
-                                                      newEmployees[empIndex] = {
-                                                        ...newEmployees[empIndex],
-                                                        name: e.target.value,
-                                                      };
-                                                      updateCheckpointOverride(
-                                                        index,
-                                                        cpIndex,
-                                                        { employees: newEmployees }
-                                                      );
-                                                    }}
-                                                    placeholder="e.g., John Doe"
-                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                                  />
-                                                </div>
-                                                <div>
-                                                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                    Employee ID (Optional)
-                                                  </label>
-                                                  <input
-                                                    type="text"
-                                                    value={employee.employeeId || ""}
-                                                    onChange={(e) => {
-                                                      const currentEmployees =
-                                                        (getCheckpointValue(
+                                                          {
+                                                            employees:
+                                                              newEmployees,
+                                                          }
+                                                        );
+                                                      }}
+                                                      placeholder="e.g., John Doe"
+                                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                      Employee ID (Optional)
+                                                    </label>
+                                                    <input
+                                                      type="text"
+                                                      value={
+                                                        employee.employeeId ||
+                                                        ""
+                                                      }
+                                                      onChange={(e) => {
+                                                        const currentEmployees =
+                                                          (getCheckpointValue(
+                                                            index,
+                                                            cpIndex,
+                                                            "employees"
+                                                          ) as Array<{
+                                                            name?: string;
+                                                            employeeId?: string;
+                                                          }>) || [];
+                                                        const newEmployees = [
+                                                          ...currentEmployees,
+                                                        ];
+                                                        newEmployees[empIndex] =
+                                                          {
+                                                            ...newEmployees[
+                                                              empIndex
+                                                            ],
+                                                            employeeId:
+                                                              e.target.value,
+                                                          };
+                                                        updateCheckpointOverride(
                                                           index,
                                                           cpIndex,
-                                                          "employees"
-                                                        ) as Array<{
-                                                          name?: string;
-                                                          employeeId?: string;
-                                                        }>) || [];
-                                                      const newEmployees = [
-                                                        ...currentEmployees,
-                                                      ];
-                                                      newEmployees[empIndex] = {
-                                                        ...newEmployees[empIndex],
-                                                        employeeId: e.target.value,
-                                                      };
-                                                      updateCheckpointOverride(
+                                                          {
+                                                            employees:
+                                                              newEmployees,
+                                                          }
+                                                        );
+                                                      }}
+                                                      placeholder="e.g., EMP001"
+                                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                                    />
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const currentEmployees =
+                                                      (getCheckpointValue(
                                                         index,
                                                         cpIndex,
-                                                        { employees: newEmployees }
-                                                      );
-                                                    }}
-                                                    placeholder="e.g., EMP001"
-                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                                  />
-                                                </div>
-                                              </div>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const currentEmployees =
-                                                    (getCheckpointValue(
+                                                        "employees"
+                                                      ) as Array<{
+                                                        name?: string;
+                                                        employeeId?: string;
+                                                      }>) || [];
+                                                    const newEmployees = [
+                                                      ...currentEmployees,
+                                                    ];
+                                                    newEmployees.splice(
+                                                      empIndex,
+                                                      1
+                                                    );
+                                                    updateCheckpointOverride(
                                                       index,
                                                       cpIndex,
-                                                      "employees"
-                                                    ) as Array<{
-                                                      name?: string;
-                                                      employeeId?: string;
-                                                    }>) || [];
-                                                  const newEmployees = [
-                                                    ...currentEmployees,
-                                                  ];
-                                                  newEmployees.splice(empIndex, 1);
-                                                  updateCheckpointOverride(
-                                                    index,
-                                                    cpIndex,
-                                                    { employees: newEmployees }
-                                                  );
-                                                }}
-                                                className="mt-6 p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                                                title="Remove employee"
-                                              >
-                                                <XMarkIcon className="h-5 w-5" />
-                                              </button>
-                                            </div>
-                                          ))}
+                                                      {
+                                                        employees: newEmployees,
+                                                      }
+                                                    );
+                                                  }}
+                                                  className="mt-6 p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                                                  title="Remove employee"
+                                                >
+                                                  <XMarkIcon className="h-5 w-5" />
+                                                </button>
+                                              </div>
+                                            )
+                                          )}
                                         </div>
                                       ) : (
                                         <p className="text-sm text-gray-500 italic">
-                                          No employees added. Click "Add Employee"
-                                          to add employees who should be picked
-                                          up at this checkpoint.
+                                          No employees added. Click "Add
+                                          Employee" to add employees who should
+                                          be picked up at this checkpoint.
                                         </p>
                                       );
                                     })()}
@@ -988,13 +1070,13 @@ export default function CreateTripsFromTemplatePage() {
                 </div>
               ))}
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
 
         <div className="flex justify-end gap-3">
           <Button
             type="button"
-            variant="secondary"
+            variant="outline"
             onClick={() => router.back()}
             disabled={submitting}
           >

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { getToken } from "@/lib/auth";
-import Card, { CardHeader, CardBody } from "@/components/common/Card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 
 interface TripAlertsProps {
@@ -411,7 +411,7 @@ export default function TripAlerts({
       {/* Alerts List */}
       {filteredAlerts.length === 0 ? (
         <Card>
-          <CardBody>
+          <CardContent>
             <div className="text-center py-8">
               <p className="text-gray-500">
                 {alerts.length === 0
@@ -419,13 +419,13 @@ export default function TripAlerts({
                   : "No alerts match the selected filter"}
               </p>
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {filteredAlerts.map((alert, index) => (
             <Card key={index}>
-              <CardBody>
+              <CardContent>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
@@ -512,7 +512,7 @@ export default function TripAlerts({
                     )}
                   </div>
                 </div>
-              </CardBody>
+              </CardContent>
             </Card>
           ))}
         </div>

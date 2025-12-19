@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import FormField from "@/components/common/FormField";
 import { Company } from "@/types";
@@ -43,15 +43,20 @@ interface Driver {
 }
 
 export default function CompaniesPage() {
-  const [activeTab, setActiveTab] = useState<"companies" | "accounts">("companies");
+  const [activeTab, setActiveTab] = useState<"companies" | "accounts">(
+    "companies"
+  );
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyAccounts, setCompanyAccounts] = useState<CompanyAccount[]>([]);
   const [allDrivers, setAllDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
-  const [editingAccount, setEditingAccount] = useState<CompanyAccount | null>(null);
-  const [selectedCompanyForDrivers, setSelectedCompanyForDrivers] = useState<Company | null>(null);
+  const [editingAccount, setEditingAccount] = useState<CompanyAccount | null>(
+    null
+  );
+  const [selectedCompanyForDrivers, setSelectedCompanyForDrivers] =
+    useState<Company | null>(null);
   const [companyDrivers, setCompanyDrivers] = useState<Driver[]>([]);
   const [formState, setFormState] = useState<CompanyFormState>({
     name: "",
@@ -69,12 +74,12 @@ export default function CompaniesPage() {
       typeof error === "object" &&
       error !== null &&
       "response" in error &&
-      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message ===
-        "string"
+      typeof (error as { response?: { data?: { message?: string } } }).response
+        ?.data?.message === "string"
     ) {
       return (
-        (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
-        fallback
+        (error as { response?: { data?: { message?: string } } }).response?.data
+          ?.message || fallback
       );
     }
     return fallback;
@@ -105,7 +110,9 @@ export default function CompaniesPage() {
 
   const fetchAllDrivers = useCallback(async () => {
     try {
-      const response = await api.get("/admin/drivers", { params: { limit: 1000 } });
+      const response = await api.get("/admin/drivers", {
+        params: { limit: 1000 },
+      });
       setAllDrivers(response.data.drivers || []);
     } catch (error) {
       console.error("Error fetching drivers:", error);
@@ -149,7 +156,11 @@ export default function CompaniesPage() {
 
   const handleAccountSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!accountFormState.name || !accountFormState.email || !accountFormState.companyId) {
+    if (
+      !accountFormState.name ||
+      !accountFormState.email ||
+      !accountFormState.companyId
+    ) {
       toast.error("Name, email, and company are required");
       return;
     }
@@ -215,7 +226,10 @@ export default function CompaniesPage() {
     }
   };
 
-  const handleAssignDrivers = async (companyId: string, driverIds: string[]) => {
+  const handleAssignDrivers = async (
+    companyId: string,
+    driverIds: string[]
+  ) => {
     try {
       await api.post(`/admin/companies/${companyId}/assign-drivers`, {
         driverIds,
@@ -325,162 +339,158 @@ export default function CompaniesPage() {
       </div>
 
       {activeTab === "companies" && (
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">
-                  {editingCompany ? "Edit Company" : "Add Company"}
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Set default scheduled trip pricing per company
-                </p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-1">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    {editingCompany ? "Edit Company" : "Add Company"}
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Set default scheduled trip pricing per company
+                  </p>
+                </div>
+                {editingCompany && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={XMarkIcon}
+                    onClick={resetForm}
+                  >
+                    Cancel
+                  </Button>
+                )}
               </div>
-              {editingCompany && (
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleSubmit}>
+                <FormField label="Company Name" required>
+                  <input
+                    type="text"
+                    value={formState.name}
+                    onChange={(event) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="e.g., RideWave Logistics"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                  />
+                </FormField>
+
+                <FormField label="Default Scheduled Trip Price" required>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formState.defaultScheduledTripPrice}
+                    onChange={(event) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        defaultScheduledTripPrice: event.target.value,
+                      }))
+                    }
+                    placeholder="e.g., 15.00"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                  />
+                </FormField>
+
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={XMarkIcon}
-                  onClick={resetForm}
+                  type="submit"
+                  icon={editingCompany ? PencilIcon : PlusIcon}
+                  disabled={saving}
+                  className="w-full"
                 >
-                  Cancel
+                  {editingCompany ? "Update Company" : "Add Company"}
                 </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardBody>
-            <form className="space-y-4" onSubmit={handleSubmit}>
-              <FormField
-                label="Company Name"
-                required
-              >
-                <input
-                  type="text"
-                  value={formState.name}
-                  onChange={(event) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      name: event.target.value,
-                    }))
-                  }
-                  placeholder="e.g., RideWave Logistics"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                />
-              </FormField>
+              </form>
+            </CardContent>
+          </Card>
 
-              <FormField
-                label="Default Scheduled Trip Price"
-                required
-              >
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formState.defaultScheduledTripPrice}
-                  onChange={(event) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      defaultScheduledTripPrice: event.target.value,
-                    }))
-                  }
-                  placeholder="e.g., 15.00"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                />
-              </FormField>
-
-              <Button
-                type="submit"
-                icon={editingCompany ? PencilIcon : PlusIcon}
-                disabled={saving}
-                className="w-full"
-              >
-                {editingCompany ? "Update Company" : "Add Company"}
-              </Button>
-            </form>
-          </CardBody>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Company Directory
-                </h2>
-                <p className="text-sm text-gray-500">
-                  {companies.length} companies configured
-                </p>
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Company Directory
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {companies.length} companies configured
+                  </p>
+                </div>
+                <Button variant="ghost" onClick={fetchCompanies}>
+                  Refresh
+                </Button>
               </div>
-              <Button variant="ghost" onClick={fetchCompanies}>
-                Refresh
-              </Button>
-            </div>
-          </CardHeader>
-          <CardBody padding="none">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <LoadingSpinner size="lg" text="Loading companies..." />
-              </div>
-            ) : companies.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                No companies configured yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Default Trip Price
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {companies.map((company) => (
-                      <tr key={company.id} className="hover:bg-indigo-50/50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {company.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          ${company.defaultScheduledTripPrice.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              icon={PencilIcon}
-                              onClick={() => handleEdit(company)}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              icon={TrashIcon}
-                              onClick={() => handleDelete(company)}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </td>
+            </CardHeader>
+            <CardContent padding="none">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <LoadingSpinner size="lg" text="Loading companies..." />
+                </div>
+              ) : companies.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  No companies configured yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Default Trip Price
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardBody>
-        </Card>
-      </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {companies.map((company) => (
+                        <tr
+                          key={company.id}
+                          className="hover:bg-indigo-50/50 transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {company.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            ${company.defaultScheduledTripPrice.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={PencilIcon}
+                                onClick={() => handleEdit(company)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                icon={TrashIcon}
+                                onClick={() => handleDelete(company)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {activeTab === "accounts" && (
@@ -508,14 +518,17 @@ export default function CompaniesPage() {
                 )}
               </div>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <form className="space-y-4" onSubmit={handleAccountSubmit}>
                 <FormField label="Account Name" required>
                   <input
                     type="text"
                     value={accountFormState.name}
                     onChange={(e) =>
-                      setAccountFormState((prev) => ({ ...prev, name: e.target.value }))
+                      setAccountFormState((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
                     }
                     placeholder="e.g., School Admin"
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -527,19 +540,32 @@ export default function CompaniesPage() {
                     type="email"
                     value={accountFormState.email}
                     onChange={(e) =>
-                      setAccountFormState((prev) => ({ ...prev, email: e.target.value }))
+                      setAccountFormState((prev) => ({
+                        ...prev,
+                        email: e.target.value,
+                      }))
                     }
                     placeholder="admin@company.com"
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </FormField>
 
-                <FormField label={editingAccount ? "New Password (leave blank to keep current)" : "Password"} required={!editingAccount}>
+                <FormField
+                  label={
+                    editingAccount
+                      ? "New Password (leave blank to keep current)"
+                      : "Password"
+                  }
+                  required={!editingAccount}
+                >
                   <input
                     type="password"
                     value={accountFormState.password}
                     onChange={(e) =>
-                      setAccountFormState((prev) => ({ ...prev, password: e.target.value }))
+                      setAccountFormState((prev) => ({
+                        ...prev,
+                        password: e.target.value,
+                      }))
                     }
                     placeholder="••••••••"
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -550,7 +576,10 @@ export default function CompaniesPage() {
                   <select
                     value={accountFormState.companyId}
                     onChange={(e) =>
-                      setAccountFormState((prev) => ({ ...prev, companyId: e.target.value }))
+                      setAccountFormState((prev) => ({
+                        ...prev,
+                        companyId: e.target.value,
+                      }))
                     }
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   >
@@ -572,14 +601,16 @@ export default function CompaniesPage() {
                   {editingAccount ? "Update Account" : "Create Account"}
                 </Button>
               </form>
-            </CardBody>
+            </CardContent>
           </Card>
 
           <Card className="lg:col-span-2">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Company Accounts</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Company Accounts
+                  </h2>
                   <p className="text-sm text-gray-500">
                     {companyAccounts.length} account(s) configured
                   </p>
@@ -589,7 +620,7 @@ export default function CompaniesPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardBody padding="none">
+            <CardContent padding="none">
               {companyAccounts.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   No company accounts configured yet.
@@ -640,7 +671,9 @@ export default function CompaniesPage() {
                                 size="sm"
                                 icon={TruckIcon}
                                 onClick={() => {
-                                  setSelectedCompanyForDrivers(account.company || null);
+                                  setSelectedCompanyForDrivers(
+                                    account.company || null
+                                  );
                                   if (account.companyId) {
                                     fetchCompanyDrivers(account.companyId);
                                   }
@@ -649,7 +682,7 @@ export default function CompaniesPage() {
                                 Assign Drivers
                               </Button>
                               <Button
-                                variant="danger"
+                                variant="destructive"
                                 size="sm"
                                 icon={TrashIcon}
                                 onClick={() => handleAccountDelete(account)}
@@ -664,7 +697,7 @@ export default function CompaniesPage() {
                   </table>
                 </div>
               )}
-            </CardBody>
+            </CardContent>
           </Card>
         </div>
       )}
@@ -696,11 +729,13 @@ export default function CompaniesPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <div className="space-y-4">
                 <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4">
                   {allDrivers.map((driver) => {
-                    const isAssigned = companyDrivers.some((cd) => cd.id === driver.id);
+                    const isAssigned = companyDrivers.some(
+                      (cd) => cd.id === driver.id
+                    );
                     return (
                       <label
                         key={driver.id}
@@ -711,23 +746,28 @@ export default function CompaniesPage() {
                           checked={isAssigned}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              handleAssignDrivers(selectedCompanyForDrivers.id, [
-                                ...companyDrivers.map((d) => d.id),
-                                driver.id,
-                              ]);
+                              handleAssignDrivers(
+                                selectedCompanyForDrivers.id,
+                                [...companyDrivers.map((d) => d.id), driver.id]
+                              );
                             } else {
                               handleAssignDrivers(
                                 selectedCompanyForDrivers.id,
-                                companyDrivers.filter((d) => d.id !== driver.id).map((d) => d.id)
+                                companyDrivers
+                                  .filter((d) => d.id !== driver.id)
+                                  .map((d) => d.id)
                               );
                             }
                           }}
                           className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <div className="flex-1">
-                          <div className="text-sm font-medium text-gray-900">{driver.name}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {driver.name}
+                          </div>
                           <div className="text-xs text-gray-500">
-                            {driver.email} • {driver.vehicle_type} • {driver.status}
+                            {driver.email} • {driver.vehicle_type} •{" "}
+                            {driver.status}
                           </div>
                         </div>
                       </label>
@@ -738,11 +778,10 @@ export default function CompaniesPage() {
                   {companyDrivers.length} driver(s) assigned to this company
                 </div>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </div>
       )}
     </div>
   );
 }
-

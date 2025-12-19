@@ -9,8 +9,8 @@ import { useTripForm } from "@/hooks/useTripForm";
 import LocationPicker from "@/components/trips/LocationPicker";
 import CaptainSelector from "@/components/trips/CaptainSelector";
 import FormField from "@/components/common/FormField";
-import Card, { CardBody, CardHeader } from "@/components/common/Card";
-import Button from "@/components/common/Button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   PlusIcon,
   TrashIcon,
@@ -202,7 +202,7 @@ export default function CreateTripPage() {
           )}
         </div>
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={() => router.back()}
           disabled={isSubmitting}
         >
@@ -222,7 +222,7 @@ export default function CreateTripPage() {
                 Enter the trip name, date, and scheduled time
               </p>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <div className="space-y-4">
                 <FormField
                   label="Trip Name"
@@ -343,7 +343,7 @@ export default function CreateTripPage() {
                   </FormField>
                 </div>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Section 2: Assignment */}
@@ -356,7 +356,7 @@ export default function CreateTripPage() {
                 Optionally assign a captain to this trip
               </p>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               <FormField
                 label="Assign Captain"
                 hint="Optional - can be assigned later. Search by phone number, name, or email."
@@ -377,7 +377,7 @@ export default function CreateTripPage() {
                   )}
                 />
               </FormField>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Section 3: Route Planning */}
@@ -402,7 +402,7 @@ export default function CreateTripPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardBody>
+            <CardContent>
               {form.formState.errors.points && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-600">
@@ -457,7 +457,7 @@ export default function CreateTripPage() {
                           </Button>
                           <Button
                             type="button"
-                            variant="danger"
+                            variant="destructive"
                             size="sm"
                             icon={TrashIcon}
                             onClick={() => removeCheckpoint(index)}
@@ -592,7 +592,7 @@ export default function CreateTripPage() {
                           </div>
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             icon={PlusIcon}
                             onClick={() => {
@@ -708,16 +708,16 @@ export default function CreateTripPage() {
                   );
                 })}
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
 
           {/* Section 4: Actions */}
           <Card>
-            <CardBody>
+            <CardContent>
               <div className="flex justify-between items-center">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={handleDraftSave}
                   disabled={!isDirty || isSubmitting}
                 >
@@ -726,7 +726,7 @@ export default function CreateTripPage() {
                 <div className="flex gap-3">
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     onClick={() => router.back()}
                     disabled={isSubmitting}
                   >
@@ -741,7 +741,7 @@ export default function CreateTripPage() {
                   </Button>
                 </div>
               </div>
-            </CardBody>
+            </CardContent>
           </Card>
         </div>
       </form>

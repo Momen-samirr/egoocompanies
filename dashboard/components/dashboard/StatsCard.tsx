@@ -1,7 +1,8 @@
 "use client";
 
-import Card, { CardBody } from "@/components/common/Card";
+import { Card, CardContent } from "@/components/ui/card";
 import type { ComponentType } from "react";
+import { cn } from "@/lib/utils";
 
 interface StatsCardProps {
   title: string;
@@ -16,21 +17,22 @@ interface StatsCardProps {
 
 export default function StatsCard({ title, value, icon: Icon, trend, subtitle }: StatsCardProps) {
   return (
-    <Card hover className="transition-all duration-200 group">
-      <CardBody>
+    <Card className="transition-all duration-200 group hover:shadow-md">
+      <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
+            <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
+            <p className="text-3xl font-bold text-foreground mt-1">{value}</p>
             {subtitle && (
-              <p className="text-xs text-gray-500 mt-1.5">{subtitle}</p>
+              <p className="text-xs text-muted-foreground mt-1.5">{subtitle}</p>
             )}
             {trend && (
               <div className="flex items-center mt-3">
                 <span
-                  className={`inline-flex items-center text-sm font-semibold ${
+                  className={cn(
+                    "inline-flex items-center text-sm font-semibold",
                     trend.isPositive ? "text-green-600" : "text-red-600"
-                  }`}
+                  )}
                 >
                   {trend.isPositive ? (
                     <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -43,20 +45,19 @@ export default function StatsCard({ title, value, icon: Icon, trend, subtitle }:
                   )}
                   {Math.abs(trend.value)}%
                 </span>
-                <span className="text-xs text-gray-500 ml-2">vs last period</span>
+                <span className="text-xs text-muted-foreground ml-2">vs last period</span>
               </div>
             )}
           </div>
           {Icon && (
             <div className="ml-4">
-              <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-50 group-hover:from-indigo-200 group-hover:to-indigo-100 transition-all duration-200">
-                <Icon className="h-7 w-7 text-indigo-600" />
+              <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-all duration-200">
+                <Icon className="h-7 w-7 text-primary" />
               </div>
             </div>
           )}
         </div>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
-
