@@ -228,25 +228,29 @@ export default function ActiveTripsPage() {
       <div className="bg-white border-t p-4 max-h-48 overflow-y-auto">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {activeTrips.map((trip) => (
-            <Card
+            <div
               key={trip.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
+              className="cursor-pointer"
               onClick={() => router.push(`/dashboard/trips/${trip.id}`)}
             >
-              <CardBody>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{trip.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {trip.assignedCaptain?.name || "No captain"}
-                    </p>
+              <Card className="hover:shadow-md transition-shadow">
+                <CardBody>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {trip.name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {trip.assignedCaptain?.name || "No captain"}
+                      </p>
+                    </div>
+                    {trip.currentLocation && (
+                      <div className="w-3 h-3 bg-green-500 rounded-full" />
+                    )}
                   </div>
-                  {trip.currentLocation && (
-                    <div className="w-3 h-3 bg-green-500 rounded-full" />
-                  )}
-                </div>
-              </CardBody>
-            </Card>
+                </CardBody>
+              </Card>
+            </div>
           ))}
         </div>
       </div>
