@@ -40,6 +40,7 @@ export interface ButtonProps
   asChild?: boolean;
   icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   loading?: boolean;
+  iconPosition?: "left" | "right";
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -51,6 +52,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       asChild = false,
       icon: Icon,
       loading = false,
+      iconPosition = "left",
       disabled,
       children,
       ...props
@@ -58,6 +60,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const Comp = asChild ? Slot : "button";
+    const iconElement = loading ? (
+      <Loader2 className="animate-spin" />
+    ) : Icon ? (
+      <Icon />
+    ) : null;
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
@@ -65,8 +73,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         {...props}
       >
-        {loading ? <Loader2 className="animate-spin" /> : Icon && <Icon />}
+        {iconPosition === "left" && iconElement}
         {children}
+        {iconPosition === "right" && iconElement}
       </Comp>
     );
   }
