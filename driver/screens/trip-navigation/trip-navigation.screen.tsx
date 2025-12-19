@@ -40,6 +40,7 @@ import { useNavigation } from "@/hooks/useNavigation";
 import TurnByTurnCard from "@/components/navigation/TurnByTurnCard";
 import { decodePolyline } from "@/services/navigationService";
 import Constants from "expo-constants";
+import { useKeepAwake } from "@/hooks/useKeepAwake";
 
 interface ScheduledTrip {
   id: string;
@@ -136,6 +137,10 @@ export default function TripNavigationScreen() {
       console.log("⚠️ Route deviation detected, recalculating...");
     },
   });
+
+  // Keep screen awake during active trips
+  const shouldKeepAwake = trip?.status === "ACTIVE";
+  useKeepAwake(shouldKeepAwake);
 
   // Manually control navigation start/stop based on isNavigationMode
   useEffect(() => {

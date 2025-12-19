@@ -1,5 +1,19 @@
-import { View, Text, Linking, ScrollView, TouchableOpacity, Platform, Modal } from "react-native";
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import {
+  View,
+  Text,
+  Linking,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
+  Modal,
+} from "react-native";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
 import MapView, { Marker } from "react-native-maps";
@@ -20,11 +34,16 @@ import Header from "@/components/common/header";
 import { useGetDriverData } from "@/hooks/useGetDriverData";
 import * as GeoLocation from "expo-location";
 import NavigationArrow from "@/components/navigation/NavigationArrow";
-import { calculateBearing, calculateHeadingFromMovement, Coordinate } from "@/utils/navigation.utils";
+import {
+  calculateBearing,
+  calculateHeadingFromMovement,
+  Coordinate,
+} from "@/utils/navigation.utils";
 import { runMapDiagnostics, logMapDiagnostics } from "@/utils/mapDiagnostics";
 import NavigationScreen from "@/components/navigation/NavigationScreen";
 import { Coordinate as NavCoordinate } from "@/services/navigationService";
 import { calculateDistance } from "@/utils/haversine";
+import { useKeepAwake } from "@/hooks/useKeepAwake";
 
 export default function RideDetailsScreen() {
   const { colors } = useTheme();
@@ -39,32 +58,43 @@ export default function RideDetailsScreen() {
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
-  
+
   // Navigation arrow state
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(
-    orderData?.currentLocation ? {
-      latitude: orderData.currentLocation.latitude,
-      longitude: orderData.currentLocation.longitude,
-    } : null
+    orderData?.currentLocation
+      ? {
+          latitude: orderData.currentLocation.latitude,
+          longitude: orderData.currentLocation.longitude,
+        }
+      : null
   );
   const [driverHeading, setDriverHeading] = useState<number | null>(null);
-  const [bearingToDestination, setBearingToDestination] = useState<number | null>(null);
+  const [bearingToDestination, setBearingToDestination] = useState<
+    number | null
+  >(null);
   const locationWatchSubscription = useRef<any>(null);
   const previousLocation = useRef<Coordinate | null>(null);
   const hasShownProximityNotification = useRef<string | null>(null);
-  
+
   // Map error handling state
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoading, setMapLoading] = useState(true);
-  
+
   // Navigation state
   const [isNavigationActive, setIsNavigationActive] = useState(false);
-  const [navigationMode, setNavigationMode] = useState<"pickup" | "destination">("pickup");
+  const [navigationMode, setNavigationMode] = useState<
+    "pickup" | "destination"
+  >("pickup");
+
+  // Keep screen awake during active trips (Processing or Ongoing)
+  const shouldKeepAwake =
+    orderStatus === "Processing" || orderStatus === "Ongoing";
+  useKeepAwake(shouldKeepAwake);
 
   useEffect(() => {
     checkOnlineStatus();
-    
+
     // Run map diagnostics on mount
     runMapDiagnostics().then((diagnostics) => {
       logMapDiagnostics(diagnostics);
@@ -109,13 +139,13 @@ export default function RideDetailsScreen() {
         longitudeDelta: Math.max(longitudeDelta, 0.0421),
       });
       setorderStatus(orderData.rideData.status);
-      
+
       // Initialize current location
       setCurrentLocation({
         latitude: orderData.currentLocation.latitude,
         longitude: orderData.currentLocation.longitude,
       });
-      
+
       // Calculate initial bearing to destination
       if (orderData.marker) {
         const bearing = calculateBearing(
@@ -135,7 +165,10 @@ export default function RideDetailsScreen() {
 
   // Set up location watching when trip is Processing or Ongoing
   useEffect(() => {
-    if ((orderStatus !== "Ongoing" && orderStatus !== "Processing") || (!orderData?.marker && !orderData?.currentLocation)) {
+    if (
+      (orderStatus !== "Ongoing" && orderStatus !== "Processing") ||
+      (!orderData?.marker && !orderData?.currentLocation)
+    ) {
       // Clean up if trip is not in progress
       if (locationWatchSubscription.current) {
         locationWatchSubscription.current.remove();
@@ -149,7 +182,8 @@ export default function RideDetailsScreen() {
     const startLocationWatching = async () => {
       try {
         // Request location permissions if needed
-        const { status } = await GeoLocation.requestForegroundPermissionsAsync();
+        const { status } =
+          await GeoLocation.requestForegroundPermissionsAsync();
         if (status !== "granted") {
           console.warn("Location permission not granted");
           return;
@@ -236,13 +270,22 @@ export default function RideDetailsScreen() {
                 targetLocation.longitude
               );
 
-              if (distance <= 500 && hasShownProximityNotification.current !== notificationKey) {
+              if (
+                distance <= 500 &&
+                hasShownProximityNotification.current !== notificationKey
+              ) {
                 hasShownProximityNotification.current = notificationKey;
-                const actionText = orderStatus === "Processing" ? "Pick Up Passenger" : "Complete Ride";
-                Toast.show(`You've reached ${targetName}! Please press "${actionText}".`, {
-                  type: "success",
-                  duration: 5000,
-                });
+                const actionText =
+                  orderStatus === "Processing"
+                    ? "Pick Up Passenger"
+                    : "Complete Ride";
+                Toast.show(
+                  `You've reached ${targetName}! Please press "${actionText}".`,
+                  {
+                    type: "success",
+                    duration: 5000,
+                  }
+                );
               }
             }
 
@@ -276,16 +319,22 @@ export default function RideDetailsScreen() {
         longitude: orderData.marker.longitude,
       });
       setBearingToDestination(bearing);
-      console.log("🧭 Navigation Arrow - Bearing calculated:", bearing, "Heading:", driverHeading);
+      console.log(
+        "🧭 Navigation Arrow - Bearing calculated:",
+        bearing,
+        "Heading:",
+        driverHeading
+      );
     }
   }, [currentLocation, orderData?.marker, driverHeading]);
 
   // Debug: Log arrow visibility conditions
   useEffect(() => {
-    const shouldShow = (orderStatus === "Ongoing" || orderStatus === "Processing") && 
-                      bearingToDestination !== null && 
-                      currentLocation && 
-                      orderData?.marker;
+    const shouldShow =
+      (orderStatus === "Ongoing" || orderStatus === "Processing") &&
+      bearingToDestination !== null &&
+      currentLocation &&
+      orderData?.marker;
     console.log("🧭 Navigation Arrow visibility:", {
       shouldShow,
       orderStatus,
@@ -295,7 +344,13 @@ export default function RideDetailsScreen() {
       bearing: bearingToDestination,
       heading: driverHeading,
     });
-  }, [orderStatus, bearingToDestination, currentLocation, orderData?.marker, driverHeading]);
+  }, [
+    orderStatus,
+    bearingToDestination,
+    currentLocation,
+    orderData?.marker,
+    driverHeading,
+  ]);
 
   const handleSubmit = async () => {
     const accessToken = await AsyncStorage.getItem("accessToken");
@@ -350,7 +405,9 @@ export default function RideDetailsScreen() {
     if (url) {
       Linking.openURL(url).catch(() => {
         // Fallback to Google Maps web
-        Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latLng}`);
+        Linking.openURL(
+          `https://www.google.com/maps/search/?api=1&query=${latLng}`
+        );
       });
     }
   };
@@ -362,7 +419,8 @@ export default function RideDetailsScreen() {
     }
 
     // Determine navigation mode based on order status
-    const mode: "pickup" | "destination" = orderStatus === "Processing" ? "pickup" : "destination";
+    const mode: "pickup" | "destination" =
+      orderStatus === "Processing" ? "pickup" : "destination";
     setNavigationMode(mode);
     setIsNavigationActive(true);
   };
@@ -380,8 +438,11 @@ export default function RideDetailsScreen() {
     }
   };
 
-  const estimatedDistance = orderData?.distance ? parseFloat(orderData.distance) : 0;
-  const estimatedFare = estimatedDistance * parseInt(orderData?.driver?.rate || "0");
+  const estimatedDistance = orderData?.distance
+    ? parseFloat(orderData.distance)
+    : 0;
+  const estimatedFare =
+    estimatedDistance * parseInt(orderData?.driver?.rate || "0");
 
   const getStatusBadgeType = () => {
     switch (orderStatus) {
@@ -416,29 +477,50 @@ export default function RideDetailsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Navigation Screen Modal */}
-      {isNavigationActive && getNavigationOrigin() && getNavigationDestination() && (
-        <Modal
-          visible={isNavigationActive}
-          animationType="slide"
-          presentationStyle="fullScreen"
-        >
-          <NavigationScreen
-            origin={getNavigationOrigin()!}
-            destination={getNavigationDestination()!}
-            mode={navigationMode}
-            onClose={stopNavigation}
-            onArrival={handleNavigationArrival}
-          />
-        </Modal>
-      )}
+      {isNavigationActive &&
+        getNavigationOrigin() &&
+        getNavigationDestination() && (
+          <Modal
+            visible={isNavigationActive}
+            animationType="slide"
+            presentationStyle="fullScreen"
+          >
+            <NavigationScreen
+              origin={getNavigationOrigin()!}
+              destination={getNavigationDestination()!}
+              mode={navigationMode}
+              onClose={stopNavigation}
+              onArrival={handleNavigationArrival}
+            />
+          </Modal>
+        )}
 
-      <Header isOn={isOnline} toggleSwitch={() => {}} showBackButton={true} title="Ride Details" />
+      <Header
+        isOn={isOnline}
+        toggleSwitch={() => {}}
+        showBackButton={true}
+        title="Ride Details"
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Map View */}
-        <View style={{ height: windowHeight(350), borderRadius: 0, position: "relative" }}>
+        <View
+          style={{
+            height: windowHeight(350),
+            borderRadius: 0,
+            position: "relative",
+          }}
+        >
           <MapView
             style={{ flex: 1 }}
-            region={useMemo(() => region, [region.latitude, region.longitude, region.latitudeDelta, region.longitudeDelta])}
+            region={useMemo(
+              () => region,
+              [
+                region.latitude,
+                region.longitude,
+                region.latitudeDelta,
+                region.longitudeDelta,
+              ]
+            )}
             onRegionChangeComplete={useCallback((newRegion) => {
               setRegion(newRegion);
             }, [])}
@@ -456,35 +538,58 @@ export default function RideDetailsScreen() {
             }, [])}
             onDidFailLoadingMap={useCallback((error) => {
               console.error("❌ Map failed to load:", error);
-              setMapError(`Failed to load map: ${error.message || "Unknown error"}`);
+              setMapError(
+                `Failed to load map: ${error.message || "Unknown error"}`
+              );
               setMapLoading(false);
             }, [])}
           >
-            {useMemo(() => orderData?.marker && (
-              <Marker
-                coordinate={orderData.marker}
-                title="Destination"
-                pinColor={color.status.active}
-              />
-            ), [orderData?.marker?.latitude, orderData?.marker?.longitude])}
-            {useMemo(() => orderData?.currentLocation && (
-              <Marker
-                coordinate={orderData.currentLocation}
-                title="Pickup"
-                pinColor={color.status.completed}
-              />
-            ), [orderData?.currentLocation?.latitude, orderData?.currentLocation?.longitude])}
-            {useMemo(() => orderData?.currentLocation && orderData?.marker && (
-              <MapViewDirections
-                origin={orderData.currentLocation}
-                destination={orderData.marker}
-                apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
-                strokeWidth={4}
-                strokeColor={color.primary}
-              />
-            ), [orderData?.currentLocation?.latitude, orderData?.currentLocation?.longitude, orderData?.marker?.latitude, orderData?.marker?.longitude])}
+            {useMemo(
+              () =>
+                orderData?.marker && (
+                  <Marker
+                    coordinate={orderData.marker}
+                    title="Destination"
+                    pinColor={color.status.active}
+                  />
+                ),
+              [orderData?.marker?.latitude, orderData?.marker?.longitude]
+            )}
+            {useMemo(
+              () =>
+                orderData?.currentLocation && (
+                  <Marker
+                    coordinate={orderData.currentLocation}
+                    title="Pickup"
+                    pinColor={color.status.completed}
+                  />
+                ),
+              [
+                orderData?.currentLocation?.latitude,
+                orderData?.currentLocation?.longitude,
+              ]
+            )}
+            {useMemo(
+              () =>
+                orderData?.currentLocation &&
+                orderData?.marker && (
+                  <MapViewDirections
+                    origin={orderData.currentLocation}
+                    destination={orderData.marker}
+                    apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                    strokeWidth={4}
+                    strokeColor={color.primary}
+                  />
+                ),
+              [
+                orderData?.currentLocation?.latitude,
+                orderData?.currentLocation?.longitude,
+                orderData?.marker?.latitude,
+                orderData?.marker?.longitude,
+              ]
+            )}
           </MapView>
-          
+
           {/* Map Error Display */}
           {mapError && (
             <View
@@ -499,12 +604,14 @@ export default function RideDetailsScreen() {
                 zIndex: 1000,
               }}
             >
-              <Text style={{ color: "white", fontSize: 12, fontWeight: "bold" }}>
+              <Text
+                style={{ color: "white", fontSize: 12, fontWeight: "bold" }}
+              >
                 Map Error: {mapError}
               </Text>
             </View>
           )}
-          
+
           {/* Map Loading Indicator */}
           {mapLoading && !mapError && (
             <View
@@ -520,23 +627,25 @@ export default function RideDetailsScreen() {
                 zIndex: 999,
               }}
             >
-              <Text style={{ color: "white", fontSize: 14 }}>Loading map...</Text>
+              <Text style={{ color: "white", fontSize: 14 }}>
+                Loading map...
+              </Text>
             </View>
           )}
-          
+
           {/* Navigation Arrow - Show when we have location and destination data */}
-          {bearingToDestination !== null && 
-           currentLocation && 
-           orderData?.marker && 
-           mapReady && (
-            <NavigationArrow
-              bearingToDestination={bearingToDestination}
-              driverHeading={driverHeading}
-              size={70}
-              color={color.status.active}
-              visible={true}
-            />
-          )}
+          {bearingToDestination !== null &&
+            currentLocation &&
+            orderData?.marker &&
+            mapReady && (
+              <NavigationArrow
+                bearingToDestination={bearingToDestination}
+                driverHeading={driverHeading}
+                size={70}
+                color={color.status.active}
+                visible={true}
+              />
+            )}
         </View>
 
         <View style={{ padding: spacing.lg }}>
@@ -576,7 +685,13 @@ export default function RideDetailsScreen() {
             {/* Locations */}
             <View style={{ marginBottom: spacing.md }}>
               <View style={{ flexDirection: "row", marginBottom: spacing.sm }}>
-                <View style={{ width: 20, alignItems: "center", marginRight: spacing.sm }}>
+                <View
+                  style={{
+                    width: 20,
+                    alignItems: "center",
+                    marginRight: spacing.sm,
+                  }}
+                >
                   <View
                     style={{
                       width: 12,
