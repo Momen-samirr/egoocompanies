@@ -87,10 +87,20 @@ export default function TripReplay({ tripId }: TripReplayProps) {
 
         // Set planned route and checkpoints
         if (trip.points && trip.points.length > 0) {
-          const route = trip.points.map((p: any) => ({
-            lat: p.latitude,
-            lng: p.longitude,
-          }));
+          const route = trip.points
+            .map((p: any) => ({
+              lat: p.latitude,
+              lng: p.longitude,
+            }))
+            .filter(
+              (p: any) =>
+                typeof p.lat === "number" &&
+                typeof p.lng === "number" &&
+                !isNaN(p.lat) &&
+                !isNaN(p.lng) &&
+                isFinite(p.lat) &&
+                isFinite(p.lng)
+            );
           setPlannedRoute(route);
           setCheckpoints(trip.points);
         }
@@ -99,8 +109,8 @@ export default function TripReplay({ tripId }: TripReplayProps) {
         const historyResponse = await api.get(
           `/admin/trips/${tripId}/location-history?limit=1000`
         );
-        const locations = historyResponse.data.locationHistory.map(
-          (loc: any) => ({
+        const locations = historyResponse.data.locationHistory
+          .map((loc: any) => ({
             latitude: loc.latitude,
             longitude: loc.longitude,
             timestamp: new Date(loc.timestamp),
@@ -108,8 +118,16 @@ export default function TripReplay({ tripId }: TripReplayProps) {
             isRouteDeviation: loc.isRouteDeviation,
             isCheckpointReached: loc.isCheckpointReached,
             checkpointIndex: loc.checkpointIndex,
-          })
-        );
+          }))
+          .filter(
+            (loc: any) =>
+              typeof loc.latitude === "number" &&
+              typeof loc.longitude === "number" &&
+              !isNaN(loc.latitude) &&
+              !isNaN(loc.longitude) &&
+              isFinite(loc.latitude) &&
+              isFinite(loc.longitude)
+          );
 
         setLocationHistory(locations);
 
@@ -189,10 +207,19 @@ export default function TripReplay({ tripId }: TripReplayProps) {
       currentTimeIndex < locationHistory.length
     ) {
       const currentLocation = locationHistory[currentTimeIndex];
-      mapRef.current.setCenter({
-        lat: currentLocation.latitude,
-        lng: currentLocation.longitude,
-      });
+      if (
+        typeof currentLocation.latitude === "number" &&
+        typeof currentLocation.longitude === "number" &&
+        !isNaN(currentLocation.latitude) &&
+        !isNaN(currentLocation.longitude) &&
+        isFinite(currentLocation.latitude) &&
+        isFinite(currentLocation.longitude)
+      ) {
+        mapRef.current.setCenter({
+          lat: currentLocation.latitude,
+          lng: currentLocation.longitude,
+        });
+      }
     }
   }, [isLoaded, currentTimeIndex, locationHistory]);
 
@@ -206,12 +233,30 @@ export default function TripReplay({ tripId }: TripReplayProps) {
       const bounds = new google.maps.LatLngBounds();
 
       plannedRoute.forEach((point) => {
-        bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+        if (
+          typeof point.lat === "number" &&
+          typeof point.lng === "number" &&
+          !isNaN(point.lat) &&
+          !isNaN(point.lng) &&
+          isFinite(point.lat) &&
+          isFinite(point.lng)
+        ) {
+          bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+        }
       });
 
       if (locationHistory.length > 0) {
         locationHistory.forEach((loc) => {
-          bounds.extend(new google.maps.LatLng(loc.latitude, loc.longitude));
+          if (
+            typeof loc.latitude === "number" &&
+            typeof loc.longitude === "number" &&
+            !isNaN(loc.latitude) &&
+            !isNaN(loc.longitude) &&
+            isFinite(loc.latitude) &&
+            isFinite(loc.longitude)
+          ) {
+            bounds.extend(new google.maps.LatLng(loc.latitude, loc.longitude));
+          }
         });
       }
 
@@ -258,10 +303,21 @@ export default function TripReplay({ tripId }: TripReplayProps) {
 
   const getDisplayedRoute = () => {
     if (currentTimeIndex === 0) return [];
-    return locationHistory.slice(0, currentTimeIndex + 1).map((loc) => ({
-      lat: loc.latitude,
-      lng: loc.longitude,
-    }));
+    return locationHistory
+      .slice(0, currentTimeIndex + 1)
+      .map((loc) => ({
+        lat: loc.latitude,
+        lng: loc.longitude,
+      }))
+      .filter(
+        (p) =>
+          typeof p.lat === "number" &&
+          typeof p.lng === "number" &&
+          !isNaN(p.lat) &&
+          !isNaN(p.lng) &&
+          isFinite(p.lat) &&
+          isFinite(p.lng)
+      );
   };
 
   if (!googleMapsApiKey) {
@@ -465,67 +521,83 @@ export default function TripReplay({ tripId }: TripReplayProps) {
           )}
 
           {/* Checkpoints */}
-          {checkpoints.map((checkpoint) => {
-            const isReached =
-              currentLocation &&
-              currentLocation.isCheckpointReached &&
-              currentLocation.checkpointIndex === checkpoint.order;
-            const willBeReached = locationHistory.some(
-              (loc) =>
-                loc.checkpointIndex === checkpoint.order &&
-                loc.timestamp > getCurrentTime()
-            );
+          {checkpoints
+            .filter(
+              (checkpoint) =>
+                typeof checkpoint.latitude === "number" &&
+                typeof checkpoint.longitude === "number" &&
+                !isNaN(checkpoint.latitude) &&
+                !isNaN(checkpoint.longitude) &&
+                isFinite(checkpoint.latitude) &&
+                isFinite(checkpoint.longitude)
+            )
+            .map((checkpoint) => {
+              const isReached =
+                currentLocation &&
+                currentLocation.isCheckpointReached &&
+                currentLocation.checkpointIndex === checkpoint.order;
+              const willBeReached = locationHistory.some(
+                (loc) =>
+                  loc.checkpointIndex === checkpoint.order &&
+                  loc.timestamp > getCurrentTime()
+              );
 
-            return (
+              return (
+                <Marker
+                  key={checkpoint.id}
+                  position={{
+                    lat: checkpoint.latitude,
+                    lng: checkpoint.longitude,
+                  }}
+                  icon={{
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: isReached ? 10 : 6,
+                    fillColor: isReached
+                      ? "#10B981"
+                      : willBeReached
+                      ? "#3B82F6"
+                      : "#6B7280",
+                    fillOpacity: 1,
+                    strokeColor: "#fff",
+                    strokeWeight: 2,
+                  }}
+                  label={{
+                    text: `${checkpoint.order + 1}`,
+                    color: "#fff",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                  }}
+                  title={checkpoint.name}
+                />
+              );
+            })}
+
+          {/* Current Position */}
+          {currentLocation &&
+            typeof currentLocation.latitude === "number" &&
+            typeof currentLocation.longitude === "number" &&
+            !isNaN(currentLocation.latitude) &&
+            !isNaN(currentLocation.longitude) &&
+            isFinite(currentLocation.latitude) &&
+            isFinite(currentLocation.longitude) && (
               <Marker
-                key={checkpoint.id}
                 position={{
-                  lat: checkpoint.latitude,
-                  lng: checkpoint.longitude,
+                  lat: currentLocation.latitude,
+                  lng: currentLocation.longitude,
                 }}
                 icon={{
                   path: google.maps.SymbolPath.CIRCLE,
-                  scale: isReached ? 10 : 6,
-                  fillColor: isReached
-                    ? "#10B981"
-                    : willBeReached
-                    ? "#3B82F6"
-                    : "#6B7280",
+                  scale: 12,
+                  fillColor: currentLocation.isRouteDeviation
+                    ? "#EF4444"
+                    : "#10B981",
                   fillOpacity: 1,
                   strokeColor: "#fff",
-                  strokeWeight: 2,
+                  strokeWeight: 3,
                 }}
-                label={{
-                  text: `${checkpoint.order + 1}`,
-                  color: "#fff",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                }}
-                title={checkpoint.name}
+                title={`${getCurrentTime().toLocaleTimeString()}`}
               />
-            );
-          })}
-
-          {/* Current Position */}
-          {currentLocation && (
-            <Marker
-              position={{
-                lat: currentLocation.latitude,
-                lng: currentLocation.longitude,
-              }}
-              icon={{
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 12,
-                fillColor: currentLocation.isRouteDeviation
-                  ? "#EF4444"
-                  : "#10B981",
-                fillOpacity: 1,
-                strokeColor: "#fff",
-                strokeWeight: 3,
-              }}
-              title={`${getCurrentTime().toLocaleTimeString()}`}
-            />
-          )}
+            )}
         </GoogleMap>
       </div>
     </div>

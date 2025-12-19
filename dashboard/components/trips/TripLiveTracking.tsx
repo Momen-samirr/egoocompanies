@@ -64,6 +64,12 @@ interface LiveTrackingData {
     startedAt?: string | null;
     lastLocationUpdate?: string | null;
   };
+  eta?: {
+    minutes?: number;
+    method?: string;
+    calculatedAt?: string;
+    distanceMeters?: number;
+  } | null;
 }
 
 export default function TripLiveTracking({
@@ -113,10 +119,20 @@ export default function TripLiveTracking({
 
         // Set planned route and checkpoints
         if (trip.points && trip.points.length > 0) {
-          const route = trip.points.map((p: any) => ({
-            lat: p.latitude,
-            lng: p.longitude,
-          }));
+          const route = trip.points
+            .map((p: any) => ({
+              lat: p.latitude,
+              lng: p.longitude,
+            }))
+            .filter(
+              (p: any) =>
+                typeof p.lat === "number" &&
+                typeof p.lng === "number" &&
+                !isNaN(p.lat) &&
+                !isNaN(p.lng) &&
+                isFinite(p.lat) &&
+                isFinite(p.lng)
+            );
           setPlannedRoute(route);
           setCheckpoints(trip.points);
         }
@@ -129,12 +145,20 @@ export default function TripLiveTracking({
 
         // Update actual route from recent locations
         if (trackingResponse.data.recentLocations) {
-          const actual = trackingResponse.data.recentLocations.map(
-            (loc: any) => ({
+          const actual = trackingResponse.data.recentLocations
+            .map((loc: any) => ({
               lat: loc.latitude,
               lng: loc.longitude,
-            })
-          );
+            }))
+            .filter(
+              (p: any) =>
+                typeof p.lat === "number" &&
+                typeof p.lng === "number" &&
+                !isNaN(p.lat) &&
+                !isNaN(p.lng) &&
+                isFinite(p.lat) &&
+                isFinite(p.lng)
+            );
           setActualRoute(actual);
         }
 
@@ -157,14 +181,21 @@ export default function TripLiveTracking({
     if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) {
       wsUrl = `ws://${wsUrl}`;
     }
-    wsUrl = wsUrl.replace(/\/$/, "");
+    // Remove trailing slashes to avoid double slashes in URL
+    wsUrl = wsUrl.replace(/\/+$/, "");
 
     const token = getToken();
     const params = new URLSearchParams({ role: "admin" });
     if (token) {
       params.append("token", token);
     }
+    // Ensure no trailing slash before query params
     const fullWsUrl = `${wsUrl}?${params.toString()}`;
+
+    console.log(
+      "🔌 [Trip Live Tracking] Connecting to WebSocket:",
+      fullWsUrl.replace(/token=[^&]+/, "token=***")
+    );
 
     const ws = new WebSocket(fullWsUrl);
 
@@ -172,22 +203,45 @@ export default function TripLiveTracking({
       console.log("✅ [Trip Live Tracking] WebSocket connected");
       setIsConnected(true);
 
-      // Subscribe to this trip
-      ws.send(
-        JSON.stringify({
-          type: "subscribeToTrip",
-          tripId: tripId,
-        })
-      );
+      // Subscribe to this trip (only send if connection is open)
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(
+            JSON.stringify({
+              type: "subscribeToTrip",
+              tripId: tripId,
+            })
+          );
+        } catch (error) {
+          console.error(
+            "❌ [Trip Live Tracking] Error sending subscription:",
+            error
+          );
+        }
+      }
     };
 
-    ws.onclose = () => {
-      console.log("🔌 [Trip Live Tracking] WebSocket disconnected");
+    ws.onclose = (event) => {
+      console.log("🔌 [Trip Live Tracking] WebSocket disconnected", {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
       setIsConnected(false);
     };
 
     ws.onerror = (error) => {
-      console.error("❌ [Trip Live Tracking] WebSocket error:", error);
+      // WebSocket error events don't provide much detail, but we can log what we know
+      console.error("❌ [Trip Live Tracking] WebSocket error occurred");
+      console.error(
+        "❌ [Trip Live Tracking] WebSocket URL:",
+        fullWsUrl.replace(/token=[^&]+/, "token=***")
+      );
+      console.error(
+        "❌ [Trip Live Tracking] WebSocket readyState:",
+        ws.readyState
+      );
+      console.error("❌ [Trip Live Tracking] Error event:", error);
       setIsConnected(false);
     };
 
@@ -209,11 +263,27 @@ export default function TripLiveTracking({
           setCurrentSpeed(data.speed || null);
           setDistanceFromRoute(data.deviationStatus?.distance || null);
 
-          // Update actual route
-          setActualRoute((prev) => [
-            ...prev,
-            { lat: newLocation.latitude, lng: newLocation.longitude },
-          ]);
+          // Update ETA if provided
+          if (data.eta) {
+            const methodLabel =
+              data.eta.method === "google_maps" ? " (Traffic)" : "";
+            setNextCheckpointETA(`${data.eta.minutes} min${methodLabel}`);
+          }
+
+          // Update actual route (validate coordinates first)
+          if (
+            typeof newLocation.latitude === "number" &&
+            typeof newLocation.longitude === "number" &&
+            !isNaN(newLocation.latitude) &&
+            !isNaN(newLocation.longitude) &&
+            isFinite(newLocation.latitude) &&
+            isFinite(newLocation.longitude)
+          ) {
+            setActualRoute((prev) => [
+              ...prev,
+              { lat: newLocation.latitude, lng: newLocation.longitude },
+            ]);
+          }
 
           // Update tracking data
           setTrackingData((prev) => {
@@ -226,7 +296,15 @@ export default function TripLiveTracking({
           });
 
           // Center map on new location
-          if (mapRef.current) {
+          if (
+            mapRef.current &&
+            typeof newLocation.latitude === "number" &&
+            typeof newLocation.longitude === "number" &&
+            !isNaN(newLocation.latitude) &&
+            !isNaN(newLocation.longitude) &&
+            isFinite(newLocation.latitude) &&
+            isFinite(newLocation.longitude)
+          ) {
             mapRef.current.setCenter({
               lat: newLocation.latitude,
               lng: newLocation.longitude,
@@ -245,12 +323,19 @@ export default function TripLiveTracking({
 
     return () => {
       if (wsRef.current) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "unsubscribeFromTrip",
-            tripId: tripId,
-          })
-        );
+        // Only send unsubscribe if connection is open
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          try {
+            wsRef.current.send(
+              JSON.stringify({
+                type: "unsubscribeFromTrip",
+                tripId: tripId,
+              })
+            );
+          } catch (error) {
+            console.debug("Error sending unsubscribe:", error);
+          }
+        }
         wsRef.current.close();
       }
     };
@@ -303,15 +388,23 @@ export default function TripLiveTracking({
     }
   }, [trackingData, checkpoints]);
 
-  // Calculate ETA to next checkpoint
+  // Use ETA from backend (calculated with Google Maps API when available)
   useEffect(() => {
     if (
+      trackingData?.eta?.minutes !== undefined &&
+      trackingData.eta.minutes > 0
+    ) {
+      // Use accurate ETA from backend
+      const methodLabel =
+        trackingData.eta.method === "google_maps" ? " (Traffic)" : "";
+      setNextCheckpointETA(`${trackingData.eta.minutes} min${methodLabel}`);
+    } else if (
       trackingData?.currentLocation &&
       trackingData?.nextCheckpoint &&
       currentSpeed &&
       currentSpeed > 0
     ) {
-      // Simple ETA calculation (distance / speed)
+      // Fallback: Simple ETA calculation if backend ETA not available
       const distance =
         trackingData.currentLocation.distanceFromRoute ||
         calculateDistance(
@@ -323,7 +416,7 @@ export default function TripLiveTracking({
 
       const hours = distance / (currentSpeed * 1000); // Convert speed from km/h to m/h
       const minutes = Math.round(hours * 60);
-      setNextCheckpointETA(`${minutes} min`);
+      setNextCheckpointETA(`${minutes} min (Est.)`);
     } else {
       setNextCheckpointETA(null);
     }
@@ -360,19 +453,46 @@ export default function TripLiveTracking({
 
       // Add planned route
       plannedRoute.forEach((point) => {
-        bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+        if (
+          typeof point.lat === "number" &&
+          typeof point.lng === "number" &&
+          !isNaN(point.lat) &&
+          !isNaN(point.lng) &&
+          isFinite(point.lat) &&
+          isFinite(point.lng)
+        ) {
+          bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+        }
       });
 
       // Add actual route
       actualRoute.forEach((point) => {
-        bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+        if (
+          typeof point.lat === "number" &&
+          typeof point.lng === "number" &&
+          !isNaN(point.lat) &&
+          !isNaN(point.lng) &&
+          isFinite(point.lat) &&
+          isFinite(point.lng)
+        ) {
+          bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+        }
       });
 
       // Add checkpoints
       checkpoints.forEach((checkpoint) => {
-        bounds.extend(
-          new google.maps.LatLng(checkpoint.latitude, checkpoint.longitude)
-        );
+        if (
+          typeof checkpoint.latitude === "number" &&
+          typeof checkpoint.longitude === "number" &&
+          !isNaN(checkpoint.latitude) &&
+          !isNaN(checkpoint.longitude) &&
+          isFinite(checkpoint.latitude) &&
+          isFinite(checkpoint.longitude)
+        ) {
+          bounds.extend(
+            new google.maps.LatLng(checkpoint.latitude, checkpoint.longitude)
+          );
+        }
       });
 
       if (bounds.getNorthEast() && bounds.getSouthWest()) {
@@ -528,6 +648,23 @@ export default function TripLiveTracking({
               .map((loc, index, arr) => {
                 if (index === 0) return null;
                 const prevLoc = arr[index - 1];
+                // Validate coordinates before rendering
+                if (
+                  typeof prevLoc.latitude !== "number" ||
+                  typeof prevLoc.longitude !== "number" ||
+                  typeof loc.latitude !== "number" ||
+                  typeof loc.longitude !== "number" ||
+                  isNaN(prevLoc.latitude) ||
+                  isNaN(prevLoc.longitude) ||
+                  isNaN(loc.latitude) ||
+                  isNaN(loc.longitude) ||
+                  !isFinite(prevLoc.latitude) ||
+                  !isFinite(prevLoc.longitude) ||
+                  !isFinite(loc.latitude) ||
+                  !isFinite(loc.longitude)
+                ) {
+                  return null;
+                }
                 return (
                   <Polyline
                     key={`deviation-${index}`}
@@ -546,59 +683,75 @@ export default function TripLiveTracking({
               })}
 
           {/* Checkpoints */}
-          {checkpoints.map((checkpoint, index) => {
-            const isReached = checkpoint.reachedAt !== null;
-            const isCurrent =
-              trackingData?.progress?.currentPointIndex === checkpoint.order;
+          {checkpoints
+            .filter(
+              (checkpoint) =>
+                typeof checkpoint.latitude === "number" &&
+                typeof checkpoint.longitude === "number" &&
+                !isNaN(checkpoint.latitude) &&
+                !isNaN(checkpoint.longitude) &&
+                isFinite(checkpoint.latitude) &&
+                isFinite(checkpoint.longitude)
+            )
+            .map((checkpoint, index) => {
+              const isReached = checkpoint.reachedAt !== null;
+              const isCurrent =
+                trackingData?.progress?.currentPointIndex === checkpoint.order;
 
-            return (
+              return (
+                <Marker
+                  key={checkpoint.id}
+                  position={{
+                    lat: checkpoint.latitude,
+                    lng: checkpoint.longitude,
+                  }}
+                  icon={{
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: isCurrent ? 10 : isReached ? 8 : 6,
+                    fillColor: isCurrent
+                      ? "#3B82F6"
+                      : isReached
+                      ? "#10B981"
+                      : "#6B7280",
+                    fillOpacity: 1,
+                    strokeColor: "#fff",
+                    strokeWeight: 2,
+                  }}
+                  label={{
+                    text: `${checkpoint.order + 1}`,
+                    color: "#fff",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                  }}
+                  title={checkpoint.name}
+                />
+              );
+            })}
+
+          {/* Current Driver Location */}
+          {currentLocation &&
+            typeof currentLocation.latitude === "number" &&
+            typeof currentLocation.longitude === "number" &&
+            !isNaN(currentLocation.latitude) &&
+            !isNaN(currentLocation.longitude) &&
+            isFinite(currentLocation.latitude) &&
+            isFinite(currentLocation.longitude) && (
               <Marker
-                key={checkpoint.id}
                 position={{
-                  lat: checkpoint.latitude,
-                  lng: checkpoint.longitude,
+                  lat: currentLocation.latitude,
+                  lng: currentLocation.longitude,
                 }}
                 icon={{
                   path: google.maps.SymbolPath.CIRCLE,
-                  scale: isCurrent ? 10 : isReached ? 8 : 6,
-                  fillColor: isCurrent
-                    ? "#3B82F6"
-                    : isReached
-                    ? "#10B981"
-                    : "#6B7280",
+                  scale: 12,
+                  fillColor: "#EF4444",
                   fillOpacity: 1,
                   strokeColor: "#fff",
-                  strokeWeight: 2,
+                  strokeWeight: 3,
                 }}
-                label={{
-                  text: `${checkpoint.order + 1}`,
-                  color: "#fff",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                }}
-                title={checkpoint.name}
+                title="Current Location"
               />
-            );
-          })}
-
-          {/* Current Driver Location */}
-          {currentLocation && (
-            <Marker
-              position={{
-                lat: currentLocation.latitude,
-                lng: currentLocation.longitude,
-              }}
-              icon={{
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 12,
-                fillColor: "#EF4444",
-                fillOpacity: 1,
-                strokeColor: "#fff",
-                strokeWeight: 3,
-              }}
-              title="Current Location"
-            />
-          )}
+            )}
         </GoogleMap>
       </div>
     </div>

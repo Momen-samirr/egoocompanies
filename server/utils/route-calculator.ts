@@ -118,10 +118,42 @@ export function calculateDistanceToCheckpoint(
   location: Location,
   checkpoint: Checkpoint
 ): number {
-  return getDistance(location, {
+  // Validate inputs
+  if (
+    !location ||
+    !checkpoint ||
+    typeof location.latitude !== "number" ||
+    typeof location.longitude !== "number" ||
+    typeof checkpoint.latitude !== "number" ||
+    typeof checkpoint.longitude !== "number" ||
+    isNaN(location.latitude) ||
+    isNaN(location.longitude) ||
+    isNaN(checkpoint.latitude) ||
+    isNaN(checkpoint.longitude)
+  ) {
+    console.error("[Route Calculator] Invalid input for distance calculation", {
+      location,
+      checkpoint,
+    });
+    return 0;
+  }
+
+  const distance = getDistance(location, {
     latitude: checkpoint.latitude,
     longitude: checkpoint.longitude,
   });
+
+  // Log for verification in development (can be disabled in production)
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[Route Calculator] Distance to checkpoint calculated", {
+      from: { lat: location.latitude, lng: location.longitude },
+      to: { lat: checkpoint.latitude, lng: checkpoint.longitude },
+      distanceMeters: distance,
+      distanceKm: (distance / 1000).toFixed(2),
+    });
+  }
+
+  return distance;
 }
 
 /**

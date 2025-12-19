@@ -635,6 +635,26 @@ export default function TripDetailsPage() {
         </>
       )}
 
+      {activeTab === "live" && trip.status === "ACTIVE" && (
+        <div className="h-[800px]">
+          <TripLiveTracking tripId={tripId} />
+        </div>
+      )}
+
+      {activeTab === "replay" && trip.status === "COMPLETED" && (
+        <div className="h-[800px]">
+          <TripReplay tripId={tripId} />
+        </div>
+      )}
+
+      {activeTab === "route" && <RouteComparison tripId={tripId} />}
+
+      {activeTab === "analytics" && <TripAnalytics tripId={tripId} />}
+
+      {activeTab === "alerts" && (
+        <TripAlerts tripId={tripId} isActive={trip.status === "ACTIVE"} />
+      )}
+
       {/* Force Close Confirmation Modal */}
       {showForceCloseModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

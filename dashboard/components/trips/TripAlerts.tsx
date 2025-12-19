@@ -24,6 +24,9 @@ interface Alert {
     expectedTime?: string;
     actualTime?: string;
     lastUpdateTime?: string;
+    etaMinutes?: number;
+    delayMinutes?: number;
+    distanceMeters?: number;
   };
   timestamp: Date;
 }
@@ -36,7 +39,10 @@ export default function TripAlerts({
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<string>("all");
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptsRef = useRef<number>(0);
+  const maxReconnectAttempts = 5;
 
   // Fetch historical alerts (if trip is completed)
   useEffect(() => {
@@ -45,50 +51,186 @@ export default function TripAlerts({
       // Note: This would require an API endpoint to fetch stored alerts
       // For now, we'll just set loading to false
       setLoading(false);
+    } else {
+      // For active trips, set loading to false once WebSocket connection is attempted
+      // We don't need to wait for connection to succeed to show the UI
+      setLoading(false);
     }
   }, [tripId, isActive]);
+
+  // Test HTTP connectivity to WebSocket server (health check)
+  // Note: This is optional - if health endpoint doesn't exist, we'll still try WebSocket
+  const testServerConnectivity = async (baseUrl: string): Promise<boolean> => {
+    try {
+      // Convert ws:// to http:// for health check
+      const httpUrl = baseUrl.replace(/^ws/, "http").replace(/\/$/, ""); // Remove trailing slash
+      const healthUrl = `${httpUrl}/api/health`;
+
+      const response = await fetch(healthUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(3000), // 3 second timeout
+      });
+
+      return response.ok;
+    } catch (error) {
+      // Health check is optional - don't block WebSocket connection if it fails
+      console.debug(
+        "⚠️ [Trip Alerts] Server health check failed (non-blocking):",
+        error
+      );
+      return true; // Return true to allow WebSocket connection attempt
+    }
+  };
 
   // Initialize WebSocket for real-time alerts (if trip is active)
   useEffect(() => {
     if (!isActive || !tripId) return;
+
+    // Reset connection error
+    setConnectionError(null);
 
     let wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:8080";
     wsUrl = wsUrl.trim();
     if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) {
       wsUrl = `ws://${wsUrl}`;
     }
-    wsUrl = wsUrl.replace(/\/$/, "");
+    // Remove trailing slashes to avoid double slashes in URL
+    wsUrl = wsUrl.replace(/\/+$/, "");
 
     const token = getToken();
     const params = new URLSearchParams({ role: "admin" });
     if (token) {
       params.append("token", token);
     }
+    // Ensure no trailing slash before query params
     const fullWsUrl = `${wsUrl}?${params.toString()}`;
+
+    console.log(
+      "🔌 [Trip Alerts] Connecting to WebSocket:",
+      fullWsUrl.replace(/token=[^&]+/, "token=***")
+    );
+
+    // Set loading to false once we start attempting connection
+    // Don't wait for connection to succeed to show the UI
+    setLoading(false);
+
+    // Test server connectivity (non-blocking - won't prevent WebSocket connection)
+    testServerConnectivity(wsUrl).catch(() => {
+      // Health check failure is non-blocking
+    });
 
     const ws = new WebSocket(fullWsUrl);
 
+    // Add connection timeout
+    const connectionTimeout = setTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) {
+        console.error("❌ [Trip Alerts] WebSocket connection timeout");
+        ws.close();
+        setIsConnected(false);
+        setLoading(false); // Ensure loading is false on timeout
+      }
+    }, 10000); // 10 second timeout
+
     ws.onopen = () => {
+      clearTimeout(connectionTimeout);
       console.log("✅ [Trip Alerts] WebSocket connected");
       setIsConnected(true);
+      setConnectionError(null);
+      setLoading(false); // Ensure loading is false when connected
+      reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
 
-      // Subscribe to this trip
-      ws.send(
-        JSON.stringify({
-          type: "subscribeToTrip",
-          tripId: tripId,
-        })
-      );
+      // Subscribe to this trip (only send if connection is open)
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(
+            JSON.stringify({
+              type: "subscribeToTrip",
+              tripId: tripId,
+            })
+          );
+        } catch (error) {
+          console.error("❌ [Trip Alerts] Error sending subscription:", error);
+        }
+      }
     };
 
-    ws.onclose = () => {
-      console.log("🔌 [Trip Alerts] WebSocket disconnected");
+    ws.onclose = (event) => {
+      clearTimeout(connectionTimeout);
+      console.log("🔌 [Trip Alerts] WebSocket disconnected", {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
+
+      // Provide helpful error messages based on close code
+      let errorMessage = "";
+      if (event.code === 1006) {
+        const causes = [
+          "WebSocket server is not running",
+          "Network connectivity issue",
+          "Firewall blocking the connection",
+          "Server address/port is incorrect",
+        ];
+        errorMessage = `Connection failed. Please check: ${causes.join(", ")}`;
+        console.error(
+          "❌ [Trip Alerts] Connection closed abnormally. Possible causes:"
+        );
+        causes.forEach((cause) => console.error(`   - ${cause}`));
+      } else if (event.code === 1002) {
+        errorMessage = "Protocol error - check WebSocket server configuration";
+        console.error(
+          "❌ [Trip Alerts] Protocol error - check WebSocket server configuration"
+        );
+      } else if (event.code === 1008) {
+        errorMessage = "Policy violation - check authentication/authorization";
+        console.error(
+          "❌ [Trip Alerts] Policy violation - check authentication/authorization"
+        );
+      } else {
+        errorMessage = `Connection closed (code: ${event.code})`;
+      }
+
+      setConnectionError(errorMessage);
       setIsConnected(false);
+      setLoading(false); // Stop loading even if connection fails
+
+      // Attempt to reconnect if we haven't exceeded max attempts
+      // Note: Reconnection is handled by the useEffect dependency on isConnected
+      // We'll just update the attempt counter here
+      if (
+        event.code === 1006 &&
+        reconnectAttemptsRef.current < maxReconnectAttempts
+      ) {
+        reconnectAttemptsRef.current++;
+        const delay = Math.min(
+          1000 * Math.pow(2, reconnectAttemptsRef.current),
+          30000
+        ); // Exponential backoff, max 30s
+        console.log(
+          `🔄 [Trip Alerts] Will attempt to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttempts}) in ${delay}ms...`
+        );
+
+        // The useEffect will trigger reconnection when isConnected changes
+        // We'll let it handle the reconnection naturally
+      } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+        setConnectionError(
+          "Failed to connect after multiple attempts. Please check server status and refresh the page."
+        );
+        setLoading(false); // Ensure loading is false after max attempts
+      }
     };
 
     ws.onerror = (error) => {
-      console.error("❌ [Trip Alerts] WebSocket error:", error);
+      // WebSocket error events don't provide much detail, but we can log what we know
+      console.error("❌ [Trip Alerts] WebSocket error occurred");
+      console.error(
+        "❌ [Trip Alerts] WebSocket URL:",
+        fullWsUrl.replace(/token=[^&]+/, "token=***")
+      );
+      console.error("❌ [Trip Alerts] WebSocket readyState:", ws.readyState);
+      console.error("❌ [Trip Alerts] Error event:", error);
       setIsConnected(false);
+      setLoading(false); // Stop loading on error
     };
 
     ws.onmessage = (event) => {
@@ -116,15 +258,33 @@ export default function TripAlerts({
     wsRef.current = ws;
 
     return () => {
+      clearTimeout(connectionTimeout);
       if (wsRef.current) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "unsubscribeFromTrip",
-            tripId: tripId,
-          })
-        );
-        wsRef.current.close();
+        // Only send unsubscribe if connection is open
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          try {
+            wsRef.current.send(
+              JSON.stringify({
+                type: "unsubscribeFromTrip",
+                tripId: tripId,
+              })
+            );
+          } catch (error) {
+            console.debug("Error sending unsubscribe:", error);
+          }
+        }
+        // Close with normal closure code
+        if (
+          wsRef.current.readyState === WebSocket.OPEN ||
+          wsRef.current.readyState === WebSocket.CONNECTING
+        ) {
+          wsRef.current.close(1000, "Component unmounting");
+        }
+        wsRef.current = null;
       }
+      // Reset reconnect attempts when component unmounts or dependencies change
+      reconnectAttemptsRef.current = 0;
+      setIsConnected(false);
     };
   }, [tripId, isActive]);
 
@@ -188,7 +348,7 @@ export default function TripAlerts({
               <div
                 className={`w-3 h-3 rounded-full ${
                   isConnected ? "bg-green-500" : "bg-red-500"
-                }`}
+                } ${isConnected ? "animate-pulse" : ""}`}
               />
               <span className="text-sm">
                 {isConnected ? "Live" : "Disconnected"}
@@ -197,6 +357,37 @@ export default function TripAlerts({
           )}
         </div>
       </div>
+
+      {/* Connection Error Message */}
+      {isActive && connectionError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="shrink-0">
+              <svg
+                className="h-5 w-5 text-red-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-red-800">
+                Connection Error
+              </h3>
+              <p className="mt-1 text-sm text-red-700">{connectionError}</p>
+              <p className="mt-2 text-xs text-red-600">
+                Server:{" "}
+                {process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:8080"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       {alerts.length > 0 && (
@@ -257,6 +448,41 @@ export default function TripAlerts({
                     </div>
                     {alert.metadata && (
                       <div className="mt-2 text-xs text-gray-600 space-y-1">
+                        {alert.metadata.delayMinutes !== undefined && (
+                          <div className="font-semibold text-red-600">
+                            ⚠️ Delay: {alert.metadata.delayMinutes.toFixed(1)}{" "}
+                            minutes
+                          </div>
+                        )}
+                        {alert.metadata.etaMinutes !== undefined && (
+                          <div>
+                            ETA to checkpoint:{" "}
+                            {alert.metadata.etaMinutes.toFixed(0)} minutes
+                          </div>
+                        )}
+                        {alert.metadata.distanceMeters !== undefined && (
+                          <div>
+                            Distance to checkpoint:{" "}
+                            {(alert.metadata.distanceMeters / 1000).toFixed(2)}{" "}
+                            km
+                          </div>
+                        )}
+                        {alert.metadata.expectedTime && (
+                          <div>
+                            Expected time:{" "}
+                            {new Date(
+                              alert.metadata.expectedTime
+                            ).toLocaleString()}
+                          </div>
+                        )}
+                        {alert.metadata.actualTime && (
+                          <div>
+                            Estimated arrival:{" "}
+                            {new Date(
+                              alert.metadata.actualTime
+                            ).toLocaleString()}
+                          </div>
+                        )}
                         {alert.metadata.distanceFromRoute !== undefined && (
                           <div>
                             Distance from route:{" "}

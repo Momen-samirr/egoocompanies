@@ -14,6 +14,7 @@ import {
   createAlertRecord,
   AlertType,
 } from "../services/trip-alerts.service";
+import { calculateETA } from "../services/eta-calculator.service";
 
 /**
  * Record trip location - called by driver app during active trips
@@ -92,6 +93,9 @@ export const recordTripLocation = async (req: any, res: Response) => {
     let distanceFromNextCheckpoint: number | null = null;
     let isCheckpointReached = false;
     let checkpointIndex: number | null = null;
+    let etaToNextCheckpoint: number | null = null;
+    let etaCalculatedAt: Date | null = null;
+    let etaMethod: string | null = null;
 
     if (currentCheckpointIndex < trip.points.length) {
       const nextCheckpoint = trip.points[currentCheckpointIndex];
@@ -104,6 +108,24 @@ export const recordTripLocation = async (req: any, res: Response) => {
       if (isNearCheckpoint(currentLocation, nextCheckpoint, 50)) {
         isCheckpointReached = true;
         checkpointIndex = currentCheckpointIndex;
+      } else {
+        // Calculate ETA to next checkpoint (only if not reached)
+        try {
+          const etaResult = await calculateETA(
+            currentLocation,
+            nextCheckpoint,
+            speedInKmh
+          );
+          etaToNextCheckpoint = etaResult.etaMinutes;
+          etaCalculatedAt = etaResult.timestamp;
+          etaMethod = etaResult.method;
+        } catch (error: any) {
+          console.error(
+            "[Trip Tracking] Error calculating ETA:",
+            error.message
+          );
+          // Continue without ETA if calculation fails
+        }
       }
     }
 
@@ -122,6 +144,9 @@ export const recordTripLocation = async (req: any, res: Response) => {
         speed: speedInKmh,
         distanceFromRoute,
         distanceFromNextCheckpoint,
+        etaToNextCheckpoint,
+        etaCalculatedAt,
+        etaMethod,
         isCheckpointReached,
         checkpointIndex,
         isIdle,
@@ -140,7 +165,7 @@ export const recordTripLocation = async (req: any, res: Response) => {
       },
     });
 
-    // Check and generate alerts
+    // Check and generate alerts (include ETA for proactive delay detection)
     const alerts = await checkAndSendAlerts(tripId, {
       driverId,
       latitude,
@@ -149,6 +174,8 @@ export const recordTripLocation = async (req: any, res: Response) => {
       distanceFromRoute,
       isIdle,
       timestamp: new Date(),
+      etaMinutes: etaToNextCheckpoint || undefined,
+      distanceMeters: distanceFromNextCheckpoint || undefined,
     });
 
     // Store alerts
@@ -167,9 +194,21 @@ export const recordTripLocation = async (req: any, res: Response) => {
         body: JSON.stringify({
           tripId,
           driverId,
-          location: { latitude, longitude },
+          location: { latitude, longitude, heading },
           speed: speedInKmh,
-          deviationStatus: deviation.isDeviated,
+          deviationStatus: {
+            isDeviated: deviation.isDeviated,
+            distance: distanceFromRoute, // in meters
+          },
+          eta: etaToNextCheckpoint
+            ? {
+                minutes: etaToNextCheckpoint,
+                method: etaMethod,
+                calculatedAt: etaCalculatedAt?.toISOString(),
+                distanceMeters: distanceFromNextCheckpoint,
+              }
+            : null,
+          timestamp: new Date().toISOString(),
         }),
       }).catch((error) => {
         console.debug(
@@ -322,6 +361,16 @@ export const getTripLiveTracking = async (req: Request, res: Response) => {
         ? trip.points[currentCheckpointIndex]
         : null;
 
+    // Extract ETA from current location if available
+    const etaInfo = currentLocation
+      ? {
+          minutes: currentLocation.etaToNextCheckpoint,
+          method: currentLocation.etaMethod,
+          calculatedAt: currentLocation.etaCalculatedAt,
+          distanceMeters: currentLocation.distanceFromNextCheckpoint,
+        }
+      : null;
+
     res.json({
       success: true,
       trip: {
@@ -334,6 +383,7 @@ export const getTripLiveTracking = async (req: Request, res: Response) => {
       recentLocations: recentLocations.reverse(), // Reverse to show chronological order
       nextCheckpoint,
       progress: trip.progress,
+      eta: etaInfo,
     });
   } catch (error: any) {
     console.error("Error fetching live tracking data:", error);

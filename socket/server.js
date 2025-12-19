@@ -459,6 +459,8 @@ const broadcastTripLocationUpdate = (tripId, locationData) => {
     type: "tripLocationUpdate",
     tripId,
     ...locationData,
+    // Include ETA if provided
+    eta: locationData.eta || null,
   };
 
   wss.clients.forEach((client) => {
@@ -1090,7 +1092,7 @@ wss.on("connection", (ws, req) => {
 
       // Handle trip location updates
       if (data.type === "tripLocationUpdate" && data.role === "driver") {
-        const { tripId, location, speed, deviationStatus } = data;
+        const { tripId, location, speed, deviationStatus, eta } = data;
 
         console.log(
           `📍 [WebSocket] Trip location update received: tripId=${tripId}, driver=${data.driver}`
@@ -1102,6 +1104,7 @@ wss.on("connection", (ws, req) => {
           location,
           speed,
           deviationStatus,
+          eta: eta || null,
           timestamp: new Date().toISOString(),
         });
       }
@@ -1619,7 +1622,8 @@ app.post("/api/update-driver-location", async (req, res) => {
 // API endpoint to broadcast trip location update (called from backend server)
 app.post("/api/trip-location-update", (req, res) => {
   try {
-    const { tripId, driverId, location, speed, deviationStatus } = req.body;
+    const { tripId, driverId, location, speed, deviationStatus, eta } =
+      req.body;
 
     if (!tripId || !driverId || !location) {
       return res.status(400).json({
@@ -1629,7 +1633,9 @@ app.post("/api/trip-location-update", (req, res) => {
     }
 
     console.log(
-      `📍 [HTTP API] Trip location update received for trip ${tripId}`
+      `📍 [HTTP API] Trip location update received for trip ${tripId}${
+        eta ? ` with ETA: ${eta.minutes} min` : ""
+      }`
     );
 
     // Broadcast to subscribed admins
@@ -1638,6 +1644,7 @@ app.post("/api/trip-location-update", (req, res) => {
       location,
       speed,
       deviationStatus,
+      eta: eta || null,
       timestamp: new Date().toISOString(),
     });
 

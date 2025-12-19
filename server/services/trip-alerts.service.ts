@@ -1,4 +1,5 @@
 import prisma from "../utils/prisma";
+import { getOperationsConfig } from "../config/operations.config";
 
 export enum AlertType {
   ROUTE_DEVIATION = "ROUTE_DEVIATION",
@@ -29,6 +30,9 @@ export interface TripAlert {
     expectedTime?: Date;
     actualTime?: Date;
     lastUpdateTime?: Date;
+    etaMinutes?: number;
+    delayMinutes?: number;
+    distanceMeters?: number;
   };
   timestamp: Date;
 }
@@ -38,13 +42,64 @@ interface AlertConfig {
   idleTimeThreshold: number; // minutes, default 5
   speedLimit?: number; // km/h, optional
   locationUpdateTimeout: number; // minutes, default 2
+  delayThresholdMinutes: number; // minutes, default 5
+  alertUpdateIntervalMinutes: number; // minutes, default 5
 }
 
 const DEFAULT_ALERT_CONFIG: AlertConfig = {
   routeDeviationThreshold: 100, // 100 meters
   idleTimeThreshold: 5, // 5 minutes
   locationUpdateTimeout: 2, // 2 minutes
+  delayThresholdMinutes: 5, // 5 minutes
+  alertUpdateIntervalMinutes: 5, // 5 minutes
 };
+
+// Track last alert time per trip-checkpoint to avoid duplicate alerts
+const lastAlertTimeCache = new Map<string, number>();
+
+/**
+ * Get cache key for last alert time
+ */
+function getLastAlertKey(tripId: string, checkpointIndex: number): string {
+  return `${tripId}_${checkpointIndex}`;
+}
+
+/**
+ * Check if enough time has passed since last alert for this checkpoint
+ */
+function shouldSendAlert(
+  tripId: string,
+  checkpointIndex: number,
+  alertUpdateIntervalMinutes: number
+): boolean {
+  const key = getLastAlertKey(tripId, checkpointIndex);
+  const lastAlertTime = lastAlertTimeCache.get(key);
+
+  if (!lastAlertTime) {
+    return true; // First alert for this checkpoint
+  }
+
+  const timeSinceLastAlert = (Date.now() - lastAlertTime) / (60 * 1000); // minutes
+  return timeSinceLastAlert >= alertUpdateIntervalMinutes;
+}
+
+/**
+ * Record alert time for this checkpoint
+ */
+function recordAlertTime(tripId: string, checkpointIndex: number): void {
+  const key = getLastAlertKey(tripId, checkpointIndex);
+  lastAlertTimeCache.set(key, Date.now());
+
+  // Clean up old entries (keep cache size reasonable)
+  if (lastAlertTimeCache.size > 1000) {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 24 hours ago
+    for (const [k, v] of lastAlertTimeCache.entries()) {
+      if (v < cutoff) {
+        lastAlertTimeCache.delete(k);
+      }
+    }
+  }
+}
 
 /**
  * Check conditions and generate alerts for a trip location update
@@ -59,10 +114,18 @@ export async function checkAndSendAlerts(
     distanceFromRoute?: number;
     isIdle?: boolean;
     timestamp: Date;
+    etaMinutes?: number; // ETA to next checkpoint in minutes
+    distanceMeters?: number; // Distance to next checkpoint in meters
   },
   config: Partial<AlertConfig> = {}
 ): Promise<TripAlert[]> {
-  const alertConfig = { ...DEFAULT_ALERT_CONFIG, ...config };
+  const opsConfig = getOperationsConfig();
+  const alertConfig = {
+    ...DEFAULT_ALERT_CONFIG,
+    delayThresholdMinutes: opsConfig.delayThresholdMinutes,
+    alertUpdateIntervalMinutes: opsConfig.alertUpdateIntervalMinutes,
+    ...config,
+  };
   const alerts: TripAlert[] = [];
 
   // Get trip information
@@ -186,39 +249,96 @@ export async function checkAndSendAlerts(
     });
   }
 
-  // 4. Check checkpoint delays (if we have progress info)
+  // 4. Check checkpoint delays - PROACTIVE detection using ETA
   if (trip.progress && trip.points.length > 0) {
     const currentCheckpointIndex = trip.progress.currentPointIndex;
     if (currentCheckpointIndex < trip.points.length) {
       const currentCheckpoint = trip.points[currentCheckpointIndex];
-      if (currentCheckpoint.expectedTime) {
+
+      // Skip if checkpoint already reached
+      if (currentCheckpoint.reachedAt) {
+        // Clear alert cache for reached checkpoint
+        const key = getLastAlertKey(tripId, currentCheckpointIndex);
+        lastAlertTimeCache.delete(key);
+      } else if (currentCheckpoint.expectedTime) {
         const expectedTime = new Date(currentCheckpoint.expectedTime);
         const now = locationData.timestamp;
-        const delayMinutes =
-          (now.getTime() - expectedTime.getTime()) / (60 * 1000);
 
-        if (delayMinutes > 10 && !currentCheckpoint.reachedAt) {
-          // More than 10 minutes late and checkpoint not reached
-          alerts.push({
-            tripId,
-            driverId: locationData.driverId,
-            alertType: AlertType.CHECKPOINT_DELAY,
-            severity:
+        // PROACTIVE: Use ETA if available, otherwise use current time
+        let delayMinutes: number | null = null;
+        let estimatedArrivalTime: Date | null = null;
+
+        if (
+          locationData.etaMinutes !== undefined &&
+          locationData.etaMinutes > 0
+        ) {
+          // Calculate estimated arrival time based on ETA
+          estimatedArrivalTime = new Date(
+            now.getTime() + locationData.etaMinutes * 60 * 1000
+          );
+
+          // Calculate delay: estimated arrival time vs expected time
+          delayMinutes =
+            (estimatedArrivalTime.getTime() - expectedTime.getTime()) /
+            (60 * 1000);
+        } else {
+          // Fallback: Use current time (reactive detection)
+          delayMinutes = (now.getTime() - expectedTime.getTime()) / (60 * 1000);
+        }
+
+        // Check if delay exceeds threshold
+        if (delayMinutes > alertConfig.delayThresholdMinutes) {
+          // Check if we should send alert (avoid duplicates)
+          if (
+            shouldSendAlert(
+              tripId,
+              currentCheckpointIndex,
+              alertConfig.alertUpdateIntervalMinutes
+            )
+          ) {
+            const severity =
               delayMinutes > 30
                 ? AlertSeverity.HIGH
                 : delayMinutes > 20
                 ? AlertSeverity.MEDIUM
-                : AlertSeverity.LOW,
-            message: `Driver is ${delayMinutes.toFixed(
-              1
-            )} minutes late to checkpoint: ${currentCheckpoint.name}`,
-            metadata: {
-              checkpointIndex: currentCheckpointIndex,
-              expectedTime,
-              actualTime: now,
-            },
-            timestamp: locationData.timestamp,
-          });
+                : delayMinutes > 15
+                ? AlertSeverity.LOW
+                : AlertSeverity.LOW;
+
+            const message = locationData.etaMinutes
+              ? `Driver is expected to be ${delayMinutes.toFixed(
+                  1
+                )} minutes late to checkpoint: ${
+                  currentCheckpoint.name
+                } (ETA: ${locationData.etaMinutes.toFixed(0)} min)`
+              : `Driver is ${delayMinutes.toFixed(
+                  1
+                )} minutes late to checkpoint: ${currentCheckpoint.name}`;
+
+            alerts.push({
+              tripId,
+              driverId: locationData.driverId,
+              alertType: AlertType.CHECKPOINT_DELAY,
+              severity,
+              message,
+              metadata: {
+                checkpointIndex: currentCheckpointIndex,
+                expectedTime,
+                actualTime: estimatedArrivalTime || now,
+                etaMinutes: locationData.etaMinutes,
+                delayMinutes,
+                distanceMeters: locationData.distanceMeters,
+              },
+              timestamp: locationData.timestamp,
+            });
+
+            // Record alert time
+            recordAlertTime(tripId, currentCheckpointIndex);
+          }
+        } else {
+          // No delay or delay resolved - clear alert cache
+          const key = getLastAlertKey(tripId, currentCheckpointIndex);
+          lastAlertTimeCache.delete(key);
         }
       }
     }

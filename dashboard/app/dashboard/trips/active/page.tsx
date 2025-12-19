@@ -148,10 +148,18 @@ export default function ActiveTripsPage() {
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           center={
-            tripsWithLocation.length > 0
+            tripsWithLocation.length > 0 &&
+            tripsWithLocation[0].currentLocation &&
+            typeof tripsWithLocation[0].currentLocation.latitude === "number" &&
+            typeof tripsWithLocation[0].currentLocation.longitude ===
+              "number" &&
+            !isNaN(tripsWithLocation[0].currentLocation.latitude) &&
+            !isNaN(tripsWithLocation[0].currentLocation.longitude) &&
+            isFinite(tripsWithLocation[0].currentLocation.latitude) &&
+            isFinite(tripsWithLocation[0].currentLocation.longitude)
               ? {
-                  lat: tripsWithLocation[0].currentLocation!.latitude,
-                  lng: tripsWithLocation[0].currentLocation!.longitude,
+                  lat: tripsWithLocation[0].currentLocation.latitude,
+                  lng: tripsWithLocation[0].currentLocation.longitude,
                 }
               : { lat: 0, lng: 0 }
           }
@@ -164,63 +172,89 @@ export default function ActiveTripsPage() {
             fullscreenControl: true,
           }}
         >
-          {tripsWithLocation.map((trip) => {
-            if (!trip.currentLocation) return null;
-
-            return (
-              <Marker
-                key={trip.id}
-                position={{
-                  lat: trip.currentLocation.latitude,
-                  lng: trip.currentLocation.longitude,
-                }}
-                icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 10,
-                  fillColor: "#3B82F6",
-                  fillOpacity: 1,
-                  strokeColor: "#fff",
-                  strokeWeight: 2,
-                }}
-                onClick={() => setSelectedTrip(trip.id)}
-                title={trip.name}
-              />
-            );
-          })}
-
-          {selectedTrip && (
-            <InfoWindow
-              position={{
-                lat:
-                  tripsWithLocation.find((t) => t.id === selectedTrip)
-                    ?.currentLocation?.latitude || 0,
-                lng:
-                  tripsWithLocation.find((t) => t.id === selectedTrip)
-                    ?.currentLocation?.longitude || 0,
-              }}
-              onCloseClick={() => setSelectedTrip(null)}
-            >
-              <div className="p-2">
-                <h3 className="font-semibold text-gray-900">
-                  {tripsWithLocation.find((t) => t.id === selectedTrip)?.name}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  Captain:{" "}
-                  {tripsWithLocation.find((t) => t.id === selectedTrip)
-                    ?.assignedCaptain?.name || "N/A"}
-                </p>
-                <button
-                  onClick={() => {
-                    router.push(`/dashboard/trips/${selectedTrip}`);
-                    setSelectedTrip(null);
+          {tripsWithLocation
+            .filter(
+              (trip) =>
+                trip.currentLocation &&
+                typeof trip.currentLocation.latitude === "number" &&
+                typeof trip.currentLocation.longitude === "number" &&
+                !isNaN(trip.currentLocation.latitude) &&
+                !isNaN(trip.currentLocation.longitude) &&
+                isFinite(trip.currentLocation.latitude) &&
+                isFinite(trip.currentLocation.longitude)
+            )
+            .map((trip) => {
+              return (
+                <Marker
+                  key={trip.id}
+                  position={{
+                    lat: trip.currentLocation!.latitude,
+                    lng: trip.currentLocation!.longitude,
                   }}
-                  className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                  icon={{
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 10,
+                    fillColor: "#3B82F6",
+                    fillOpacity: 1,
+                    strokeColor: "#fff",
+                    strokeWeight: 2,
+                  }}
+                  onClick={() => setSelectedTrip(trip.id)}
+                  title={trip.name}
+                />
+              );
+            })}
+
+          {selectedTrip &&
+            (() => {
+              const selectedTripData = tripsWithLocation.find(
+                (t) => t.id === selectedTrip
+              );
+              if (
+                !selectedTripData?.currentLocation ||
+                typeof selectedTripData.currentLocation.latitude !== "number" ||
+                typeof selectedTripData.currentLocation.longitude !==
+                  "number" ||
+                isNaN(selectedTripData.currentLocation.latitude) ||
+                isNaN(selectedTripData.currentLocation.longitude) ||
+                !isFinite(selectedTripData.currentLocation.latitude) ||
+                !isFinite(selectedTripData.currentLocation.longitude)
+              ) {
+                return null;
+              }
+              return (
+                <InfoWindow
+                  position={{
+                    lat: selectedTripData.currentLocation.latitude,
+                    lng: selectedTripData.currentLocation.longitude,
+                  }}
+                  onCloseClick={() => setSelectedTrip(null)}
                 >
-                  View Details →
-                </button>
-              </div>
-            </InfoWindow>
-          )}
+                  <div className="p-2">
+                    <h3 className="font-semibold text-gray-900">
+                      {
+                        tripsWithLocation.find((t) => t.id === selectedTrip)
+                          ?.name
+                      }
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Captain:{" "}
+                      {tripsWithLocation.find((t) => t.id === selectedTrip)
+                        ?.assignedCaptain?.name || "N/A"}
+                    </p>
+                    <button
+                      onClick={() => {
+                        router.push(`/dashboard/trips/${selectedTrip}`);
+                        setSelectedTrip(null);
+                      }}
+                      className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      View Details →
+                    </button>
+                  </div>
+                </InfoWindow>
+              );
+            })()}
         </GoogleMap>
       </div>
 
