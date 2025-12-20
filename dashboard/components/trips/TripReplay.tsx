@@ -135,6 +135,19 @@ export default function TripReplay({ tripId }: TripReplayProps) {
     libraries: libraries,
   });
 
+  // Debug: Log API key status (but not the actual key value)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      console.log("[TripReplay] Google Maps API Key status:", {
+        hasKey: !!googleMapsApiKey,
+        keyLength: googleMapsApiKey?.length || 0,
+        isLoaded,
+        loadError: loadError?.message || null,
+        currentDomain: window.location.origin,
+      });
+    }
+  }, [googleMapsApiKey, isLoaded, loadError]);
+
   const [locationHistory, setLocationHistory] = useState<LocationPoint[]>([]);
   const [plannedRoute, setPlannedRoute] = useState<
     Array<{ lat: number; lng: number }>
@@ -640,18 +653,50 @@ export default function TripReplay({ tripId }: TripReplayProps) {
   if (!googleMapsApiKey) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-red-600 mb-2">Google Maps API Key is missing</p>
+        <div className="text-center max-w-md">
+          <p className="text-red-600 mb-2 font-semibold">
+            Google Maps API Key is missing
+          </p>
+          <p className="text-sm text-gray-600 mb-4">
+            Please set the NEXT_PUBLIC_GOOGLE_MAPS_API_KEY environment variable
+            in your production environment (e.g., Vercel).
+          </p>
+          <p className="text-xs text-gray-500">
+            Current domain:{" "}
+            {typeof window !== "undefined" ? window.location.origin : "N/A"}
+          </p>
         </div>
       </div>
     );
   }
 
   if (loadError) {
+    console.error("[TripReplay] Google Maps load error:", loadError);
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-red-600 mb-2">Error loading Google Maps</p>
+        <div className="text-center max-w-md">
+          <p className="text-red-600 mb-2 font-semibold">
+            Error loading Google Maps
+          </p>
+          <p className="text-sm text-gray-600 mb-2">
+            {loadError.message || "Unknown error occurred"}
+          </p>
+          <div className="text-xs text-gray-500 space-y-1 mt-4">
+            <p>Common causes:</p>
+            <ul className="list-disc list-inside text-left space-y-1">
+              <li>API key restrictions don't include this domain</li>
+              <li>Maps JavaScript API not enabled in Google Cloud Console</li>
+              <li>Invalid or expired API key</li>
+            </ul>
+            <p className="mt-2">
+              Current domain:{" "}
+              {typeof window !== "undefined" ? window.location.origin : "N/A"}
+            </p>
+            <p className="mt-2">
+              Make sure to add your domain to HTTP referrer restrictions in
+              Google Cloud Console.
+            </p>
+          </div>
         </div>
       </div>
     );
