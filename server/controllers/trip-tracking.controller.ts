@@ -284,6 +284,13 @@ export const getTripLocationHistory = async (req: Request, res: Response) => {
       }
     }
 
+    console.log(`[getTripLocationHistory] Fetching location history for trip ${id}`, {
+      page: pageNum,
+      limit: limitNum,
+      skip,
+      where,
+    });
+
     const [locationHistory, total] = await Promise.all([
       prisma.tripLocationHistory.findMany({
         where,
@@ -293,6 +300,33 @@ export const getTripLocationHistory = async (req: Request, res: Response) => {
       }),
       prisma.tripLocationHistory.count({ where }),
     ]);
+
+    console.log(`[getTripLocationHistory] Query results for trip ${id}:`, {
+      requestedPage: pageNum,
+      requestedLimit: limitNum,
+      recordsReturned: locationHistory.length,
+      totalRecords: total,
+      totalPages: Math.ceil(total / limitNum),
+      hasDateFilters: !!(startDate || endDate),
+    });
+
+    if (locationHistory.length > 0) {
+      console.log(`[getTripLocationHistory] Sample location (first):`, {
+        id: locationHistory[0].id,
+        timestamp: locationHistory[0].timestamp,
+        latitude: locationHistory[0].latitude,
+        longitude: locationHistory[0].longitude,
+      });
+      if (locationHistory.length > 1) {
+        const lastLoc = locationHistory[locationHistory.length - 1];
+        console.log(`[getTripLocationHistory] Sample location (last in page):`, {
+          id: lastLoc.id,
+          timestamp: lastLoc.timestamp,
+          latitude: lastLoc.latitude,
+          longitude: lastLoc.longitude,
+        });
+      }
+    }
 
     res.json({
       success: true,
@@ -305,7 +339,12 @@ export const getTripLocationHistory = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error("Error fetching location history:", error);
+    console.error("[getTripLocationHistory] Error fetching location history:", error);
+    console.error("[getTripLocationHistory] Error details:", {
+      message: error.message,
+      stack: error.stack,
+      tripId: req.params.id,
+    });
     res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch location history",
