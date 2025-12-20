@@ -298,7 +298,10 @@ export default function TripReplay({ tripId }: TripReplayProps) {
 
   const getProgressPercentage = () => {
     if (locationHistory.length === 0) return 0;
-    return (currentTimeIndex / (locationHistory.length - 1)) * 100;
+    if (locationHistory.length === 1) return 100;
+    const percentage = (currentTimeIndex / (locationHistory.length - 1)) * 100;
+    // Ensure we return a valid number, not NaN or Infinity
+    return isNaN(percentage) || !isFinite(percentage) ? 0 : percentage;
   };
 
   const getDisplayedRoute = () => {
