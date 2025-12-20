@@ -104,17 +104,20 @@ function interpolateLocations(
         const speed =
           start.speed !== undefined && end.speed !== undefined
             ? start.speed + (end.speed - start.speed) * clampedRatio
-            : start.speed || end.speed;
+            : start.speed ?? end.speed;
 
-        interpolated.push({
+        const interpolatedPoint: LocationPoint = {
           latitude: lat,
           longitude: lng,
           timestamp: timestamp,
-          speed: speed,
-          isRouteDeviation: start.isRouteDeviation || end.isRouteDeviation,
+          ...(speed !== undefined && speed !== null && { speed }),
+          ...((start.isRouteDeviation || end.isRouteDeviation) && {
+            isRouteDeviation: true,
+          }),
           isCheckpointReached: false, // Interpolated points aren't checkpoints
-          checkpointIndex: undefined,
-        });
+        };
+
+        interpolated.push(interpolatedPoint);
       }
     }
   }
@@ -256,15 +259,17 @@ export default function TripReplay({ tripId }: TripReplayProps) {
         console.log(
           `[TripReplay] Processing ${allLocations.length} raw locations...`
         );
-        const mappedLocations = allLocations.map((loc: any) => ({
-          latitude: loc.latitude,
-          longitude: loc.longitude,
-          timestamp: new Date(loc.timestamp),
-          speed: loc.speed,
-          isRouteDeviation: loc.isRouteDeviation,
-          isCheckpointReached: loc.isCheckpointReached,
-          checkpointIndex: loc.checkpointIndex,
-        }));
+        const mappedLocations: LocationPoint[] = allLocations.map(
+          (loc: any) => ({
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            timestamp: new Date(loc.timestamp),
+            speed: loc.speed,
+            isRouteDeviation: loc.isRouteDeviation,
+            isCheckpointReached: loc.isCheckpointReached,
+            checkpointIndex: loc.checkpointIndex,
+          })
+        );
         console.log(
           `[TripReplay] After mapping: ${mappedLocations.length} locations`
         );
