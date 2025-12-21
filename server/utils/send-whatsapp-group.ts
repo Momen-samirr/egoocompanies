@@ -63,9 +63,20 @@ export const formatTripWhatsAppMessage = (
   const tripTypeLabel =
     trip.tripType === "ARRIVAL" ? "🛬 ARRIVAL" : "🛫 DEPARTURE";
 
-  // Format scheduled time
+  // Format scheduled time in a consistent timezone
+  // Use environment variable if set, otherwise default to Africa/Cairo (UTC+2)
+  const timezone = process.env.DISPLAY_TIMEZONE || "Africa/Cairo";
   const scheduledTime = new Date(trip.scheduledTime);
-  const formattedScheduledTime = scheduledTime.toLocaleString();
+  const formattedScheduledTime = scheduledTime.toLocaleString("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
 
   // Build message
   const message =
@@ -79,7 +90,16 @@ export const formatTripWhatsAppMessage = (
     `*Total Checkpoints:* ${points.length}\n` +
     `*Status:* ${statusEmoji} ${trip.status}\n\n` +
     `Trip ID: ${trip.id}\n` +
-    `Status changed at: ${timestamp.toLocaleString()}`;
+    `Status changed at: ${timestamp.toLocaleString("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    })}`;
 
   return message;
 };
