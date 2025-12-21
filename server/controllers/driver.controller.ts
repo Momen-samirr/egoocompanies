@@ -10,7 +10,10 @@ import {
   applyTripCompletionPayout,
 } from "../services/trip-finance";
 import { calculateTimingDifference } from "../utils/trip-timing";
-import { sendWhatsAppToGroup } from "../utils/send-whatsapp-group";
+import {
+  sendWhatsAppToGroup,
+  formatTripWhatsAppMessage,
+} from "../utils/send-whatsapp-group";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken, {
@@ -1092,25 +1095,22 @@ export const startScheduledTrip = async (req: any, res: Response) => {
           "WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification"
         );
       } else {
-        // Format trip details message
-        const firstPoint = updatedTrip.points[0];
-        const lastPoint = updatedTrip.points[updatedTrip.points.length - 1];
-        const driverName =
-          updatedTrip.assignedCaptain?.name || "Unknown Driver";
-
-        const message =
-          `🚗 *Trip Started - Active*\n\n` +
-          `*Trip Name:* ${updatedTrip.name}\n` +
-          `*Driver:* ${driverName}\n` +
-          `*Start Point:* ${firstPoint?.name || "N/A"}\n` +
-          `*End Point:* ${lastPoint?.name || "N/A"}\n` +
-          `*Scheduled Time:* ${new Date(
-            updatedTrip.scheduledTime
-          ).toLocaleString()}\n` +
-          `*Total Checkpoints:* ${updatedTrip.points.length}\n` +
-          `*Status:* ✅ ACTIVE\n\n` +
-          `Trip ID: ${tripId}\n` +
-          `Started at: ${new Date().toLocaleString()}`;
+        // Format trip details message using reusable formatter
+        const message = formatTripWhatsAppMessage(
+          {
+            id: tripId,
+            name: updatedTrip.name,
+            tripType: updatedTrip.tripType,
+            status: "ACTIVE",
+            scheduledTime: updatedTrip.scheduledTime,
+            points: updatedTrip.points.map((p) => ({
+              name: p.name,
+              order: p.order,
+            })),
+            assignedCaptain: updatedTrip.assignedCaptain,
+          },
+          new Date()
+        );
 
         await sendWhatsAppToGroup({
           groupId: managersGroupId,

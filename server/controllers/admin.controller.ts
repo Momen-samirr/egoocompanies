@@ -3165,6 +3165,61 @@ export const updateTripStatus = async (req: any, res: Response) => {
       },
     });
 
+    // Send WhatsApp notification if status is FAILED
+    if (newStatus === "FAILED") {
+      try {
+        const managersGroupId = process.env.WHATSAPP_MANAGERS_GROUP_ID;
+
+        if (!managersGroupId) {
+          console.warn(
+            "WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification"
+          );
+        } else {
+          // Import WhatsApp utilities dynamically to avoid circular dependencies
+          const {
+            sendWhatsAppToGroup,
+            formatTripWhatsAppMessage,
+          } = await import("../utils/send-whatsapp-group");
+
+          // Format trip details message using reusable formatter
+          const message = formatTripWhatsAppMessage(
+            {
+              id: updatedTrip.id,
+              name: updatedTrip.name,
+              tripType: updatedTrip.tripType,
+              status: "FAILED",
+              scheduledTime: updatedTrip.scheduledTime,
+              points: (updatedTrip.points || []).map((p) => ({
+                name: p.name,
+                order: p.order,
+              })),
+              assignedCaptain: updatedTrip.assignedCaptain
+                ? {
+                    name: updatedTrip.assignedCaptain.name,
+                  }
+                : null,
+            },
+            new Date()
+          );
+
+          await sendWhatsAppToGroup({
+            groupId: managersGroupId,
+            message: message,
+          });
+
+          console.log(
+            `WhatsApp notification sent to managers group for ${newStatus} trip: ${id}`
+          );
+        }
+      } catch (whatsappError: any) {
+        // Log error but don't block the status update
+        console.error(
+          `Failed to send WhatsApp notification for ${newStatus} trip:`,
+          whatsappError.message || whatsappError
+        );
+      }
+    }
+
     // Fetch updated trip with new history entry
     const tripWithHistory = await prisma.scheduledTrip.findUnique({
       where: { id },
@@ -4042,19 +4097,6 @@ export const getNotifications = async (req: any, res: Response) => {
       limit = 20,
     } = req.query;
 
-    console.log("🔍 [getNotifications Controller] Request received:", {
-      adminId,
-      queryParams: {
-        driverId,
-        documentType,
-        status,
-        startDate,
-        endDate,
-        page,
-        limit,
-      },
-    });
-
     const {
       getAdminNotifications,
     } = require("../services/notification.service");
@@ -4090,19 +4132,7 @@ export const getNotifications = async (req: any, res: Response) => {
       }
     }
 
-    console.log(
-      "🔍 [getNotifications Controller] Calling service with filters:",
-      filters
-    );
-
     const result = await getAdminNotifications(adminId, filters);
-
-    console.log("🔍 [getNotifications Controller] Service returned:", {
-      notificationsCount: result.notifications?.length || 0,
-      total: result.total,
-      page: result.page,
-      limit: result.limit,
-    });
 
     res.status(200).json({
       success: true,

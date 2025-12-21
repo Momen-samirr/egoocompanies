@@ -6,6 +6,85 @@ export interface SendWhatsAppGroupOptions {
 }
 
 /**
+ * Trip data structure for message formatting
+ */
+export interface TripDataForMessage {
+  id: string;
+  name: string;
+  tripType: "ARRIVAL" | "DEPARTURE";
+  status: "ACTIVE" | "FAILED";
+  scheduledTime: Date | string;
+  points: Array<{
+    name: string;
+    order: number;
+  }>;
+  assignedCaptain?: {
+    name: string;
+  } | null;
+}
+
+/**
+ * Format trip details into a WhatsApp message
+ * Handles all trip statuses, trip types, and cases where captain is not assigned
+ * @param trip Trip data object
+ * @param statusChangeTime Optional timestamp of status change (defaults to now)
+ * @returns Formatted WhatsApp message string
+ */
+export const formatTripWhatsAppMessage = (
+  trip: TripDataForMessage,
+  statusChangeTime?: Date
+): string => {
+  const timestamp = statusChangeTime || new Date();
+
+  // Safely handle points array - it might be empty or undefined
+  const points = trip.points || [];
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  const driverName = trip.assignedCaptain?.name || "Not Assigned";
+
+  // Determine status emoji and header
+  let statusEmoji: string;
+  let statusHeader: string;
+  switch (trip.status) {
+    case "ACTIVE":
+      statusEmoji = "✅";
+      statusHeader = "🚗 *Trip Started - Active*";
+      break;
+    case "FAILED":
+      statusEmoji = "❌";
+      statusHeader = "❌ *Trip Failed*";
+      break;
+    default:
+      statusEmoji = "ℹ️";
+      statusHeader = `ℹ️ *Trip Status: ${trip.status}*`;
+  }
+
+  // Determine trip type label
+  const tripTypeLabel =
+    trip.tripType === "ARRIVAL" ? "🛬 ARRIVAL" : "🛫 DEPARTURE";
+
+  // Format scheduled time
+  const scheduledTime = new Date(trip.scheduledTime);
+  const formattedScheduledTime = scheduledTime.toLocaleString();
+
+  // Build message
+  const message =
+    `${statusHeader}\n\n` +
+    `*Trip Name:* ${trip.name}\n` +
+    `*Trip Type:* ${tripTypeLabel}\n` +
+    `*Driver:* ${driverName}\n` +
+    `*Start Point:* ${firstPoint?.name || "N/A"}\n` +
+    `*End Point:* ${lastPoint?.name || "N/A"}\n` +
+    `*Scheduled Time:* ${formattedScheduledTime}\n` +
+    `*Total Checkpoints:* ${points.length}\n` +
+    `*Status:* ${statusEmoji} ${trip.status}\n\n` +
+    `Trip ID: ${trip.id}\n` +
+    `Status changed at: ${timestamp.toLocaleString()}`;
+
+  return message;
+};
+
+/**
  * Validate group ID format
  * Group JID format: [numbers]@g.us
  * @param groupId The group ID to validate
