@@ -63,7 +63,7 @@ export const formatTripWhatsAppMessage = (
   const tripTypeLabel =
     trip.tripType === "ARRIVAL" ? "🛬 ARRIVAL" : "🛫 DEPARTURE";
 
-  // Format scheduled time in a consistent timezone
+  // Format scheduled time in a consistent timezonee
   // Use environment variable if set, otherwise default to Africa/Cairo (UTC+2)
   const timezone = process.env.DISPLAY_TIMEZONE || "Africa/Cairo";
   const scheduledTime = new Date(trip.scheduledTime);
