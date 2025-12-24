@@ -1,9 +1,6 @@
 import prisma from "../utils/prisma";
 import { applyTripFailurePenalty } from "./trip-finance";
-import {
-  sendWhatsAppToGroup,
-  formatTripWhatsAppMessage,
-} from "../utils/send-whatsapp-group";
+import { queueTripStatusChange } from "../utils/whatsapp-report-queue";
 
 /**
  * Background worker that checks for overdue scheduled trips
@@ -127,18 +124,8 @@ export class TripOverdueWorker {
               console.log(`   Assigned captain: ${trip.assignedCaptain.name}`);
             }
 
-            console.log(
-              `📱 [DEBUG] About to enter WhatsApp notification block for trip: ${trip.id}`
-            );
-
-            // Send WhatsApp notification to managers group
+            // Queue WhatsApp notification for batching
             try {
-              console.log(
-                `📱 [DEBUG] Inside WhatsApp try block for trip: ${trip.id}`
-              );
-              console.log(
-                `📱 [FAILED] Starting WhatsApp notification for trip: ${trip.id}`
-              );
               const managersGroupId = process.env.WHATSAPP_MANAGERS_GROUP_ID;
 
               if (!managersGroupId) {
@@ -146,9 +133,6 @@ export class TripOverdueWorker {
                   `⚠️ [FAILED] WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification for trip: ${trip.id}`
                 );
               } else {
-                console.log(
-                  `📱 [FAILED] Group ID configured, fetching trip data...`
-                );
                 // Fetch complete trip data including points
                 const tripWithPoints = await prisma.scheduledTrip.findUnique({
                   where: { id: trip.id },
@@ -166,18 +150,11 @@ export class TripOverdueWorker {
 
                 if (!tripWithPoints) {
                   console.error(
-                    `❌ [FAILED] Trip ${trip.id} not found after status update - cannot send WhatsApp notification`
+                    `❌ [FAILED] Trip ${trip.id} not found after status update - cannot queue WhatsApp notification`
                   );
                 } else {
-                  console.log(
-                    `📱 [FAILED] Trip data fetched. Points: ${
-                      tripWithPoints.points?.length || 0
-                    }, Trip Type: ${tripWithPoints.tripType}`
-                  );
-
-                  // Format trip details message using reusable formatter
-                  console.log(`📱 [FAILED] Formatting message...`);
-                  const message = formatTripWhatsAppMessage(
+                  // Queue trip status change for batched reporting
+                  await queueTripStatusChange(
                     {
                       id: tripWithPoints.id,
                       name: tripWithPoints.name,
@@ -190,33 +167,21 @@ export class TripOverdueWorker {
                       })),
                       assignedCaptain: tripWithPoints.assignedCaptain,
                     },
+                    "FAILED",
                     now
                   );
 
                   console.log(
-                    `📱 [FAILED] Message formatted (${message.length} chars), sending...`
-                  );
-                  await sendWhatsAppToGroup({
-                    groupId: managersGroupId,
-                    message: message,
-                  });
-
-                  console.log(
-                    `✅ [FAILED] WhatsApp notification sent successfully to managers group for trip: ${trip.id}`
+                    `📋 [FAILED] WhatsApp notification queued for FAILED trip: ${trip.id}`
                   );
                 }
               }
             } catch (whatsappError: any) {
               // Log error but don't block the FAILED status update
               console.error(
-                `❌ [FAILED] Error sending WhatsApp notification for trip ${trip.id}:`,
+                `❌ [FAILED] Error queueing WhatsApp notification for trip ${trip.id}:`,
                 whatsappError.message || whatsappError
               );
-              console.error(`❌ [FAILED] Error details:`, {
-                name: whatsappError.name,
-                stack: whatsappError.stack,
-                response: whatsappError.response?.data,
-              });
             }
           }
         }

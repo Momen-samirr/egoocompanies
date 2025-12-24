@@ -64,6 +64,37 @@ async function testConnection(
   return false;
 }
 
+// Helper function to retry operations with exponential backoff
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries = 5,
+  baseDelayMs = 1000,
+  operationName = "operation"
+): Promise<T> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      const isLastAttempt = attempt === maxRetries;
+      const isRetryableError =
+        error.message?.includes("write conflict") ||
+        error.message?.includes("deadlock") ||
+        error.message?.includes("Transaction failed");
+
+      if (!isRetryableError || isLastAttempt) {
+        throw error;
+      }
+
+      const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
+      console.log(
+        `   ⚠️  ${operationName} failed (attempt ${attempt}/${maxRetries}), retrying in ${delayMs}ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+
 async function main() {
   console.log("🧹 Starting scheduled trips cleanup...\n");
 
@@ -79,7 +110,12 @@ async function main() {
   // Step 1: Delete all ScheduledTripLedger entries (no cascade)
   console.log("📊 Deleting ScheduledTripLedger entries...");
   const ledgerCount = await prisma.scheduledTripLedger.count();
-  const ledgerResult = await prisma.scheduledTripLedger.deleteMany({});
+  const ledgerResult = await retryOperation(
+    () => prisma.scheduledTripLedger.deleteMany({}),
+    5,
+    1000,
+    "ScheduledTripLedger deletion"
+  );
   console.log(
     `   ✓ Deleted ${ledgerResult.count} of ${ledgerCount} ledger entries\n`
   );
@@ -87,7 +123,12 @@ async function main() {
   // Step 2: Delete all EmergencyUsage entries (references tripId, no cascade)
   console.log("🚨 Deleting EmergencyUsage entries...");
   const emergencyCount = await prisma.emergencyUsage.count();
-  const emergencyResult = await prisma.emergencyUsage.deleteMany({});
+  const emergencyResult = await retryOperation(
+    () => prisma.emergencyUsage.deleteMany({}),
+    5,
+    1000,
+    "EmergencyUsage deletion"
+  );
   console.log(
     `   ✓ Deleted ${emergencyResult.count} of ${emergencyCount} emergency usage records\n`
   );
@@ -95,7 +136,16 @@ async function main() {
   // Step 3: Delete all ScheduledTrip entries (will cascade delete TripPoint, TripProgress, TripActivationCheck)
   console.log("🚗 Deleting ScheduledTrip entries...");
   const tripCount = await prisma.scheduledTrip.count();
-  const tripResult = await prisma.scheduledTrip.deleteMany({});
+  
+  // Add a small delay before the large deletion to avoid conflicts
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  
+  const tripResult = await retryOperation(
+    () => prisma.scheduledTrip.deleteMany({}),
+    5,
+    2000,
+    "ScheduledTrip deletion"
+  );
   console.log(
     `   ✓ Deleted ${tripResult.count} of ${tripCount} scheduled trips\n`
   );

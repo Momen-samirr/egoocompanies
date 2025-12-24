@@ -3175,14 +3175,13 @@ export const updateTripStatus = async (req: any, res: Response) => {
             "WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification"
           );
         } else {
-          // Import WhatsApp utilities dynamically to avoid circular dependencies
-          const {
-            sendWhatsAppToGroup,
-            formatTripWhatsAppMessage,
-          } = await import("../utils/send-whatsapp-group");
+          // Import queue function dynamically to avoid circular dependencies
+          const { queueTripStatusChange } = await import(
+            "../utils/whatsapp-report-queue"
+          );
 
-          // Format trip details message using reusable formatter
-          const message = formatTripWhatsAppMessage(
+          // Queue trip status change for batched reporting
+          await queueTripStatusChange(
             {
               id: updatedTrip.id,
               name: updatedTrip.name,
@@ -3199,16 +3198,12 @@ export const updateTripStatus = async (req: any, res: Response) => {
                   }
                 : null,
             },
+            "FAILED",
             new Date()
           );
 
-          await sendWhatsAppToGroup({
-            groupId: managersGroupId,
-            message: message,
-          });
-
           console.log(
-            `WhatsApp notification sent to managers group for ${newStatus} trip: ${id}`
+            `📋 WhatsApp notification queued for ${newStatus} trip: ${id}`
           );
         }
       } catch (whatsappError: any) {

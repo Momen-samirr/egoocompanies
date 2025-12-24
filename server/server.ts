@@ -2,6 +2,7 @@ import http from "http";
 import { app } from "./app";
 import { tripActivationWorker } from "./services/trip-activation-worker";
 import { tripOverdueWorker } from "./services/trip-overdue-worker";
+import { whatsappReportScheduler } from "./services/whatsapp-report-scheduler";
 
 const server = http.createServer(app);
 
@@ -14,6 +15,9 @@ server.listen(process.env.PORT, () => {
   
   // Start trip overdue worker to mark failed trips
   tripOverdueWorker.start();
+  
+  // Start WhatsApp report scheduler for batched notifications
+  whatsappReportScheduler.start();
 });
 
 // Graceful shutdown
@@ -21,6 +25,7 @@ process.on("SIGTERM", () => {
   console.log("SIGTERM signal received: closing HTTP server");
   tripActivationWorker.stop();
   tripOverdueWorker.stop();
+  whatsappReportScheduler.stop();
   server.close(() => {
     console.log("HTTP server closed");
   });
@@ -30,6 +35,7 @@ process.on("SIGINT", () => {
   console.log("SIGINT signal received: closing HTTP server");
   tripActivationWorker.stop();
   tripOverdueWorker.stop();
+  whatsappReportScheduler.stop();
   server.close(() => {
     console.log("HTTP server closed");
     process.exit(0);

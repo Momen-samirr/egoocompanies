@@ -14,6 +14,7 @@ import {
   sendWhatsAppToGroup,
   formatTripWhatsAppMessage,
 } from "../utils/send-whatsapp-group";
+import { queueTripStatusChange } from "../utils/whatsapp-report-queue";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken, {
@@ -1095,8 +1096,8 @@ export const startScheduledTrip = async (req: any, res: Response) => {
           "WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification"
         );
       } else {
-        // Format trip details message using reusable formatter
-        const message = formatTripWhatsAppMessage(
+        // Queue trip status change for batched reporting
+        await queueTripStatusChange(
           {
             id: tripId,
             name: updatedTrip.name,
@@ -1109,16 +1110,12 @@ export const startScheduledTrip = async (req: any, res: Response) => {
             })),
             assignedCaptain: updatedTrip.assignedCaptain,
           },
+          "ACTIVE",
           new Date()
         );
 
-        await sendWhatsAppToGroup({
-          groupId: managersGroupId,
-          message: message,
-        });
-
         console.log(
-          `WhatsApp notification sent to managers group: ${managersGroupId}`
+          `📋 WhatsApp notification queued for ACTIVE trip: ${tripId}`
         );
       }
     } catch (whatsappError: any) {
