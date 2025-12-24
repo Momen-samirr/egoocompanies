@@ -40,6 +40,7 @@ const statusOptions: StatusOption[] = [
   { value: "FAILED", label: "Failed" },
   { value: "EMERGENCY_ENDED", label: "Emergency Ended" },
   { value: "EMERGENCY_TERMINATED", label: "Emergency Terminated" },
+  { value: "FORCE_CLOSED", label: "Force Closed" },
 ];
 
 export default function TripFilters({

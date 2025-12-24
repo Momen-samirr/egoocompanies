@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Breadcrumbs from "@/components/common/Breadcrumbs";
 import { Search } from "lucide-react";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -59,6 +59,12 @@ interface HeaderProps {
 export default function Header({ children }: HeaderProps) {
   const pathname = usePathname();
   const breadcrumbs = getBreadcrumbs(pathname);
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch with Radix UI DropdownMenu
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <header className="sticky top-0 z-10 border-b bg-card shadow-sm">
@@ -87,31 +93,47 @@ export default function Header({ children }: HeaderProps) {
           </div>
           <ThemeToggle />
           <NotificationBell />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 lg:gap-3 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary text-primary-foreground">
-                    A
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden md:block text-left">
-                  <p className="text-sm font-medium text-foreground">Admin</p>
-                  <p className="text-xs text-muted-foreground">
-                    admin@ridewave.com
-                  </p>
-                </div>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Logout</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {mounted ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 lg:gap-3 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      A
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden md:block text-left">
+                    <p className="text-sm font-medium text-foreground">Admin</p>
+                    <p className="text-xs text-muted-foreground">
+                      admin@ridewave.com
+                    </p>
+                  </div>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Profile</DropdownMenuItem>
+                <DropdownMenuItem>Settings</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Logout</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <button className="flex items-center gap-2 lg:gap-3 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md" disabled>
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  A
+                </AvatarFallback>
+              </Avatar>
+              <div className="hidden md:block text-left">
+                <p className="text-sm font-medium text-foreground">Admin</p>
+                <p className="text-xs text-muted-foreground">
+                  admin@ridewave.com
+                </p>
+              </div>
+            </button>
+          )}
         </div>
       </div>
     </header>

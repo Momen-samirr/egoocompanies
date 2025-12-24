@@ -92,6 +92,11 @@ export function useLocationTracking(
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastHeartbeatLocationRef = useRef<Location | null>(null);
   const sentStopNotificationRef = useRef(false);
+  // Add these new refs to prevent concurrent operations
+  const isVerifyingRef = useRef(false);
+  const isRestartingRef = useRef(false);
+  const lastAppStateChangeRef = useRef<number>(0);
+  const appStateChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keep ref in sync with isActive
   useEffect(() => {
@@ -400,7 +405,7 @@ export function useLocationTracking(
           // Service startup can take time, so we verify multiple times with delays
           logger.info("Verifying background service startup...");
           const verifyStartTime = Date.now();
-          const isRunning = await verifyBackgroundServiceRunning(3, 1000);
+          const isRunning = await verifyBackgroundServiceRunning(2, 500);
           const verifyDuration = Date.now() - verifyStartTime;
 
           // #region agent log
@@ -702,88 +707,48 @@ export function useLocationTracking(
       maxRetries: number = 3,
       delayMs: number = 1000
     ): Promise<boolean> => {
-      logger.debug(
-        `Verifying background service is running (maxRetries: ${maxRetries})`
-      );
+      // Prevent concurrent verification attempts
+      if (isVerifyingRef.current) {
+        logger.debug(
+          "Verification already in progress - skipping duplicate call"
+        );
+        return false;
+      }
 
-      // #region agent log
-      fetch(
-        "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "useLocationTracking.ts:641",
-            message: "Verification starting",
-            data: { maxRetries, delayMs },
-            timestamp: Date.now(),
-            sessionId: "debug-session",
-            runId: "run1",
-            hypothesisId: "B",
-          }),
-        }
-      ).catch(() => {});
-      // #endregion
+      isVerifyingRef.current = true;
 
-      for (let i = 0; i < maxRetries; i++) {
-        // Wait progressively longer between checks (1s, 2s, 3s...)
-        if (i > 0) {
-          const waitTime = delayMs * i;
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                location: "useLocationTracking.ts:648",
-                message: "Waiting before verification attempt",
-                data: { waitTime, attempt: i + 1, maxRetries },
-                timestamp: Date.now(),
-                sessionId: "debug-session",
-                runId: "run1",
-                hypothesisId: "A",
-              }),
-            }
-          ).catch(() => {});
-          // #endregion
-          await new Promise((resolve) => setTimeout(resolve, waitTime));
-        }
+      try {
+        // Reduce retries to prevent blocking - use fewer attempts with shorter delays
+        const actualMaxRetries = Math.min(maxRetries, 2); // Cap at 2 retries
+        const actualDelayMs = Math.min(delayMs, 500); // Cap delay at 500ms
 
-        try {
-          const checkStartTime = Date.now();
-          const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(
-            BACKGROUND_LOCATION_TASK
-          );
-          const checkDuration = Date.now() - checkStartTime;
+        logger.debug(
+          `Verifying background service is running (maxRetries: ${actualMaxRetries})`
+        );
 
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                location: "useLocationTracking.ts:658",
-                message: "hasStartedLocationUpdatesAsync result",
-                data: { hasStarted, checkDuration, attempt: i + 1, maxRetries },
-                timestamp: Date.now(),
-                sessionId: "debug-session",
-                runId: "run1",
-                hypothesisId: "B",
-              }),
-            }
-          ).catch(() => {});
-          // #endregion
+        // #region agent log
+        fetch(
+          "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location: "useLocationTracking.ts:641",
+              message: "Verification starting",
+              data: { maxRetries, delayMs },
+              timestamp: Date.now(),
+              sessionId: "debug-session",
+              runId: "run1",
+              hypothesisId: "B",
+            }),
+          }
+        ).catch(() => {});
+        // #endregion
 
-          logger.debug(
-            `Background service verification attempt ${i + 1}/${maxRetries}: ${
-              hasStarted ? "RUNNING" : "STOPPED"
-            }`
-          );
-
-          if (hasStarted) {
-            logger.info("✅ Background service verified as running");
+        for (let i = 0; i < actualMaxRetries; i++) {
+          // Wait progressively longer between checks (0ms, 500ms...)
+          if (i > 0) {
+            const waitTime = actualDelayMs * i;
             // #region agent log
             fetch(
               "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
@@ -791,9 +756,46 @@ export function useLocationTracking(
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  location: "useLocationTracking.ts:667",
-                  message: "Verification succeeded",
-                  data: { attempt: i + 1 },
+                  location: "useLocationTracking.ts:648",
+                  message: "Waiting before verification attempt",
+                  data: {
+                    waitTime,
+                    attempt: i + 1,
+                    maxRetries: actualMaxRetries,
+                  },
+                  timestamp: Date.now(),
+                  sessionId: "debug-session",
+                  runId: "run1",
+                  hypothesisId: "A",
+                }),
+              }
+            ).catch(() => {});
+            // #endregion
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
+          }
+
+          try {
+            const checkStartTime = Date.now();
+            const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(
+              BACKGROUND_LOCATION_TASK
+            );
+            const checkDuration = Date.now() - checkStartTime;
+
+            // #region agent log
+            fetch(
+              "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  location: "useLocationTracking.ts:658",
+                  message: "hasStartedLocationUpdatesAsync result",
+                  data: {
+                    hasStarted,
+                    checkDuration,
+                    attempt: i + 1,
+                    maxRetries: actualMaxRetries,
+                  },
                   timestamp: Date.now(),
                   sessionId: "debug-session",
                   runId: "run1",
@@ -802,60 +804,91 @@ export function useLocationTracking(
               }
             ).catch(() => {});
             // #endregion
-            return true;
-          }
-        } catch (error: any) {
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                location: "useLocationTracking.ts:672",
-                message: "Error checking service status",
-                data: {
-                  error: error?.message,
-                  code: error?.code,
-                  attempt: i + 1,
-                },
-                timestamp: Date.now(),
-                sessionId: "debug-session",
-                runId: "run1",
-                hypothesisId: "B",
-              }),
-            }
-          ).catch(() => {});
-          // #endregion
-          logger.warn(
-            `Error checking background service status (attempt ${i + 1}):`,
-            error
-          );
-        }
-      }
 
-      logger.warn(
-        `❌ Background service verification failed after ${maxRetries} attempts`
-      );
-      // #region agent log
-      fetch(
-        "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "useLocationTracking.ts:682",
-            message: "Verification failed all attempts",
-            data: { maxRetries },
-            timestamp: Date.now(),
-            sessionId: "debug-session",
-            runId: "run1",
-            hypothesisId: "B",
-          }),
+            logger.debug(
+              `Background service verification attempt ${
+                i + 1
+              }/${actualMaxRetries}: ${hasStarted ? "RUNNING" : "STOPPED"}`
+            );
+
+            if (hasStarted) {
+              logger.info("✅ Background service verified as running");
+              // #region agent log
+              fetch(
+                "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    location: "useLocationTracking.ts:667",
+                    message: "Verification succeeded",
+                    data: { attempt: i + 1 },
+                    timestamp: Date.now(),
+                    sessionId: "debug-session",
+                    runId: "run1",
+                    hypothesisId: "B",
+                  }),
+                }
+              ).catch(() => {});
+              // #endregion
+              return true;
+            }
+          } catch (error: any) {
+            // #region agent log
+            fetch(
+              "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  location: "useLocationTracking.ts:672",
+                  message: "Error checking service status",
+                  data: {
+                    error: error?.message,
+                    code: error?.code,
+                    attempt: i + 1,
+                  },
+                  timestamp: Date.now(),
+                  sessionId: "debug-session",
+                  runId: "run1",
+                  hypothesisId: "B",
+                }),
+              }
+            ).catch(() => {});
+            // #endregion
+            logger.warn(
+              `Error checking background service status (attempt ${i + 1}):`,
+              error
+            );
+          }
         }
-      ).catch(() => {});
-      // #endregion
-      return false;
+
+        logger.debug(
+          `❌ Background service verification failed after ${actualMaxRetries} attempts`
+        );
+        // #region agent log
+        fetch(
+          "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location: "useLocationTracking.ts:682",
+              message: "Verification failed all attempts",
+              data: { maxRetries: actualMaxRetries },
+              timestamp: Date.now(),
+              sessionId: "debug-session",
+              runId: "run1",
+              hypothesisId: "B",
+            }),
+          }
+        ).catch(() => {});
+        // #endregion
+        return false;
+      } finally {
+        // Always release the lock, even if there's an error
+        isVerifyingRef.current = false;
+      }
     },
     []
   );
@@ -983,339 +1016,411 @@ export function useLocationTracking(
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       logger.debug(`App state changed to: ${nextAppState}`);
 
-      if (nextAppState === "background" || nextAppState === "inactive") {
-        // CRITICAL: Verify service is running BEFORE allowing background transition
-        // This ensures we catch issues early and can attempt recovery if still in foreground
-        console.log(
-          "🔍 [DEBUG] App going to background - verifying background location service is running..."
+      // Debounce rapid AppState changes - ignore if called within 2 seconds of last change
+      const now = Date.now();
+      const timeSinceLastChange = now - lastAppStateChangeRef.current;
+      if (timeSinceLastChange < 2000 && lastAppStateChangeRef.current > 0) {
+        logger.debug(
+          `AppState change debounced (${timeSinceLastChange}ms since last change)`
         );
+        return;
+      }
+      lastAppStateChangeRef.current = now;
 
-        if (isTrackingRef.current) {
-          // Verify service is actually running before going to background
-          const isRunning = await verifyBackgroundServiceRunning(2, 500);
+      // Clear any pending timeout
+      if (appStateChangeTimeoutRef.current) {
+        clearTimeout(appStateChangeTimeoutRef.current);
+        appStateChangeTimeoutRef.current = null;
+      }
 
-          if (!isRunning) {
-            logger.warn(
-              "⚠️ Background service not running before background transition - attempting recovery"
-            );
+      // Debounce with a small delay to batch rapid changes
+      appStateChangeTimeoutRef.current = setTimeout(async () => {
+        if (nextAppState === "background" || nextAppState === "inactive") {
+          // CRITICAL: Verify service is running BEFORE allowing background transition
+          // This ensures we catch issues early and can attempt recovery if still in foreground
+          console.log(
+            "🔍 [DEBUG] App going to background - verifying background location service is running..."
+          );
 
-            // If we're still transitioning (not fully in background), try to restart
-            const currentState = AppState.currentState;
-            if (currentState === "active" && isActiveRef.current) {
-              logger.info(
-                "Attempting to restart background service before background transition"
+          if (
+            isTrackingRef.current &&
+            !isVerifyingRef.current &&
+            !isRestartingRef.current
+          ) {
+            // Verify service is actually running before going to background
+            // Use fewer retries to prevent blocking
+            const isRunning = await verifyBackgroundServiceRunning(1, 300);
+
+            if (!isRunning && !isRestartingRef.current) {
+              logger.debug(
+                "⚠️ Background service not running before background transition - attempting recovery"
               );
-              try {
-                await startTracking();
-                // Give it a moment to start
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                const verified = await verifyBackgroundServiceRunning(2, 500);
-                if (verified) {
-                  logger.info(
-                    "✅ Background service restarted successfully before background transition"
-                  );
-                } else {
-                  logger.error(
-                    "❌ Failed to restart background service before background transition"
-                  );
-                  Toast.show(
-                    "Location tracking may not work in background. Please check permissions.",
-                    {
-                      type: "warning",
-                      duration: 4000,
-                    }
-                  );
+
+              // If we're still transitioning (not fully in background), try to restart
+              const currentState = AppState.currentState;
+              if (currentState === "active" && isActiveRef.current) {
+                // Prevent concurrent restart attempts
+                if (isRestartingRef.current) {
+                  logger.debug("Restart already in progress - skipping");
+                  return;
                 }
-              } catch (error: any) {
-                logger.error(
-                  "Error restarting service before background transition",
-                  error
+
+                isRestartingRef.current = true;
+                try {
+                  logger.debug(
+                    "Attempting to restart background service before background transition"
+                  );
+                  await startTracking();
+                  // Give it a moment to start - but don't verify again to avoid nested loops
+                  await new Promise((resolve) => setTimeout(resolve, 500));
+
+                  // Only do a quick single check, don't call verifyBackgroundServiceRunning again
+                  const hasStarted =
+                    await GeoLocation.hasStartedLocationUpdatesAsync(
+                      BACKGROUND_LOCATION_TASK
+                    );
+
+                  if (hasStarted) {
+                    logger.info(
+                      "✅ Background service restarted successfully before background transition"
+                    );
+                  } else {
+                    logger.debug(
+                      "❌ Failed to restart background service before background transition"
+                    );
+                    Toast.show(
+                      "Location tracking may not work in background. Please check permissions.",
+                      {
+                        type: "warning",
+                        duration: 4000,
+                      }
+                    );
+                  }
+                } catch (error: any) {
+                  logger.error(
+                    "Error restarting service before background transition",
+                    error
+                  );
+                } finally {
+                  isRestartingRef.current = false;
+                }
+              } else {
+                logger.warn(
+                  "App already in background - cannot restart service. Will recover when returning to foreground."
                 );
               }
             } else {
-              logger.warn(
-                "App already in background - cannot restart service. Will recover when returning to foreground."
+              logger.info(
+                "✅ Background service verified as running before background transition"
               );
             }
-          } else {
-            logger.info(
-              "✅ Background service verified as running before background transition"
-            );
           }
-        }
-      } else if (nextAppState === "active") {
-        // App came to foreground - immediately check and recover if needed
-        logger.debug(
-          "App came to foreground - verifying and recovering location tracking if needed"
-        );
-
-        if (isTrackingRef.current) {
-          // Check battery optimization when returning to foreground
-          try {
-            await ensureBatteryOptimizationDisabled();
-          } catch (error: any) {
-            logger.warn("Error checking battery optimization", error);
-          }
-
-          // Verify service status
-          await monitorBackgroundTracking();
-
-          // If tracking stopped while in background, immediately restart (we're now in foreground)
-          const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(
-            BACKGROUND_LOCATION_TASK
+        } else if (nextAppState === "active") {
+          // App came to foreground - immediately check and recover if needed
+          logger.debug(
+            "App came to foreground - verifying and recovering location tracking if needed"
           );
 
-          if (!hasStarted && isActiveRef.current) {
-            logger.info(
-              "Background location stopped while in background - immediately restarting from foreground"
+          if (isTrackingRef.current && !isRestartingRef.current) {
+            // Check battery optimization when returning to foreground
+            try {
+              await ensureBatteryOptimizationDisabled();
+            } catch (error: any) {
+              logger.warn("Error checking battery optimization", error);
+            }
+
+            // Verify service status
+            await monitorBackgroundTracking();
+
+            // If tracking stopped while in background, immediately restart (we're now in foreground)
+            const hasStarted = await GeoLocation.hasStartedLocationUpdatesAsync(
+              BACKGROUND_LOCATION_TASK
             );
-            Toast.show("Location tracking was stopped. Restarting...", {
-              type: "warning",
-              duration: 3000,
-            });
 
-            // Restart tracking now that we're in foreground with retry logic
-            let restartSuccess = false;
-            const maxRestartAttempts = 3;
-
-            for (let attempt = 1; attempt <= maxRestartAttempts; attempt++) {
-              try {
-                // #region agent log
-                fetch(
-                  "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      location: "useLocationTracking.ts:902",
-                      message: "Restart attempt starting",
-                      data: {
-                        attempt,
-                        maxRestartAttempts,
-                        appState: AppState.currentState,
-                        isActive: isActiveRef.current,
-                      },
-                      timestamp: Date.now(),
-                      sessionId: "debug-session",
-                      runId: "run1",
-                      hypothesisId: "A",
-                    }),
-                  }
-                ).catch(() => {});
-                // #endregion
-
-                logger.info(`Restart attempt ${attempt}/${maxRestartAttempts}`);
-
-                // Check task registration before starting
-                let taskRegistered = false;
-                if (TaskManager && TaskManager.isTaskRegisteredAsync) {
-                  try {
-                    taskRegistered = await TaskManager.isTaskRegisteredAsync(
-                      BACKGROUND_LOCATION_TASK
-                    );
-                    // #region agent log
-                    fetch(
-                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                      {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          location: "useLocationTracking.ts:910",
-                          message: "Task registration check before start",
-                          data: { taskRegistered, attempt },
-                          timestamp: Date.now(),
-                          sessionId: "debug-session",
-                          runId: "run1",
-                          hypothesisId: "C",
-                        }),
-                      }
-                    ).catch(() => {});
-                    // #endregion
-                  } catch (err: any) {
-                    // #region agent log
-                    fetch(
-                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                      {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          location: "useLocationTracking.ts:914",
-                          message: "Task registration check error",
-                          data: { error: err?.message, attempt },
-                          timestamp: Date.now(),
-                          sessionId: "debug-session",
-                          runId: "run1",
-                          hypothesisId: "C",
-                        }),
-                      }
-                    ).catch(() => {});
-                    // #endregion
-                  }
-                }
-
-                // Check permissions before starting
-                const permissionStatus = await getLocationPermissionStatus();
-                // #region agent log
-                fetch(
-                  "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      location: "useLocationTracking.ts:920",
-                      message: "Permission status before startTracking",
-                      data: { permissionStatus, attempt },
-                      timestamp: Date.now(),
-                      sessionId: "debug-session",
-                      runId: "run1",
-                      hypothesisId: "D",
-                    }),
-                  }
-                ).catch(() => {});
-                // #endregion
-
-                const startTrackingStartTime = Date.now();
-                await startTracking();
-                const startTrackingDuration =
-                  Date.now() - startTrackingStartTime;
-
-                // #region agent log
-                fetch(
-                  "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      location: "useLocationTracking.ts:927",
-                      message: "startTracking completed",
-                      data: { duration: startTrackingDuration, attempt },
-                      timestamp: Date.now(),
-                      sessionId: "debug-session",
-                      runId: "run1",
-                      hypothesisId: "A",
-                    }),
-                  }
-                ).catch(() => {});
-                // #endregion
-
-                // Verify restart was successful
-                const waitStartTime = Date.now();
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-                const waitDuration = Date.now() - waitStartTime;
-
-                // #region agent log
-                fetch(
-                  "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      location: "useLocationTracking.ts:934",
-                      message: "Wait completed before verification",
-                      data: { waitDuration, attempt },
-                      timestamp: Date.now(),
-                      sessionId: "debug-session",
-                      runId: "run1",
-                      hypothesisId: "A",
-                    }),
-                  }
-                ).catch(() => {});
-                // #endregion
-
-                const verifyStartTime = Date.now();
-                const verified = await verifyBackgroundServiceRunning(2, 500);
-                const verifyDuration = Date.now() - verifyStartTime;
-
-                // #region agent log
-                fetch(
-                  "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      location: "useLocationTracking.ts:940",
-                      message: "Verification result",
-                      data: { verified, verifyDuration, attempt },
-                      timestamp: Date.now(),
-                      sessionId: "debug-session",
-                      runId: "run1",
-                      hypothesisId: "A",
-                    }),
-                  }
-                ).catch(() => {});
-                // #endregion
-
-                if (verified) {
-                  restartSuccess = true;
-                  logger.info(
-                    "✅ Background location service restarted successfully"
-                  );
-                  Toast.show("Location tracking resumed successfully", {
-                    type: "success",
-                    duration: 2000,
-                  });
-                  break;
-                } else {
-                  logger.warn(`Restart attempt ${attempt} failed verification`);
-                  if (attempt < maxRestartAttempts) {
-                    await new Promise((resolve) =>
-                      setTimeout(resolve, 1000 * attempt)
-                    );
-                  }
-                }
-              } catch (error: any) {
-                // #region agent log
-                fetch(
-                  "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      location: "useLocationTracking.ts:960",
-                      message: "Error during restart attempt",
-                      data: {
-                        error: error?.message,
-                        code: error?.code,
-                        attempt,
-                      },
-                      timestamp: Date.now(),
-                      sessionId: "debug-session",
-                      runId: "run1",
-                      hypothesisId: "E",
-                    }),
-                  }
-                ).catch(() => {});
-                // #endregion
-                logger.error(`Error during restart attempt ${attempt}`, error);
-                if (attempt < maxRestartAttempts) {
-                  await new Promise((resolve) =>
-                    setTimeout(resolve, 1000 * attempt)
-                  );
-                }
+            if (
+              !hasStarted &&
+              isActiveRef.current &&
+              !isRestartingRef.current
+            ) {
+              // Prevent concurrent restart attempts
+              if (isRestartingRef.current) {
+                logger.debug("Restart already in progress - skipping");
+                return;
               }
-            }
 
-            if (!restartSuccess) {
-              logger.error(
-                "Failed to restart background location service after multiple attempts"
-              );
-              Toast.show(
-                "Failed to restart location tracking. Please toggle online/offline status.",
-                {
-                  type: "danger",
-                  duration: 5000,
+              isRestartingRef.current = true;
+              try {
+                logger.info(
+                  "Background location stopped while in background - immediately restarting from foreground"
+                );
+                Toast.show("Location tracking was stopped. Restarting...", {
+                  type: "warning",
+                  duration: 3000,
+                });
+
+                // Restart tracking now that we're in foreground with retry logic
+                let restartSuccess = false;
+                const maxRestartAttempts = 3;
+
+                for (
+                  let attempt = 1;
+                  attempt <= maxRestartAttempts;
+                  attempt++
+                ) {
+                  try {
+                    // #region agent log
+                    fetch(
+                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          location: "useLocationTracking.ts:902",
+                          message: "Restart attempt starting",
+                          data: {
+                            attempt,
+                            maxRestartAttempts,
+                            appState: AppState.currentState,
+                            isActive: isActiveRef.current,
+                          },
+                          timestamp: Date.now(),
+                          sessionId: "debug-session",
+                          runId: "run1",
+                          hypothesisId: "A",
+                        }),
+                      }
+                    ).catch(() => {});
+                    // #endregion
+
+                    logger.info(
+                      `Restart attempt ${attempt}/${maxRestartAttempts}`
+                    );
+
+                    // Check task registration before starting
+                    let taskRegistered = false;
+                    if (TaskManager && TaskManager.isTaskRegisteredAsync) {
+                      try {
+                        taskRegistered =
+                          await TaskManager.isTaskRegisteredAsync(
+                            BACKGROUND_LOCATION_TASK
+                          );
+                        // #region agent log
+                        fetch(
+                          "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                          {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              location: "useLocationTracking.ts:910",
+                              message: "Task registration check before start",
+                              data: { taskRegistered, attempt },
+                              timestamp: Date.now(),
+                              sessionId: "debug-session",
+                              runId: "run1",
+                              hypothesisId: "C",
+                            }),
+                          }
+                        ).catch(() => {});
+                        // #endregion
+                      } catch (err: any) {
+                        // #region agent log
+                        fetch(
+                          "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                          {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              location: "useLocationTracking.ts:914",
+                              message: "Task registration check error",
+                              data: { error: err?.message, attempt },
+                              timestamp: Date.now(),
+                              sessionId: "debug-session",
+                              runId: "run1",
+                              hypothesisId: "C",
+                            }),
+                          }
+                        ).catch(() => {});
+                        // #endregion
+                      }
+                    }
+
+                    // Check permissions before starting
+                    const permissionStatus =
+                      await getLocationPermissionStatus();
+                    // #region agent log
+                    fetch(
+                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          location: "useLocationTracking.ts:920",
+                          message: "Permission status before startTracking",
+                          data: { permissionStatus, attempt },
+                          timestamp: Date.now(),
+                          sessionId: "debug-session",
+                          runId: "run1",
+                          hypothesisId: "D",
+                        }),
+                      }
+                    ).catch(() => {});
+                    // #endregion
+
+                    const startTrackingStartTime = Date.now();
+                    await startTracking();
+                    const startTrackingDuration =
+                      Date.now() - startTrackingStartTime;
+
+                    // #region agent log
+                    fetch(
+                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          location: "useLocationTracking.ts:927",
+                          message: "startTracking completed",
+                          data: { duration: startTrackingDuration, attempt },
+                          timestamp: Date.now(),
+                          sessionId: "debug-session",
+                          runId: "run1",
+                          hypothesisId: "A",
+                        }),
+                      }
+                    ).catch(() => {});
+                    // #endregion
+
+                    // Verify restart was successful - but use a simple check, not the full verification
+                    const waitStartTime = Date.now();
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    const waitDuration = Date.now() - waitStartTime;
+
+                    // #region agent log
+                    fetch(
+                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          location: "useLocationTracking.ts:934",
+                          message: "Wait completed before verification",
+                          data: { waitDuration, attempt },
+                          timestamp: Date.now(),
+                          sessionId: "debug-session",
+                          runId: "run1",
+                          hypothesisId: "A",
+                        }),
+                      }
+                    ).catch(() => {});
+                    // #endregion
+
+                    // Use a simple single check instead of verifyBackgroundServiceRunning to avoid nested loops
+                    const verifyStartTime = Date.now();
+                    const verified =
+                      await GeoLocation.hasStartedLocationUpdatesAsync(
+                        BACKGROUND_LOCATION_TASK
+                      );
+                    const verifyDuration = Date.now() - verifyStartTime;
+
+                    // #region agent log
+                    fetch(
+                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          location: "useLocationTracking.ts:940",
+                          message: "Verification result",
+                          data: { verified, verifyDuration, attempt },
+                          timestamp: Date.now(),
+                          sessionId: "debug-session",
+                          runId: "run1",
+                          hypothesisId: "A",
+                        }),
+                      }
+                    ).catch(() => {});
+                    // #endregion
+
+                    if (verified) {
+                      restartSuccess = true;
+                      logger.info(
+                        "✅ Background location service restarted successfully"
+                      );
+                      Toast.show("Location tracking resumed successfully", {
+                        type: "success",
+                        duration: 2000,
+                      });
+                      break;
+                    } else {
+                      logger.warn(
+                        `Restart attempt ${attempt} failed verification`
+                      );
+                      if (attempt < maxRestartAttempts) {
+                        await new Promise((resolve) =>
+                          setTimeout(resolve, 1000 * attempt)
+                        );
+                      }
+                    }
+                  } catch (error: any) {
+                    // #region agent log
+                    fetch(
+                      "http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          location: "useLocationTracking.ts:960",
+                          message: "Error during restart attempt",
+                          data: {
+                            error: error?.message,
+                            code: error?.code,
+                            attempt,
+                          },
+                          timestamp: Date.now(),
+                          sessionId: "debug-session",
+                          runId: "run1",
+                          hypothesisId: "E",
+                        }),
+                      }
+                    ).catch(() => {});
+                    // #endregion
+                    logger.error(
+                      `Error during restart attempt ${attempt}`,
+                      error
+                    );
+                    if (attempt < maxRestartAttempts) {
+                      await new Promise((resolve) =>
+                        setTimeout(resolve, 1000 * attempt)
+                      );
+                    }
+                  }
                 }
+
+                if (!restartSuccess) {
+                  logger.error(
+                    "Failed to restart background location service after multiple attempts"
+                  );
+                  Toast.show(
+                    "Failed to restart location tracking. Please toggle online/offline status.",
+                    {
+                      type: "danger",
+                      duration: 5000,
+                    }
+                  );
+                }
+              } finally {
+                isRestartingRef.current = false;
+              }
+            } else if (hasStarted) {
+              logger.info(
+                "✅ Background location service is running - no recovery needed"
               );
+              // Reset notification flag since service is running
+              sentStopNotificationRef.current = false;
             }
-          } else if (hasStarted) {
-            logger.info(
-              "✅ Background location service is running - no recovery needed"
-            );
-            // Reset notification flag since service is running
-            sentStopNotificationRef.current = false;
           }
         }
-      }
+      }, 300); // 300ms debounce delay
     };
 
     appStateSubscriptionRef.current = AppState.addEventListener(
@@ -1327,6 +1432,10 @@ export function useLocationTracking(
       if (appStateSubscriptionRef.current) {
         appStateSubscriptionRef.current.remove();
         appStateSubscriptionRef.current = null;
+      }
+      if (appStateChangeTimeoutRef.current) {
+        clearTimeout(appStateChangeTimeoutRef.current);
+        appStateChangeTimeoutRef.current = null;
       }
     };
   }, [

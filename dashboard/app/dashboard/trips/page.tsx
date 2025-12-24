@@ -158,7 +158,7 @@ export default function ScheduledTripsOverviewPage() {
             <h2 className="text-xl font-semibold text-gray-900">
               Recent Trips
             </h2>
-            <Link href="/dashboard/trips/upcoming">
+            <Link href="/dashboard/trips/all">
               <Button
                 variant="ghost"
                 size="sm"
@@ -249,7 +249,24 @@ export default function ScheduledTripsOverviewPage() {
       </Card>
 
       {/* Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link href="/dashboard/trips/all">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-2 border-indigo-200 bg-indigo-50/50">
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    All Trips
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    View all trips with filters
+                  </p>
+                </div>
+                <ArrowRightIcon className="h-6 w-6 text-indigo-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
         <Link href="/dashboard/trips/upcoming">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent>
