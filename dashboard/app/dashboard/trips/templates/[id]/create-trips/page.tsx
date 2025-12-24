@@ -291,6 +291,17 @@ export default function CreateTripsFromTemplatePage() {
         return;
       }
 
+      // Get timezone offset for time preservation
+      const now = new Date();
+      const timezoneOffset = -now.getTimezoneOffset();
+      const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+      const offsetMinutes = Math.abs(timezoneOffset) % 60;
+      const offsetSign = timezoneOffset >= 0 ? "+" : "-";
+      const timezoneString = `${offsetSign}${String(offsetHours).padStart(
+        2,
+        "0"
+      )}:${String(offsetMinutes).padStart(2, "0")}`;
+
       const response = await api.post(
         `/admin/trip-templates/${templateId}/create-trips`,
         {
@@ -305,10 +316,13 @@ export default function CreateTripsFromTemplatePage() {
               }
             );
 
+            // Add timezone to scheduledTime
+            const scheduledTimeWithTimezone = `${trip.scheduledTime}:00${timezoneString}`;
+
             return {
               name: trip.name,
               tripDate: trip.tripDate,
-              scheduledTime: trip.scheduledTime,
+              scheduledTime: scheduledTimeWithTimezone,
               assignedCaptainId: trip.assignedCaptainId || undefined,
               price: trip.price || undefined,
               pointOverrides:
