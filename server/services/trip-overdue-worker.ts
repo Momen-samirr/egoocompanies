@@ -1,6 +1,7 @@
 import prisma from "../utils/prisma";
 import { applyTripFailurePenalty } from "./trip-finance";
 import { queueTripStatusChange } from "../utils/whatsapp-report-queue";
+import { sendTripStatusToOperations } from "../utils/send-whatsapp-group";
 
 /**
  * Background worker that checks for overdue scheduled trips
@@ -153,27 +154,37 @@ export class TripOverdueWorker {
                     `❌ [FAILED] Trip ${trip.id} not found after status update - cannot queue WhatsApp notification`
                   );
                 } else {
-                  // Queue trip status change for batched reporting
-                  await queueTripStatusChange(
-                    {
-                      id: tripWithPoints.id,
-                      name: tripWithPoints.name,
-                      tripType: tripWithPoints.tripType,
-                      status: "FAILED",
-                      scheduledTime: tripWithPoints.scheduledTime,
-                      points: (tripWithPoints.points || []).map((p) => ({
-                        name: p.name,
-                        order: p.order,
-                      })),
-                      assignedCaptain: tripWithPoints.assignedCaptain,
-                    },
-                    "FAILED",
-                    now
-                  );
+                  const tripData = {
+                    id: tripWithPoints.id,
+                    name: tripWithPoints.name,
+                    tripType: tripWithPoints.tripType,
+                    status: "FAILED" as const,
+                    scheduledTime: tripWithPoints.scheduledTime,
+                    points: (tripWithPoints.points || []).map((p) => ({
+                      name: p.name,
+                      order: p.order,
+                    })),
+                    assignedCaptain: tripWithPoints.assignedCaptain,
+                  };
 
-                  console.log(
-                    `📋 [FAILED] WhatsApp notification queued for FAILED trip: ${trip.id}`
-                  );
+                  // Send immediate notification to Operations group
+                  await sendTripStatusToOperations(tripData, "FAILED", now);
+
+                  // Queue trip status change for batched reporting to Managers group
+                  const managersGroupId =
+                    process.env.WHATSAPP_MANAGERS_GROUP_ID;
+
+                  if (!managersGroupId) {
+                    console.warn(
+                      `⚠️ [FAILED] WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification for trip: ${trip.id}`
+                    );
+                  } else {
+                    await queueTripStatusChange(tripData, "FAILED", now);
+
+                    console.log(
+                      `📋 [FAILED] WhatsApp notification queued for FAILED trip: ${trip.id}`
+                    );
+                  }
                 }
               }
             } catch (whatsappError: any) {

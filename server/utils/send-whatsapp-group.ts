@@ -105,6 +105,57 @@ export const formatTripWhatsAppMessage = (
 };
 
 /**
+ * Send individual trip status notification to Operations group
+ * This sends immediate notifications for real-time monitoring
+ * Only handles ACTIVE and FAILED statuses (CANCELLED trips are excluded)
+ * @param tripData Trip data
+ * @param status Trip status (ACTIVE or FAILED)
+ * @param statusChangeTime Timestamp when status changed
+ */
+export async function sendTripStatusToOperations(
+  tripData: TripDataForMessage,
+  status: "ACTIVE" | "FAILED",
+  statusChangeTime: Date = new Date()
+): Promise<void> {
+  const operationsGroupId = process.env.WHATSAPP_OPERATIONS_GROUP_ID;
+
+  if (!operationsGroupId) {
+    console.warn(
+      "WHATSAPP_OPERATIONS_GROUP_ID not configured, skipping Operations WhatsApp notification"
+    );
+    return;
+  }
+
+  // Update tripData status for formatting
+  const tripDataWithStatus: TripDataForMessage = {
+    ...tripData,
+    status,
+  };
+
+  // Format message using existing function
+  const message = formatTripWhatsAppMessage(
+    tripDataWithStatus,
+    statusChangeTime
+  );
+
+  try {
+    await sendWhatsAppToGroup({
+      groupId: operationsGroupId,
+      message,
+    });
+    console.log(
+      `✅ [Operations] Sent ${status} notification for trip "${tripData.name}" to Operations group`
+    );
+  } catch (error: any) {
+    console.error(
+      `❌ [Operations] Error sending ${status} notification to Operations group:`,
+      error.message || error
+    );
+    // Don't throw - Operations notifications shouldn't block the main flow
+  }
+}
+
+/**
  * Validate group ID format
  * Group JID format: [numbers]@g.us
  * @param groupId The group ID to validate

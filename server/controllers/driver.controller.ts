@@ -13,6 +13,7 @@ import { calculateTimingDifference } from "../utils/trip-timing";
 import {
   sendWhatsAppToGroup,
   formatTripWhatsAppMessage,
+  sendTripStatusToOperations,
 } from "../utils/send-whatsapp-group";
 import { queueTripStatusChange } from "../utils/whatsapp-report-queue";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -1087,8 +1088,26 @@ export const startScheduledTrip = async (req: any, res: Response) => {
       },
     });
 
-    // Send WhatsApp notification to managers group
+    // Send WhatsApp notifications
     try {
+      const statusChangeTime = new Date();
+      const tripData = {
+        id: tripId,
+        name: updatedTrip.name,
+        tripType: updatedTrip.tripType,
+        status: "ACTIVE" as const,
+        scheduledTime: updatedTrip.scheduledTime,
+        points: updatedTrip.points.map((p) => ({
+          name: p.name,
+          order: p.order,
+        })),
+        assignedCaptain: updatedTrip.assignedCaptain,
+      };
+
+      // Send immediate notification to Operations group
+      await sendTripStatusToOperations(tripData, "ACTIVE", statusChangeTime);
+
+      // Queue trip status change for batched reporting to Managers group
       const managersGroupId = process.env.WHATSAPP_MANAGERS_GROUP_ID;
 
       if (!managersGroupId) {
@@ -1096,23 +1115,7 @@ export const startScheduledTrip = async (req: any, res: Response) => {
           "WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification"
         );
       } else {
-        // Queue trip status change for batched reporting
-        await queueTripStatusChange(
-          {
-            id: tripId,
-            name: updatedTrip.name,
-            tripType: updatedTrip.tripType,
-            status: "ACTIVE",
-            scheduledTime: updatedTrip.scheduledTime,
-            points: updatedTrip.points.map((p) => ({
-              name: p.name,
-              order: p.order,
-            })),
-            assignedCaptain: updatedTrip.assignedCaptain,
-          },
-          "ACTIVE",
-          new Date()
-        );
+        await queueTripStatusChange(tripData, "ACTIVE", statusChangeTime);
 
         console.log(
           `📋 WhatsApp notification queued for ACTIVE trip: ${tripId}`

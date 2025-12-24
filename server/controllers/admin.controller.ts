@@ -3168,6 +3168,36 @@ export const updateTripStatus = async (req: any, res: Response) => {
     // Send WhatsApp notification if status is FAILED
     if (newStatus === "FAILED") {
       try {
+        const statusChangeTime = new Date();
+        const tripData = {
+          id: updatedTrip.id,
+          name: updatedTrip.name,
+          tripType: updatedTrip.tripType,
+          status: "FAILED" as const,
+          scheduledTime: updatedTrip.scheduledTime,
+          points: (updatedTrip.points || []).map((p) => ({
+            name: p.name,
+            order: p.order,
+          })),
+          assignedCaptain: updatedTrip.assignedCaptain
+            ? {
+                name: updatedTrip.assignedCaptain.name,
+              }
+            : null,
+        };
+
+        // Import functions dynamically to avoid circular dependencies
+        const { sendTripStatusToOperations } = await import(
+          "../utils/send-whatsapp-group"
+        );
+        const { queueTripStatusChange } = await import(
+          "../utils/whatsapp-report-queue"
+        );
+
+        // Send immediate notification to Operations group
+        await sendTripStatusToOperations(tripData, "FAILED", statusChangeTime);
+
+        // Queue trip status change for batched reporting to Managers group
         const managersGroupId = process.env.WHATSAPP_MANAGERS_GROUP_ID;
 
         if (!managersGroupId) {
@@ -3175,32 +3205,7 @@ export const updateTripStatus = async (req: any, res: Response) => {
             "WHATSAPP_MANAGERS_GROUP_ID not configured, skipping WhatsApp notification"
           );
         } else {
-          // Import queue function dynamically to avoid circular dependencies
-          const { queueTripStatusChange } = await import(
-            "../utils/whatsapp-report-queue"
-          );
-
-          // Queue trip status change for batched reporting
-          await queueTripStatusChange(
-            {
-              id: updatedTrip.id,
-              name: updatedTrip.name,
-              tripType: updatedTrip.tripType,
-              status: "FAILED",
-              scheduledTime: updatedTrip.scheduledTime,
-              points: (updatedTrip.points || []).map((p) => ({
-                name: p.name,
-                order: p.order,
-              })),
-              assignedCaptain: updatedTrip.assignedCaptain
-                ? {
-                    name: updatedTrip.assignedCaptain.name,
-                  }
-                : null,
-            },
-            "FAILED",
-            new Date()
-          );
+          await queueTripStatusChange(tripData, "FAILED", statusChangeTime);
 
           console.log(
             `📋 WhatsApp notification queued for ${newStatus} trip: ${id}`
