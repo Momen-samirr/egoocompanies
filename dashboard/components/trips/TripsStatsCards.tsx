@@ -58,6 +58,7 @@ interface OverviewStatsProps {
   upcomingCount: number;
   activeCount: number;
   completedCount: number;
+  failedCount: number;
   cancelledCount: number;
   emergencyCount: number;
   forceClosedCount: number;
@@ -68,6 +69,7 @@ export function OverviewStats({
   upcomingCount,
   activeCount,
   completedCount,
+  failedCount,
   cancelledCount,
   emergencyCount,
   forceClosedCount,
@@ -93,10 +95,16 @@ export function OverviewStats({
       color: "bg-emerald-50 text-emerald-700 border-emerald-200",
     },
     {
+      label: "Failed",
+      value: failedCount,
+      href: "/dashboard/trips/failed",
+      color: "bg-orange-50 text-orange-700 border-orange-200",
+    },
+    {
       label: "Cancelled",
       value: cancelledCount,
       href: "/dashboard/trips/cancelled",
-      color: "bg-gray-50 text-gray-700 border-gray-200",
+      color: "bg-zinc-50 text-zinc-700 border-zinc-200",
     },
     {
       label: "Emergency",
@@ -114,8 +122,8 @@ export function OverviewStats({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
           <Card key={i}>
             <CardContent className="p-6">
               <div className="space-y-3">
@@ -130,23 +138,27 @@ export function OverviewStats({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-      {stats.map((stat) => (
-        <Link key={stat.label} href={stat.href}>
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-6">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground uppercase tracking-wide mb-2">
-                  {stat.label}
-                </p>
-                <p className="text-3xl font-bold text-foreground">
-                  {stat.value.toLocaleString()}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      ))}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+      {stats.map((stat) => {
+        // Extract text color class (second class in the color string)
+        const textColorClass = stat.color.split(' ')[1] || stat.color.split(' ')[0];
+        return (
+          <Link key={stat.label} href={stat.href}>
+            <Card className={`hover:shadow-md transition-shadow cursor-pointer border ${stat.color}`}>
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <p className={`text-sm uppercase tracking-wide mb-2 ${textColorClass}`}>
+                    {stat.label}
+                  </p>
+                  <p className={`text-3xl font-bold ${textColorClass}`}>
+                    {stat.value.toLocaleString()}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        );
+      })}
     </div>
   );
 }

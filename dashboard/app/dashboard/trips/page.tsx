@@ -41,6 +41,10 @@ export default function ScheduledTripsOverviewPage() {
       view: "completed",
       pagination: { page: 1, pageSize: 1 },
     });
+  const { pagination: failedPagination, isLoading: failedLoading } = useTrips({
+    view: "failed",
+    pagination: { page: 1, pageSize: 1 },
+  });
   const { pagination: cancelledPagination, isLoading: cancelledLoading } =
     useTrips({
       view: "cancelled",
@@ -109,6 +113,7 @@ export default function ScheduledTripsOverviewPage() {
     upcomingLoading ||
     activeLoading ||
     completedLoading ||
+    failedLoading ||
     cancelledLoading ||
     emergencyLoading ||
     forceClosedLoading;
@@ -138,6 +143,7 @@ export default function ScheduledTripsOverviewPage() {
         upcomingCount={upcomingPagination?.total || 0}
         activeCount={activePagination?.total || 0}
         completedCount={completedPagination?.total || 0}
+        failedCount={failedPagination?.total || 0}
         cancelledCount={cancelledPagination?.total || 0}
         emergencyCount={emergencyPagination?.total || 0}
         forceClosedCount={forceClosedPagination?.total || 0}

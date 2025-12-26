@@ -47,10 +47,14 @@ export const deriveTripFinance = (trip: ScheduledTrip) => {
     }
   }
 
-  // Special calculation for FORCE_CLOSED: deduct 100 from trip price
+  // Special calculations for certain statuses (must match backend logic)
   let computedNet: number;
   if (resolvedRule === "FORCE_CLOSED_DEDUCTION" || trip.status === "FORCE_CLOSED") {
+    // FORCE_CLOSED: deduct 100 from trip price
     computedNet = baseAmount - 100;
+  } else if (trip.status === "FAILED" && resolvedRule === "FAILED_DOUBLE") {
+    // FAILED: apply fixed -50 deduction (matches backend logic)
+    computedNet = baseAmount - 50;
   } else {
     const multiplier = RULE_MULTIPLIERS[resolvedRule] ?? 0;
     computedNet = baseAmount * multiplier;
@@ -67,12 +71,35 @@ export const deriveTripFinance = (trip: ScheduledTrip) => {
       ? trip.financialAdjustment
       : (isNaN(netAmount) ? 0 : netAmount);
 
+  // Determine context-appropriate label based on trip status and history
+  let ruleLabel: string;
+  
+  // Check if trip is CANCELLED and has status history showing FAILED → CANCELLED
+  const wasFailedToCancelled =
+    trip.status === "CANCELLED" &&
+    resolvedRule === "FAILED_DOUBLE" &&
+    trip.statusHistory?.some(
+      (h) => h.previousStatus === "FAILED" && h.newStatus === "CANCELLED"
+    );
+
+  // Determine label based on status and history
+  if (trip.status === "FAILED" && resolvedRule === "FAILED_DOUBLE") {
+    // Failed trips (automatic) show "Completed without using the app"
+    ruleLabel = "Completed without using the app";
+  } else if (wasFailedToCancelled) {
+    // Cancelled trips (from Failed) show "Double Price Deduction"
+    ruleLabel = "Double Price Deduction";
+  } else {
+    // All other cases use the standard rule labels
+    ruleLabel = RULE_LABELS[resolvedRule];
+  }
+
   return {
     baseAmount: isNaN(baseAmount) ? 0 : baseAmount,
     appliedAmount: isNaN(appliedAmount) ? 0 : appliedAmount,
     netAmount: isNaN(netAmount) ? 0 : netAmount,
     rule: resolvedRule,
-    ruleLabel: RULE_LABELS[resolvedRule],
+    ruleLabel,
     hasFinanceApplied: Boolean(trip.financialAppliedAt),
   };
 };

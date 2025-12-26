@@ -4,7 +4,7 @@ import prisma from "../utils/prisma";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
-import { applyForceClosedDeduction } from "../services/trip-finance";
+import { applyForceClosedDeduction, applyFailedToCancelledPenalty, applyStatusChangeFinance } from "../services/trip-finance";
 
 type LedgerSummary = {
   totalTrips: number;
@@ -3152,6 +3152,29 @@ export const updateTripStatus = async (req: any, res: Response) => {
         },
       },
     });
+
+    // Apply financial logic for the new status
+    // This ensures manual status changes trigger the same financial logic as automatic changes
+    try {
+      const financeResult = await applyStatusChangeFinance(id, newStatus, previousStatus);
+      if (!financeResult.success && !financeResult.skipped) {
+        console.error(
+          `Failed to apply finance logic for ${previousStatus} → ${newStatus} transition (trip ${id}):`,
+          financeResult.reason
+        );
+        // Don't fail the status update, just log the error
+      } else if (financeResult.success && !financeResult.skipped) {
+        console.log(
+          `✅ Applied finance logic for ${previousStatus} → ${newStatus} transition (trip ${id})`
+        );
+      }
+    } catch (financeError: any) {
+      console.error(
+        `Error applying finance logic for ${previousStatus} → ${newStatus} transition (trip ${id}):`,
+        financeError.message || financeError
+      );
+      // Don't fail the status update, just log the error
+    }
 
     // Create status history entry with deduction
     await prisma.tripStatusHistory.create({

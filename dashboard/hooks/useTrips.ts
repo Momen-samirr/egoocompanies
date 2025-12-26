@@ -5,7 +5,7 @@ import { ScheduledTrip, TripFilters, TripSort, PaginationParams } from "@/types/
 import { Pagination as PaginationType } from "@/types";
 import { toast } from "react-hot-toast";
 
-export type TripView = "all" | "upcoming" | "active" | "completed" | "cancelled" | "emergency" | "force-closed";
+export type TripView = "all" | "upcoming" | "active" | "completed" | "failed" | "cancelled" | "emergency" | "force-closed";
 
 interface UseTripsOptions {
   view?: TripView;
@@ -49,8 +49,10 @@ const getStatusFiltersForView = (view: TripView): ScheduledTrip["status"][] => {
       return ["ACTIVE"];
     case "completed":
       return ["COMPLETED"];
+    case "failed":
+      return ["FAILED"];
     case "cancelled":
-      return ["CANCELLED", "FAILED"];
+      return ["CANCELLED"];
     case "emergency":
       return ["EMERGENCY_TERMINATED", "EMERGENCY_ENDED"];
     case "force-closed":
