@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { ScheduledTrip, TripFilters, TripSort, PaginationParams } from "@/types/trip";
 import { Pagination as PaginationType } from "@/types";
 import { toast } from "react-hot-toast";
+import { useCompanyContextSafe } from "@/lib/providers/CompanyProvider";
 
 export type TripView = "all" | "upcoming" | "active" | "completed" | "failed" | "cancelled" | "emergency" | "force-closed";
 
@@ -73,11 +74,22 @@ export function useTrips(options: UseTripsOptions = {}) {
   } = options;
 
   const queryClient = useQueryClient();
+  
+  // Get company context - will be null if not in CompanyProvider (graceful fallback)
+  const companyContext = useCompanyContextSafe();
+  const selectedCompanyId = companyContext?.selectedCompanyId || null;
 
   // Merge view-based status filters with user filters
   const viewStatuses = getStatusFiltersForView(view);
   const mergedFilters = useMemo(() => {
     const merged: TripFilters = { ...filters };
+    
+    // Apply company context to filters
+    // Context companyId takes precedence over explicit filter companyId for consistency
+    // If user wants to override, they can clear the context selection
+    if (selectedCompanyId) {
+      merged.companyId = selectedCompanyId;
+    }
     
     if (viewStatuses.length > 0) {
       // If view has status filters, merge with user filters
@@ -91,7 +103,7 @@ export function useTrips(options: UseTripsOptions = {}) {
     }
     
     return merged;
-  }, [view, filters, viewStatuses]);
+  }, [view, filters, viewStatuses, selectedCompanyId]);
 
   // Build query params
   const queryParams = useMemo(() => {

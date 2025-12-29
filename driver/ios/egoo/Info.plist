@@ -49,18 +49,12 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
-    <key>NSCameraUsageDescription</key>
-    <string>Allow egoo to access your camera to take photos for document verification.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Allow egoo to use your location to find nearby rides and navigate.</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Allow egoo to use your location to find nearby rides and navigate even when the app is in the background.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Allow egoo to use your location to find nearby rides and navigate.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Allow egoo to access your photo library to upload documents for verification.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

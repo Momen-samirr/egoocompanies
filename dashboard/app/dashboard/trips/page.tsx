@@ -15,6 +15,10 @@ import { useTrips } from "@/hooks/useTrips";
 import Link from "next/link";
 import StatusBadge from "@/components/common/StatusBadge";
 import { formatDistanceToNow } from "date-fns";
+import { useCompanyContextSafe } from "@/lib/providers/CompanyProvider";
+import { useQuery } from "@tanstack/react-query";
+import { Company } from "@/types";
+import { Badge } from "@/components/ui/badge";
 
 export default function ScheduledTripsOverviewPage() {
   const router = useRouter();
@@ -25,6 +29,24 @@ export default function ScheduledTripsOverviewPage() {
   const [financeSummaryLoading, setFinanceSummaryLoading] = useState(true);
   const [recentTrips, setRecentTrips] = useState<ScheduledTrip[]>([]);
   const [recentTripsLoading, setRecentTripsLoading] = useState(true);
+
+  // Get selected company context
+  const companyContext = useCompanyContextSafe();
+  const selectedCompanyId = companyContext?.selectedCompanyId || null;
+
+  const { data: companiesData } = useQuery<{ companies: Company[] }>({
+    queryKey: ["companies"],
+    queryFn: async () => {
+      const res = await api.get("/admin/companies");
+      return res.data;
+    },
+    enabled: !!selectedCompanyId,
+  });
+
+  const selectedCompany =
+    selectedCompanyId && companiesData?.companies
+      ? companiesData.companies.find((c) => c.id === selectedCompanyId) || null
+      : null;
 
   // Fetch counts for each view
   const { pagination: upcomingPagination, isLoading: upcomingLoading } =
@@ -121,7 +143,14 @@ export default function ScheduledTripsOverviewPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Scheduled Trips</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-gray-900">Scheduled Trips</h1>
+          {selectedCompany && (
+            <Badge variant="secondary" className="text-sm">
+              {selectedCompany.name}
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-3">
           <Button
             variant="outline"

@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import AppSidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { isAuthenticated, isCompanyUser } from "@/lib/auth";
+import { isAuthenticated, isCompanyUser, getUserRole, getCompanyId } from "@/lib/auth";
 import QueryProvider from "@/lib/providers/QueryProvider";
+import { CompanyProvider } from "@/lib/providers/CompanyProvider";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 export default function DashboardLayout({
@@ -19,10 +20,15 @@ export default function DashboardLayout({
   const [isCompany, setIsCompany] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userCompanyId, setUserCompanyId] = useState<string | null>(null);
+
   // Check user role only on client side to avoid hydration mismatch
   useEffect(() => {
     setMounted(true);
     setIsCompany(isCompanyUser());
+    setUserRole(getUserRole());
+    setUserCompanyId(getCompanyId());
   }, []);
 
   useEffect(() => {
@@ -50,16 +56,18 @@ export default function DashboardLayout({
 
         {/* Main content */}
         <QueryProvider>
-          <SidebarInset className="flex flex-col">
-            {!isMapPage && showSidebar && <Header />}
-            <main
-              className={`flex-1 overflow-x-hidden overflow-y-auto ${
-                !isMapPage && showSidebar ? "p-4 lg:p-6" : ""
-              }`}
-            >
-              {children}
-            </main>
-          </SidebarInset>
+          <CompanyProvider userRole={userRole} userCompanyId={userCompanyId}>
+            <SidebarInset className="flex flex-col">
+              {!isMapPage && showSidebar && <Header />}
+              <main
+                className={`flex-1 overflow-x-hidden overflow-y-auto ${
+                  !isMapPage && showSidebar ? "p-4 lg:p-6" : ""
+                }`}
+              >
+                {children}
+              </main>
+            </SidebarInset>
+          </CompanyProvider>
         </QueryProvider>
       </div>
     </SidebarProvider>

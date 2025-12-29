@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggle } from "./ThemeToggle";
+import { CompanySelector } from "./CompanySelector";
 
 function getBreadcrumbs(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
@@ -81,6 +82,9 @@ export default function Header({ children }: HeaderProps) {
               </h1>
             )}
           </div>
+        </div>
+        <div className="flex items-center gap-3 lg:gap-4">
+          <CompanySelector />
         </div>
         <div className="flex items-center gap-2 lg:gap-4">
           <div className="relative hidden md:block">

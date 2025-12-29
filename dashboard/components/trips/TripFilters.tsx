@@ -15,6 +15,8 @@ import {
   weekRangeToDateStrings,
   WeekRange,
 } from "@/lib/utils/weekUtils";
+import { useCompanyContextSafe } from "@/lib/providers/CompanyProvider";
+import { getUserRole } from "@/lib/auth";
 
 interface CompanyOption {
   id: string;
@@ -51,10 +53,35 @@ export default function TripFilters({
   const [showFilters, setShowFilters] = useState(false);
   const [localFilters, setLocalFilters] = useState<TripFiltersType>(filters);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
+  
+  // Get company context and user role
+  const userRole = getUserRole();
+  const isCompanyUser = userRole === "COMPANY";
+  const companyContext = useCompanyContextSafe();
 
   useEffect(() => {
     setLocalFilters(filters);
   }, [filters]);
+
+  // Sync company filter with context when context changes externally
+  useEffect(() => {
+    if (companyContext?.selectedCompanyId !== undefined) {
+      const contextCompanyId = companyContext.selectedCompanyId;
+      // Only sync if local filter is different from context (prevents loops)
+      const currentCompanyId = localFilters.companyId || null;
+      if (currentCompanyId !== contextCompanyId) {
+        const newFilters = { ...localFilters };
+        if (contextCompanyId) {
+          newFilters.companyId = contextCompanyId;
+        } else {
+          delete newFilters.companyId;
+        }
+        setLocalFilters(newFilters);
+        onChange(newFilters);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyContext?.selectedCompanyId]);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -73,7 +100,7 @@ export default function TripFilters({
     (localFilters.status && localFilters.status.length > 0) ||
     localFilters.name ||
     localFilters.captain ||
-    localFilters.companyId ||
+    (!isCompanyUser && localFilters.companyId) ||
     localFilters.checkpoints?.min !== undefined ||
     localFilters.checkpoints?.max !== undefined ||
     localFilters.dateRange?.start ||
@@ -91,6 +118,12 @@ export default function TripFilters({
     }
     setLocalFilters(newFilters);
     onChange(newFilters);
+    
+    // If changing company filter, update context (this will trigger sync, but that's OK since we just updated localFilters)
+    if (key === "companyId" && companyContext) {
+      const companyIdValue = value as string | undefined;
+      companyContext.setSelectedCompanyId(companyIdValue || null);
+    }
   };
 
   const handleStatusChange = (selectedOptions: MultiValue<StatusOption>) => {
@@ -146,7 +179,7 @@ export default function TripFilters({
     localFilters.status?.length || 0,
     localFilters.name ? 1 : 0,
     localFilters.captain ? 1 : 0,
-    localFilters.companyId ? 1 : 0,
+    !isCompanyUser && localFilters.companyId ? 1 : 0,
     localFilters.checkpoints?.min !== undefined ||
     localFilters.checkpoints?.max !== undefined
       ? 1
@@ -328,25 +361,27 @@ export default function TripFilters({
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              Company
-            </label>
-            <select
-              value={localFilters.companyId || ""}
-              onChange={(event) =>
-                handleFilterChange("companyId", event.target.value || undefined)
-              }
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
-            >
-              <option value="">All companies</option>
-              {companies.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isCompanyUser && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Company
+              </label>
+              <select
+                value={localFilters.companyId || ""}
+                onChange={(event) =>
+                  handleFilterChange("companyId", event.target.value || undefined)
+                }
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
+              >
+                <option value="">All companies</option>
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
