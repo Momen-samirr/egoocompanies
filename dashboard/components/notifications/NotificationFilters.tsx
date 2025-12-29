@@ -120,16 +120,16 @@ export default function NotificationFilters({
               <div className="space-y-2">
                 <Label>Document Type</Label>
                 <Select
-                  value={localFilters.documentType || ""}
+                  value={localFilters.documentType || "all"}
                   onValueChange={(value) =>
-                    handleFilterChange("documentType", value || undefined)
+                    handleFilterChange("documentType", value === "all" ? undefined : value)
                   }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All Types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Types</SelectItem>
+                    <SelectItem value="all">All Types</SelectItem>
                     {documentTypeOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -143,11 +143,11 @@ export default function NotificationFilters({
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select
-                  value={localFilters.status || ""}
+                  value={localFilters.status || "all"}
                   onValueChange={(value) =>
                     handleFilterChange(
                       "status",
-                      (value as NotificationStatus) || undefined
+                      value === "all" ? undefined : (value as NotificationStatus)
                     )
                   }
                 >
@@ -155,7 +155,7 @@ export default function NotificationFilters({
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Status</SelectItem>
+                    <SelectItem value="all">All Status</SelectItem>
                     {statusOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}

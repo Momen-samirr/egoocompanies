@@ -94,9 +94,9 @@ export default function DriversPage() {
               />
             </div>
             <Select
-              value={statusFilter}
+              value={statusFilter || "all"}
               onValueChange={(value) => {
-                setStatusFilter(value);
+                setStatusFilter(value === "all" ? "" : value);
                 setPage(1);
               }}
             >
@@ -104,7 +104,7 @@ export default function DriversPage() {
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>

@@ -14,8 +14,8 @@
 		96905EF65AED1B983A6B3ABC /* libPods-egoo.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 58EEBF8E8E6FB1BC6CAF49B5 /* libPods-egoo.a */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		074AE74FF3694F3BB26EA9D4 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = 355553BF664043378913AC2E /* noop-file.swift */; };
-		783E4182ABD34DC9BE082A23 /* TT-Octosquares-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0924BA7E5A774AB3880F6382 /* TT-Octosquares-Medium.ttf */; };
+		4917CE108988431C9339738A /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15819B083B874BF8B28A04BE /* noop-file.swift */; };
+		715137A766D9446D844F4ECA /* TT-Octosquares-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6F091EE2081A4E9A9BE255FC /* TT-Octosquares-Medium.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,9 +32,9 @@
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-egoo/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		355553BF664043378913AC2E /* noop-file.swift */ = {isa = PBXFileReference; name = "noop-file.swift"; path = "egoo/noop-file.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
-		84374DB16473455FBAD245D3 /* egoo-Bridging-Header.h */ = {isa = PBXFileReference; name = "egoo-Bridging-Header.h"; path = "egoo/egoo-Bridging-Header.h"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; explicitFileType = undefined; includeInIndex = 0; };
-		0924BA7E5A774AB3880F6382 /* TT-Octosquares-Medium.ttf */ = {isa = PBXFileReference; name = "TT-Octosquares-Medium.ttf"; path = "../assets/fonts/TT-Octosquares-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		15819B083B874BF8B28A04BE /* noop-file.swift */ = {isa = PBXFileReference; name = "noop-file.swift"; path = "egoo/noop-file.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
+		29E78BEC439D4FA8923BCD87 /* egoo-Bridging-Header.h */ = {isa = PBXFileReference; name = "egoo-Bridging-Header.h"; path = "egoo/egoo-Bridging-Header.h"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; explicitFileType = undefined; includeInIndex = 0; };
+		6F091EE2081A4E9A9BE255FC /* TT-Octosquares-Medium.ttf */ = {isa = PBXFileReference; name = "TT-Octosquares-Medium.ttf"; path = "../assets/fonts/TT-Octosquares-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,8 +59,8 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				355553BF664043378913AC2E /* noop-file.swift */,
-				84374DB16473455FBAD245D3 /* egoo-Bridging-Header.h */,
+				15819B083B874BF8B28A04BE /* noop-file.swift */,
+				29E78BEC439D4FA8923BCD87 /* egoo-Bridging-Header.h */,
 			);
 			name = egoo;
 			sourceTree = "<group>";
@@ -90,7 +90,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				D65327D7A22EEC0BE12398D9 /* Pods */,
 				D7E4C46ADA2E9064B798F356 /* ExpoModulesProviders */,
-				F5C2E3C4BA554C1BA7C63821 /* Resources */,
+				EBD1E2C9335140FD88C29BD8 /* Resources */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -139,10 +139,10 @@
 			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
-		F5C2E3C4BA554C1BA7C63821 /* Resources */ = {
+		EBD1E2C9335140FD88C29BD8 /* Resources */ = {
 			isa = "PBXGroup";
 			children = (
-				0924BA7E5A774AB3880F6382 /* TT-Octosquares-Medium.ttf */,
+				6F091EE2081A4E9A9BE255FC /* TT-Octosquares-Medium.ttf */,
 			);
 			name = Resources;
 			sourceTree = "<group>";
@@ -210,8 +210,8 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				DA86A67C325F484EAFFC9D8A /* egoo-Bridging-Header.h in Resources */,
-				783E4182ABD34DC9BE082A23 /* TT-Octosquares-Medium.ttf in Resources */,
+				A283215AAC6D4C57B2679C32 /* egoo-Bridging-Header.h in Resources */,
+				715137A766D9446D844F4ECA /* TT-Octosquares-Medium.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -287,7 +287,7 @@
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
 				B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */,
-				074AE74FF3694F3BB26EA9D4 /* noop-file.swift in Sources */,
+				4917CE108988431C9339738A /* noop-file.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

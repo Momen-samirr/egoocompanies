@@ -17,7 +17,7 @@ export function formatWhatsAppReport(
   }
 
   const timezone = process.env.DISPLAY_TIMEZONE || "Africa/Cairo";
-  
+
   // Format date for display
   const dateObj = new Date(date);
   const formattedDate = dateObj.toLocaleDateString("en-US", {
@@ -59,78 +59,18 @@ export function formatWhatsAppReport(
   // Summary section
   report += `📈 *Summary:*\n`;
   report += `• Total: ${total} trip${total !== 1 ? "s" : ""}\n`;
-  report += `• ✅ On Track: ${onTrack} trip${onTrack !== 1 ? "s" : ""} (ACTIVE)\n`;
-  report += `• ❌ Off Track: ${offTrack} trip${offTrack !== 1 ? "s" : ""} (FAILED)\n\n`;
+  report += `• ✅ On Track: ${onTrack} trip${
+    onTrack !== 1 ? "s" : ""
+  } (ACTIVE)\n`;
+  report += `• ❌ Off Track: ${offTrack} trip${
+    offTrack !== 1 ? "s" : ""
+  } (OFFLINE COMPLETION)\n\n`;
 
   report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-  // ACTIVE trips section
-  if (activeTrips.length > 0) {
-    report += `✅ *ACTIVE TRIPS (${activeTrips.length})*\n`;
-    report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-
-    activeTrips.forEach((queuedTrip, index) => {
-      const trip = queuedTrip.tripData;
-      const points = trip.points || [];
-      const firstPoint = points[0];
-      const lastPoint = points[points.length - 1];
-      const driverName = trip.assignedCaptain?.name || "Not Assigned";
-
-      // Format scheduled time
-      const scheduledTime = new Date(trip.scheduledTime);
-      const formattedScheduledTime = scheduledTime.toLocaleString("en-US", {
-        timeZone: timezone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "numeric",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      });
-
-      // Format status change time
-      const formattedStatusChangeTime = queuedTrip.statusChangeTime.toLocaleString(
-        "en-US",
-        {
-          timeZone: timezone,
-          hour: "numeric",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        }
-      );
-
-      // Check if on time (within 5 minutes of scheduled time)
-      const timeDiff = Math.abs(
-        scheduledTime.getTime() - queuedTrip.statusChangeTime.getTime()
-      );
-      const minutesDiff = timeDiff / (1000 * 60);
-      const onTimeStatus = minutesDiff <= 5 ? "✅ On Time" : "⚠️ Late";
-
-      // Get trip type label
-      const tripTypeLabel =
-        trip.tripType === "ARRIVAL" ? "🛬 ARRIVAL" : "🛫 DEPARTURE";
-
-      report += `🚗 *Trip:* ${trip.name} (${tripTypeLabel})\n`;
-      report += `   Driver: ${driverName}\n`;
-      report += `   Scheduled: ${formattedScheduledTime}\n`;
-      report += `   Start: ${firstPoint?.name || "N/A"} → End: ${lastPoint?.name || "N/A"}\n`;
-      report += `   Checkpoints: ${points.length}\n`;
-      report += `   Status: Started at ${formattedStatusChangeTime} ${onTimeStatus}\n`;
-      report += `   Trip ID: ${trip.id}\n`;
-
-      if (index < activeTrips.length - 1) {
-        report += `\n`;
-      }
-    });
-
-    report += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  }
-
-  // FAILED trips section
+  // OFFLINE COMPLETION trips section
   if (failedTrips.length > 0) {
-    report += `❌ *FAILED TRIPS (${failedTrips.length})*\n`;
+    report += `📱 *OFFLINE COMPLETION (${failedTrips.length})*\n`;
     report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
 
     failedTrips.forEach((queuedTrip, index) => {
@@ -154,27 +94,27 @@ export function formatWhatsAppReport(
       });
 
       // Format status change time
-      const formattedStatusChangeTime = queuedTrip.statusChangeTime.toLocaleString(
-        "en-US",
-        {
+      const formattedStatusChangeTime =
+        queuedTrip.statusChangeTime.toLocaleString("en-US", {
           timeZone: timezone,
           hour: "numeric",
           minute: "2-digit",
           second: "2-digit",
           hour12: true,
-        }
-      );
+        });
 
       // Get trip type label
       const tripTypeLabel =
         trip.tripType === "ARRIVAL" ? "🛬 ARRIVAL" : "🛫 DEPARTURE";
 
-      report += `❌ *Trip:* ${trip.name} (${tripTypeLabel})\n`;
+      report += `📱 *Trip:* ${trip.name} (${tripTypeLabel})\n`;
       report += `   Driver: ${driverName}\n`;
       report += `   Scheduled: ${formattedScheduledTime}\n`;
-      report += `   Start: ${firstPoint?.name || "N/A"} → End: ${lastPoint?.name || "N/A"}\n`;
+      report += `   Start: ${firstPoint?.name || "N/A"} → End: ${
+        lastPoint?.name || "N/A"
+      }\n`;
       report += `   Checkpoints: ${points.length}\n`;
-      report += `   Failed at: ${formattedStatusChangeTime}\n`;
+      report += `   Offline at: ${formattedStatusChangeTime}\n`;
       report += `   Trip ID: ${trip.id}\n`;
 
       if (index < failedTrips.length - 1) {
@@ -198,4 +138,3 @@ export function formatWhatsAppReport(
 
   return report;
 }
-

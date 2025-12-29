@@ -249,7 +249,7 @@ model ScheduledTripLedger {
   calculatedAt        DateTime                   @default(now())
   createdAt           DateTime                   @default(now())
   updatedAt           DateTime                   @updatedAt
-  scheduledTrip       ScheduledTrip              @relation(fields: [scheduledTripId], references: [id])
+  scheduledTrip       ScheduledTrip              @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
   captain             driver                     @relation("LedgerCaptain", fields: [captainId], references: [id])
 }
 

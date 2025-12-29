@@ -2862,6 +2862,11 @@ export const deleteScheduledTrip = async (req: any, res: Response) => {
       });
     }
 
+    // Delete ledger entries first (they don't have cascade delete)
+    await prisma.scheduledTripLedger.deleteMany({
+      where: { scheduledTripId: id },
+    });
+
     // Delete trip (cascade will delete points, progress, and activation checks)
     await prisma.scheduledTrip.delete({
       where: { id },

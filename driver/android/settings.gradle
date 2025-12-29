@@ -8,8 +8,6 @@ pluginManagement {
   if(reactNativeMinor == 74 && reactNativePatch <= 3){
     includeBuild("react-settings-plugin")
   }
-  // Include expo-module-gradle-plugin
-  includeBuild("expo-module-gradle-plugin")
 }
 
 plugins { id("com.facebook.react.settings") }
