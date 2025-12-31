@@ -9,10 +9,13 @@ import Pagination from "@/components/common/Pagination";
 import ExportButton from "@/components/common/ExportButton";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import EmptyState from "@/components/common/EmptyState";
+import BulkEditBar from "./BulkEditBar";
+import MultiEditModal, { TripChanges } from "./MultiEditModal";
+import ChangesPreviewModal from "./ChangesPreviewModal";
 import { useTrips, TripView } from "@/hooks/useTrips";
 import { useTripFilters } from "@/hooks/useTripFilters";
 import { useTripPagination } from "@/hooks/useTripPagination";
-import { TripSort } from "@/types/trip";
+import { TripSort, ScheduledTrip } from "@/types/trip";
 import { exportTripsToCSV } from "@/lib/utils/export";
 import TripsStatsCards from "./TripsStatsCards";
 
@@ -38,6 +41,14 @@ export default function TripsView({ view, title }: TripsViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [selectedTripIds, setSelectedTripIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [isMultiEditOpen, setIsMultiEditOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewChanges, setPreviewChanges] = useState<TripChanges | null>(
+    null
+  );
 
   const sort: TripSort | undefined = sortField
     ? { field: sortField, direction: sortDirection }
@@ -87,6 +98,58 @@ export default function TripsView({ view, title }: TripsViewProps) {
       `trips-${view}-${new Date().toISOString().split("T")[0]}.csv`
     );
     toast.success("Trips exported successfully");
+  };
+
+  const handleSelectTrip = (tripId: string, selected: boolean) => {
+    setSelectedTripIds((prev) => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(tripId);
+      } else {
+        newSet.delete(tripId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      const editableTrips = trips.filter(
+        (trip) =>
+          trip.status === "SCHEDULED" ||
+          trip.status === "FAILED" ||
+          trip.status === "ACTIVE"
+      );
+      setSelectedTripIds(new Set(editableTrips.map((trip) => trip.id)));
+    } else {
+      setSelectedTripIds(new Set());
+    }
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedTripIds(new Set());
+  };
+
+  const handleEditSelected = () => {
+    setIsMultiEditOpen(true);
+  };
+
+  const handleShowChanges = (changes: TripChanges) => {
+    setPreviewChanges(changes);
+    setIsMultiEditOpen(false);
+    setIsPreviewOpen(true);
+  };
+
+  const handlePreviewBack = () => {
+    setIsPreviewOpen(false);
+    setIsMultiEditOpen(true);
+  };
+
+  const handleSaveSuccess = () => {
+    setSelectedTripIds(new Set());
+    setPreviewChanges(null);
+    setIsPreviewOpen(false);
+    setIsMultiEditOpen(false);
   };
 
   return (
@@ -150,7 +213,21 @@ export default function TripsView({ view, title }: TripsViewProps) {
               sortField={sortField}
               sortDirection={sortDirection}
               onSort={handleSort}
+              selectedTripIds={selectedTripIds}
+              onSelectTrip={handleSelectTrip}
+              onSelectAll={handleSelectAll}
             />
+
+            {/* Bulk Edit Bar - positioned above pagination */}
+            {selectedTripIds.size > 0 && (
+              <div className="mt-4">
+                <BulkEditBar
+                  selectedCount={selectedTripIds.size}
+                  onEdit={handleEditSelected}
+                  onDeselectAll={handleDeselectAll}
+                />
+              </div>
+            )}
 
             {/* Pagination */}
             {pagination && pagination.pages > 1 && (
@@ -168,6 +245,27 @@ export default function TripsView({ view, title }: TripsViewProps) {
           </>
         )}
       </TripsViewLayout>
+
+      <MultiEditModal
+        selectedTripIds={Array.from(selectedTripIds)}
+        isOpen={isMultiEditOpen}
+        onClose={() => setIsMultiEditOpen(false)}
+        onShowChanges={handleShowChanges}
+        onSaveSuccess={handleSaveSuccess}
+      />
+
+      {previewChanges && (
+        <ChangesPreviewModal
+          changes={previewChanges}
+          isOpen={isPreviewOpen}
+          onClose={() => {
+            setIsPreviewOpen(false);
+            setPreviewChanges(null);
+          }}
+          onBack={handlePreviewBack}
+          onSaveSuccess={handleSaveSuccess}
+        />
+      )}
     </div>
   );
 }

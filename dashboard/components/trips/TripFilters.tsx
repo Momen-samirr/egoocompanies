@@ -244,6 +244,7 @@ export default function TripFilters({
               Week:
             </label>
             <Select<{ value: WeekRange; label: string }, false>
+              instanceId="trip-filters-week-select"
               options={weekOptions.map((week) => ({
                 value: week,
                 label: week.label,
@@ -313,6 +314,7 @@ export default function TripFilters({
               Status
             </label>
             <Select<StatusOption, true>
+              instanceId="trip-filters-status-select"
               isMulti
               options={statusOptions}
               value={statusOptions.filter((opt) =>

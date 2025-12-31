@@ -45,6 +45,9 @@ interface TripsTableProps {
   sortField?: string | null;
   sortDirection?: "asc" | "desc";
   onSort?: (field: string) => void;
+  selectedTripIds?: Set<string>;
+  onSelectTrip?: (tripId: string, selected: boolean) => void;
+  onSelectAll?: (selected: boolean) => void;
 }
 
 export default function TripsTable({
@@ -54,10 +57,16 @@ export default function TripsTable({
   sortField,
   sortDirection = "asc",
   onSort,
+  selectedTripIds = new Set(),
+  onSelectTrip,
+  onSelectAll,
 }: TripsTableProps) {
   const handleSort = (field: string) => {
     onSort?.(field);
   };
+
+  const allSelected = trips.length > 0 && trips.every((trip) => selectedTripIds.has(trip.id));
+  const someSelected = trips.some((trip) => selectedTripIds.has(trip.id));
 
   if (loading) {
     return (
@@ -80,6 +89,18 @@ export default function TripsTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(input) => {
+                  if (input) input.indeterminate = someSelected && !allSelected;
+                }}
+                onChange={(e) => onSelectAll?.(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                aria-label="Select all trips"
+              />
+            </TableHead>
             <TableHead
               className="cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={() => handleSort("name")}
@@ -158,6 +179,8 @@ export default function TripsTable({
               trip={trip}
               index={index}
               onDelete={onDelete}
+              isSelected={selectedTripIds.has(trip.id)}
+              onSelectChange={(selected) => onSelectTrip?.(trip.id, selected)}
             />
           ))}
         </TableBody>

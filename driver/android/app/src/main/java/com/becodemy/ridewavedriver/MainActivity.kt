@@ -1,6 +1,5 @@
 package com.becodemy.ridewavedriver
 
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -17,63 +16,7 @@ class MainActivity : ReactActivity() {
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
-    
-    // Fix for UserHandle serialization error when app is opened from notification
-    // Remove UserHandle from Intent extras before it's processed by expo-notifications
-    // This prevents "Could not put 'class android.os.UserHandle' to WritableMap" error
-    try {
-      intent?.let { currentIntent ->
-        if (currentIntent.hasExtra("android.intent.extra.USER")) {
-          currentIntent.removeExtra("android.intent.extra.USER")
-        }
-        // Also check for any other non-serializable extras that might cause issues
-        val extras = currentIntent.extras
-        if (extras != null) {
-          val keys = extras.keySet()
-          for (key in keys) {
-            val value = extras.get(key)
-            // Remove UserHandle objects if found under any key
-            if (value != null && value.javaClass.name == "android.os.UserHandle") {
-              currentIntent.removeExtra(key)
-            }
-          }
-        }
-      }
-    } catch (e: Exception) {
-      // Silently handle any errors during Intent cleanup
-      // This ensures the app can still start even if Intent manipulation fails
-    }
-    
-    super.onCreate(savedInstanceState)
-  }
-  
-  override fun onNewIntent(intent: Intent) {
-    super.onNewIntent(intent)
-    
-    // Fix for UserHandle serialization error when app receives new intent from notification
-    // Remove UserHandle from Intent extras before it's processed by expo-notifications
-    // This prevents "Could not put 'class android.os.UserHandle' to WritableMap" error
-    try {
-      if (intent.hasExtra("android.intent.extra.USER")) {
-        intent.removeExtra("android.intent.extra.USER")
-      }
-      // Also check for any other non-serializable extras that might cause issues
-      val extras = intent.extras
-      if (extras != null) {
-        val keys = extras.keySet()
-        for (key in keys) {
-          val value = extras.get(key)
-          // Remove UserHandle objects if found under any key
-          if (value != null && value.javaClass.name == "android.os.UserHandle") {
-            intent.removeExtra(key)
-          }
-        }
-      }
-    } catch (e: Exception) {
-      // Silently handle any errors during Intent cleanup
-      // This ensures the app can still handle the intent even if cleanup fails
-    }
-    setIntent(intent)
+    super.onCreate(null)
   }
 
   /**

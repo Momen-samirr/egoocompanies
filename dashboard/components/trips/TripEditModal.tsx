@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import FormField from "@/components/common/FormField";
+import CaptainSelector from "@/components/trips/CaptainSelector";
 import { ScheduledTrip } from "@/types/trip";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
@@ -14,13 +15,6 @@ interface TripEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-}
-
-interface Driver {
-  id: string;
-  name: string;
-  phone_number: string;
-  email: string;
 }
 
 interface Company {
@@ -43,28 +37,15 @@ export default function TripEditModal({
     companyId: trip.companyId || "",
     price: trip.price || 0,
   });
-  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
-      fetchDrivers();
       fetchCompanies();
     }
   }, [isOpen]);
-
-  const fetchDrivers = async () => {
-    try {
-      const response = await api.get("/admin/drivers");
-      setDrivers(response.data.drivers || []);
-    } catch (error) {
-      console.error("Error fetching drivers:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchCompanies = async () => {
     try {
@@ -72,6 +53,8 @@ export default function TripEditModal({
       setCompanies(response.data.companies || []);
     } catch (error) {
       console.error("Error fetching companies:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -195,25 +178,20 @@ export default function TripEditModal({
               </select>
             </FormField>
 
-            <FormField label="Assigned Captain">
-              <select
-                value={formData.assignedCaptainId}
-                onChange={(e) =>
+            <FormField 
+              label="Assigned Captain"
+              hint="Optional - can be assigned later. Search by phone number, name, or email."
+            >
+              <CaptainSelector
+                value={formData.assignedCaptainId || undefined}
+                onChange={(captainId) =>
                   setFormData({
                     ...formData,
-                    assignedCaptainId: e.target.value,
+                    assignedCaptainId: captainId || "",
                   })
                 }
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                disabled={isSubmitting || loading}
-              >
-                <option value="">No captain assigned</option>
-                {drivers.map((driver) => (
-                  <option key={driver.id} value={driver.id}>
-                    {driver.name} ({driver.phone_number})
-                  </option>
-                ))}
-              </select>
+                disabled={isSubmitting}
+              />
             </FormField>
 
             <FormField label="Price" required>

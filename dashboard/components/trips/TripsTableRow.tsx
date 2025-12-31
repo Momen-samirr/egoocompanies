@@ -20,12 +20,16 @@ interface TripsTableRowProps {
   trip: ScheduledTrip;
   index: number;
   onDelete?: (id: string) => void;
+  isSelected?: boolean;
+  onSelectChange?: (selected: boolean) => void;
 }
 
 export default function TripsTableRow({
   trip,
   index,
   onDelete,
+  isSelected = false,
+  onSelectChange,
 }: TripsTableRowProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -50,14 +54,27 @@ export default function TripsTableRow({
     queryClient.invalidateQueries({ queryKey: ["trips"] });
   };
 
+  const canEdit = trip.status === "SCHEDULED" || trip.status === "FAILED" || trip.status === "ACTIVE";
+
   return (
     <>
       <TableRow
         className={cn(
           "transition-all duration-150",
-          index % 2 === 0 ? "bg-background" : "bg-muted/30"
+          index % 2 === 0 ? "bg-background" : "bg-muted/30",
+          isSelected && "bg-indigo-50/50"
         )}
       >
+        <TableCell className="w-12">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => onSelectChange?.(e.target.checked)}
+            disabled={!canEdit}
+            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={`Select trip ${trip.name}`}
+          />
+        </TableCell>
         <TableCell className="whitespace-nowrap">
           <div className="text-sm font-semibold text-foreground">
             {trip.name}
