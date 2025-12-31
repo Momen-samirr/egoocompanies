@@ -41,6 +41,8 @@ export interface TripChange {
     [key: string]: {
       before: any;
       after: any;
+      beforeId?: string;
+      afterId?: string;
     };
   };
 }

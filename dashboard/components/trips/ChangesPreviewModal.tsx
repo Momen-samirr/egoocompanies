@@ -74,12 +74,12 @@ export default function ChangesPreviewModal({
         }
         if (editedFields.companyId) {
           // Use the stored ID, not the display value
-          const afterId = (editedFields.companyId as any).afterId;
+          const afterId = editedFields.companyId.afterId;
           updatePayload.companyId = afterId || undefined;
         }
         if (editedFields.assignedCaptainId) {
           // Use the stored ID, not the display value
-          const afterId = (editedFields.assignedCaptainId as any).afterId;
+          const afterId = editedFields.assignedCaptainId.afterId;
           updatePayload.assignedCaptainId = afterId || undefined;
         }
         if (editedFields.price) {
