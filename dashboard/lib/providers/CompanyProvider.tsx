@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 interface CompanyContextType {
@@ -16,7 +16,7 @@ interface CompanyProviderProps {
   userCompanyId: string | null;
 }
 
-export function CompanyProvider({
+function CompanyProviderInner({
   children,
   userRole,
   userCompanyId,
@@ -98,5 +98,36 @@ export function useCompanyContext(): CompanyContextType {
 // Safe hook that returns null if not in provider (for optional usage)
 export function useCompanyContextSafe(): CompanyContextType | null {
   return useContext(CompanyContext);
+}
+
+// Wrapper component with Suspense boundary
+export function CompanyProvider({
+  children,
+  userRole,
+  userCompanyId,
+}: CompanyProviderProps) {
+  return (
+    <Suspense fallback={<CompanyProviderFallback>{children}</CompanyProviderFallback>}>
+      <CompanyProviderInner userRole={userRole} userCompanyId={userCompanyId}>
+        {children}
+      </CompanyProviderInner>
+    </Suspense>
+  );
+}
+
+// Fallback component that provides context without search params
+function CompanyProviderFallback({ children }: { children: ReactNode }) {
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+
+  return (
+    <CompanyContext.Provider
+      value={{
+        selectedCompanyId,
+        setSelectedCompanyId,
+      }}
+    >
+      {children}
+    </CompanyContext.Provider>
+  );
 }
 

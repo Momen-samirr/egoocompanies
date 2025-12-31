@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -107,7 +107,7 @@ interface ScheduledTrip {
   }>;
 }
 
-export default function TripDetailsPage() {
+function TripDetailsPageContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -748,5 +748,13 @@ export default function TripDetailsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TripDetailsPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner size="lg" text="Loading trip details..." />}>
+      <TripDetailsPageContent />
+    </Suspense>
   );
 }
