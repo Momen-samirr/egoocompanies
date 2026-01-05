@@ -312,7 +312,6 @@ export default function RoutesPage() {
     setStopLocation({
       latitude: stop.latitude,
       longitude: stop.longitude,
-      name: stop.name,
     });
   };
 

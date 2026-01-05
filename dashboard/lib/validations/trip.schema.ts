@@ -47,6 +47,7 @@ export const tripPointSchema = z.object({
     .max(180, "Longitude must be between -180 and 180"),
   order: z.number().int().min(0),
   isFinalPoint: z.boolean(),
+  stopId: z.string().optional(),
   expectedTime: z
     .string()
     .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {

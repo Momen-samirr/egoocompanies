@@ -573,7 +573,6 @@ export default function CreateTripPage() {
                                       handleLocationChange(index, {
                                         latitude: stop.latitude,
                                         longitude: stop.longitude,
-                                        name: stop.name,
                                       });
                                     }
                                   }
