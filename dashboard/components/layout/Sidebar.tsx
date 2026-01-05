@@ -17,6 +17,9 @@ import {
   Bell,
   ClipboardCheck,
   Film,
+  School,
+  Route,
+  GraduationCap,
 } from "lucide-react";
 import { logout, isCompanyUser } from "@/lib/auth";
 import {
@@ -85,6 +88,31 @@ const navigationGroups: NavGroup[] = [
         name: "Companies",
         href: "/dashboard/companies",
         icon: Building2,
+      },
+    ],
+  },
+  {
+    title: "School Transportation",
+    items: [
+      {
+        name: "Schools",
+        href: "/dashboard/schools",
+        icon: School,
+      },
+      {
+        name: "Routes & Stops",
+        href: "/dashboard/routes",
+        icon: Route,
+      },
+      {
+        name: "Students",
+        href: "/dashboard/students",
+        icon: GraduationCap,
+      },
+      {
+        name: "Parents",
+        href: "/dashboard/parents",
+        icon: Users,
       },
     ],
   },

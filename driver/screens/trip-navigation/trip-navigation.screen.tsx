@@ -7,7 +7,7 @@ import {
   Alert,
   Modal,
 } from "react-native";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useTheme } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -41,6 +41,7 @@ import TurnByTurnCard from "@/components/navigation/TurnByTurnCard";
 import { decodePolyline } from "@/services/navigationService";
 import Constants from "expo-constants";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
+import { useThrottledCoordinates } from "@/hooks/useThrottledCoordinates";
 
 interface ScheduledTrip {
   id: string;
@@ -141,6 +142,17 @@ export default function TripNavigationScreen() {
   // Keep screen awake during active trips
   const shouldKeepAwake = trip?.status === "ACTIVE";
   useKeepAwake(shouldKeepAwake);
+
+  // Throttle coordinates for MapViewDirections to reduce API calls
+  // Only update when location moves >100m or 60 seconds have passed
+  const throttledOrigin = useThrottledCoordinates(
+    currentLocation?.coords ? {
+      latitude: currentLocation.coords.latitude,
+      longitude: currentLocation.coords.longitude,
+    } : null,
+    100, // 100 meters threshold
+    60000 // 60 seconds threshold
+  );
 
   // Manually control navigation start/stop based on isNavigationMode
   useEffect(() => {
@@ -918,26 +930,7 @@ export default function TripNavigationScreen() {
                   lineJoin="round"
                 />
               ) : (
-                <MapViewDirections
-                  origin={{
-                    latitude: currentLocation.coords.latitude,
-                    longitude: currentLocation.coords.longitude,
-                  }}
-                  destination={{
-                    latitude: currentPoint.latitude,
-                    longitude: currentPoint.longitude,
-                  }}
-                  apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
-                  strokeWidth={4}
-                  strokeColor={color.primary}
-                  onReady={(result) => {
-                    // Update distance and ETA when route is calculated
-                    if (result.distance && result.duration) {
-                      setDistanceToCheckpoint(result.distance / 1000); // Convert to km
-                      setEtaToCheckpoint(result.duration / 60); // Convert to minutes
-                    }
-                  }}
-                />
+                memoizedDirections
               )}
             </>
           )}

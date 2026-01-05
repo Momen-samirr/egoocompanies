@@ -4,7 +4,7 @@ import { useTheme } from "@react-navigation/native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { useNavigation } from "@/hooks/useNavigation";
-import { Coordinate } from "@/services/navigationService";
+import { Coordinate, decodePolyline } from "@/services/navigationService";
 import NavigationArrow from "@/components/navigation/NavigationArrow";
 import TurnByTurnCard from "@/components/navigation/TurnByTurnCard";
 import ETADisplay from "@/components/common/ETADisplay";
@@ -130,22 +130,39 @@ export default function NavigationScreen({
         />
 
         {/* Route Polyline */}
-        {state.route && state.currentLocation && (
-          <MapViewDirections
-            origin={state.currentLocation}
-            destination={destination}
-            apikey={apiKey}
-            strokeWidth={5}
-            strokeColor={color.primary}
-            onReady={(result) => {
-              // Route is ready
-              console.log("✅ Route rendered on map");
-            }}
-            onError={(error) => {
-              console.error("❌ Error rendering route:", error);
-            }}
-          />
-        )}
+        {/* Prefer using Polyline from cached route instead of MapViewDirections to reduce API calls */}
+        {state.route && state.currentLocation ? (
+          state.route.overview_polyline?.points ? (
+            <Polyline
+              coordinates={decodePolyline(state.route.overview_polyline.points)}
+              strokeColor={color.primary}
+              strokeWidth={5}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ) : (
+            // Fallback to MapViewDirections only if route polyline is not available
+            <MapViewDirections
+              origin={state.currentLocation}
+              destination={destination}
+              apikey={apiKey}
+              strokeWidth={5}
+              strokeColor={color.primary}
+              onReady={(result) => {
+                // Log API call for monitoring (can be disabled in production)
+                if (__DEV__) {
+                  console.log("[Directions API] Route calculated (fallback) at", new Date().toISOString());
+                }
+                console.log("✅ Route rendered on map");
+              }}
+              onError={(error) => {
+                if (__DEV__) {
+                  console.error("[Directions API] Error:", error);
+                }
+              }}
+            />
+          )
+        ) : null}
       </MapView>
 
       {/* Turn-by-Turn Instructions Card */}

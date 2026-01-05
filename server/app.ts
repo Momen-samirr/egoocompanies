@@ -5,6 +5,7 @@ import cors from "cors";
 import userRouter from "./routes/user.route";
 import driverRouter from "./routes/driver.route";
 import adminRouter from "./routes/admin.route";
+import parentRouter from "./routes/parent.route";
 
 export const app = express();
 
@@ -58,6 +59,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use("/api/v1", userRouter);
 app.use("/api/v1/driver", driverRouter);
 app.use("/api/v1/admin", adminRouter);
+app.use("/api/v1/parent", parentRouter);
 
 // testing api
 app.get("/test", (req: Request, res: Response, next: NextFunction) => {

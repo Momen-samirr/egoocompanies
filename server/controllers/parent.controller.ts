@@ -1,0 +1,506 @@
+require("dotenv").config();
+import { NextFunction, Request, Response } from "express";
+import prisma from "../utils/prisma";
+import bcrypt from "bcryptjs";
+import { sendToken } from "../utils/send-token";
+import { sendEmail } from "../utils/send-email";
+import twilio from "twilio";
+
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = twilio(accountSid, authToken, {
+  lazyLoading: true,
+});
+
+// Normalize phone number to E.164 format
+const normalizePhoneNumber = (phoneNumber: string): string => {
+  if (!phoneNumber) return "";
+  let normalized = phoneNumber.trim().replace(/[\s\-\(\)\.]/g, "");
+  if (!normalized.startsWith("+")) {
+    normalized = `+${normalized}`;
+  }
+  return normalized;
+};
+
+// Register parent
+export const registerParent = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { phoneNumber, email, firstName, lastName, password } = req.body;
+
+    if (!phoneNumber && !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number or email is required",
+      });
+    }
+
+    if (!firstName || !lastName) {
+      return res.status(400).json({
+        success: false,
+        message: "First name and last name are required",
+      });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    // Check if parent already exists
+    if (phoneNumber) {
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      const existingByPhone = await prisma.parent.findUnique({
+        where: { phoneNumber: normalizedPhone },
+      });
+      if (existingByPhone) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already registered",
+        });
+      }
+    }
+
+    if (email) {
+      const existingByEmail = await prisma.parent.findUnique({
+        where: { email },
+      });
+      if (existingByEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already registered",
+        });
+      }
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Generate verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Create parent
+    const parent = await prisma.parent.create({
+      data: {
+        phoneNumber: phoneNumber ? normalizePhoneNumber(phoneNumber) : undefined,
+        email: email || undefined,
+        firstName,
+        lastName,
+        password: hashedPassword,
+        verificationCode,
+        isVerified: false,
+      },
+    });
+
+    // Send verification code via SMS or Email
+    if (phoneNumber && process.env.TWILIO_SERVICE_SID) {
+      try {
+        await client.verify.v2
+          .services(process.env.TWILIO_SERVICE_SID!)
+          .verifications.create({
+            channel: "sms",
+            to: normalizePhoneNumber(phoneNumber),
+          });
+      } catch (error) {
+        console.error("Failed to send SMS verification:", error);
+      }
+    } else if (email && process.env.EMAIL_USER) {
+      try {
+        await sendEmail({
+          to: email,
+          name: `${firstName} ${lastName}`,
+          subject: "Verify your parent account",
+          html: `
+            <p>Hi ${firstName},</p>
+            <p>Your verification code is <strong>${verificationCode}</strong>.</p>
+            <p>This code will expire in 10 minutes.</p>
+            <p>Thanks,<br>School Transportation Team</p>
+          `,
+        });
+      } catch (error) {
+        console.error("Failed to send email verification:", error);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Registration successful. Please verify your account.",
+      parentId: parent.id,
+    });
+  } catch (error: any) {
+    console.error("Registration error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Registration failed",
+    });
+  }
+};
+
+// Verify parent account
+export const verifyParent = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { phoneNumber, email, verificationCode } = req.body;
+
+    if (!verificationCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Verification code is required",
+      });
+    }
+
+    let parent;
+    if (phoneNumber) {
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      parent = await prisma.parent.findUnique({
+        where: { phoneNumber: normalizedPhone },
+      });
+    } else if (email) {
+      parent = await prisma.parent.findUnique({
+        where: { email },
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number or email is required",
+      });
+    }
+
+    if (!parent) {
+      return res.status(404).json({
+        success: false,
+        message: "Parent not found",
+      });
+    }
+
+    if (parent.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Account already verified",
+      });
+    }
+
+    // Verify code via Twilio if phone number
+    if (phoneNumber && process.env.TWILIO_SERVICE_SID) {
+      try {
+        const verificationCheck = await client.verify.v2
+          .services(process.env.TWILIO_SERVICE_SID!)
+          .verificationChecks.create({
+            to: normalizePhoneNumber(phoneNumber),
+            code: verificationCode,
+          });
+
+        if (verificationCheck.status !== "approved") {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid or expired verification code",
+          });
+        }
+      } catch (error: any) {
+        // Fallback to stored verification code
+        if (parent.verificationCode !== verificationCode) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid verification code",
+          });
+        }
+      }
+    } else {
+      // Verify using stored code
+      if (parent.verificationCode !== verificationCode) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid verification code",
+        });
+      }
+    }
+
+    // Update parent as verified
+    const updatedParent = await prisma.parent.update({
+      where: { id: parent.id },
+      data: {
+        isVerified: true,
+        verificationCode: null,
+      },
+    });
+
+    sendToken(updatedParent, res);
+  } catch (error: any) {
+    console.error("Verification error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Verification failed",
+    });
+  }
+};
+
+// Login parent
+export const loginParent = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { phoneNumber, email, password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "Password is required",
+      });
+    }
+
+    if (!phoneNumber && !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number or email is required",
+      });
+    }
+
+    let parent;
+    if (phoneNumber) {
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      parent = await prisma.parent.findUnique({
+        where: { phoneNumber: normalizedPhone },
+      });
+    } else {
+      parent = await prisma.parent.findUnique({
+        where: { email },
+      });
+    }
+
+    if (!parent) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    if (!parent.isVerified) {
+      return res.status(403).json({
+        success: false,
+        message: "Please verify your account first",
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, parent.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    sendToken(parent, res);
+  } catch (error: any) {
+    console.error("Login error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Login failed",
+    });
+  }
+};
+
+// Get parent's students
+export const getParentStudents = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const parentId = req.parent.id;
+
+    const students = await prisma.parentStudent.findMany({
+      where: { parentId },
+      include: {
+        student: {
+          include: {
+            stop: {
+              include: {
+                route: {
+                  include: {
+                    school: true,
+                  },
+                },
+              },
+            },
+            school: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      students: students.map((ps) => ({
+        ...ps.student,
+        relationship: ps.relationship,
+        isPrimary: ps.isPrimary,
+      })),
+    });
+  } catch (error: any) {
+    console.error("Get students error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch students",
+    });
+  }
+};
+
+// Get active trip for a student
+export const getStudentActiveTrip = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { studentId } = req.params;
+    const parentId = req.parent.id;
+
+    // Verify parent has access to this student
+    const parentStudent = await prisma.parentStudent.findFirst({
+      where: {
+        parentId,
+        studentId,
+      },
+    });
+
+    if (!parentStudent) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    // Get student's stop
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: { stop: true },
+    });
+
+    if (!student || !student.stop) {
+      return res.json({
+        success: true,
+        trip: null,
+        message: "Student has no assigned stop",
+      });
+    }
+
+    // Find active trip that includes this stop
+    const activeTrip = await prisma.scheduledTrip.findFirst({
+      where: {
+        status: "ACTIVE",
+        points: {
+          some: {
+            stopId: student.stop.id,
+          },
+        },
+      },
+      include: {
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+            phone_number: true,
+            selfiePhoto: true,
+            vehicle_type: true,
+            registration_number: true,
+            vehicle_color: true,
+            ratings: true,
+          },
+        },
+        points: {
+          where: {
+            stopId: student.stop.id,
+          },
+          orderBy: {
+            order: "asc",
+          },
+        },
+        progress: true,
+        route: {
+          include: {
+            school: true,
+          },
+        },
+      },
+    });
+
+    if (!activeTrip) {
+      return res.json({
+        success: true,
+        trip: null,
+        message: "No active trip found",
+      });
+    }
+
+    // Get student's specific point in the trip
+    const studentPoint = activeTrip.points[0];
+
+    res.json({
+      success: true,
+      trip: {
+        ...activeTrip,
+        studentPoint,
+      },
+    });
+  } catch (error: any) {
+    console.error("Get active trip error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch active trip",
+    });
+  }
+};
+
+// Update notification token
+export const updateNotificationToken = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { notificationToken } = req.body;
+    const parentId = req.parent.id;
+
+    if (!notificationToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Notification token is required",
+      });
+    }
+
+    const updatedParent = await prisma.parent.update({
+      where: { id: parentId },
+      data: { notificationToken },
+    });
+
+    res.json({
+      success: true,
+      message: "Notification token updated",
+      parent: updatedParent,
+    });
+  } catch (error: any) {
+    console.error("Update notification token error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update notification token",
+    });
+  }
+};
+
+
+
+
+
+
+

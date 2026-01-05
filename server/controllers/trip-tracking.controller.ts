@@ -133,6 +133,72 @@ export const recordTripLocation = async (req: any, res: Response) => {
     // Detect idle state (speed < 5 km/h)
     const isIdle = speedInKmh < 5;
 
+    // Calculate ETA for each stop that has students
+    const studentStopETAs: Array<{
+      stopId: string;
+      etaMinutes: number;
+      distanceMeters: number;
+      method: string;
+    }> = [];
+
+    try {
+      // Get all trip points in this trip that are linked to stops with students
+      const tripPointsWithStops = await prisma.tripPoint.findMany({
+        where: {
+          scheduledTripId: tripId,
+          stopId: {
+            not: null,
+          },
+          reachedAt: null, // Only calculate for unreached stops
+        },
+        include: {
+          stop: {
+            include: {
+              students: {
+                take: 1, // Just check if students exist
+              },
+            },
+          },
+        },
+      });
+
+      // Calculate ETA for each stop that has students
+      for (const tripPoint of tripPointsWithStops) {
+        if (!tripPoint.stop || tripPoint.stop.students.length === 0) continue;
+
+        try {
+          const etaResult = await calculateETA(
+            currentLocation,
+            {
+              latitude: tripPoint.stop.latitude,
+              longitude: tripPoint.stop.longitude,
+              order: tripPoint.order,
+            },
+            speedInKmh
+          );
+
+          studentStopETAs.push({
+            stopId: tripPoint.stop.id,
+            etaMinutes: etaResult.etaMinutes,
+            distanceMeters: etaResult.distanceMeters,
+            method: etaResult.method,
+          });
+        } catch (error: any) {
+          console.error(
+            `[Trip Tracking] Error calculating ETA for stop ${tripPoint.stop.id}:`,
+            error.message
+          );
+          // Continue with other stops if one fails
+        }
+      }
+    } catch (error: any) {
+      console.error(
+        "[Trip Tracking] Error fetching stops with students:",
+        error.message
+      );
+      // Continue without student stop ETAs if query fails
+    }
+
     // Create location history record
     const locationHistory = await prisma.tripLocationHistory.create({
       data: {
@@ -148,6 +214,7 @@ export const recordTripLocation = async (req: any, res: Response) => {
         etaToNextCheckpoint,
         etaCalculatedAt,
         etaMethod,
+        studentStopETAs: studentStopETAs.length > 0 ? studentStopETAs : null,
         isCheckpointReached,
         checkpointIndex,
         isIdle,
@@ -209,6 +276,7 @@ export const recordTripLocation = async (req: any, res: Response) => {
                 distanceMeters: distanceFromNextCheckpoint,
               }
             : null,
+          studentStopETAs: studentStopETAs.length > 0 ? studentStopETAs : null,
           timestamp: new Date().toISOString(),
         }),
       }).catch((error) => {

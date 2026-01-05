@@ -168,3 +168,55 @@ export const isAdminUser = (
 
   next();
 };
+
+export const isAuthenticatedParent = (
+  req: any,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    // Extract the token from the Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res
+        .status(401)
+        .json({ message: "Please Log in to access this content!" });
+    }
+    const token = authHeader.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Token missing" });
+    }
+
+    // Verify the token
+    jwt.verify(
+      token,
+      process.env.ACCESS_TOKEN_SECRET!,
+      async (err: any, decoded: any) => {
+        if (err) {
+          return res.status(401).json({ message: "Invalid token" });
+        }
+
+        const parentData = await prisma.parent.findUnique({
+          where: {
+            id: decoded.id,
+          },
+        });
+
+        if (!parentData) {
+          return res.status(401).json({ message: "Parent not found" });
+        }
+
+        if (!parentData.isVerified) {
+          return res.status(403).json({ message: "Please verify your account first" });
+        }
+
+        // Attach the parent data to the request object
+        req.parent = parentData;
+        next();
+      }
+    );
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

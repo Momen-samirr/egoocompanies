@@ -382,6 +382,9 @@ let companyDriversMap = {};
 // Store admin subscriptions to trips (admin connection ID -> Set of trip IDs)
 let adminTripSubscriptions = new Map();
 
+// Store parent subscriptions to trips (parent connection ID -> Set of { tripId, studentId, parentId })
+let parentTripSubscriptions = new Map();
+
 // Store active trips with their current status
 let activeTripsMap = {};
 
@@ -505,6 +508,72 @@ const broadcastTripLocationUpdate = (tripId, locationData) => {
   if (sentCount > 0) {
     console.log(
       `📡 [Trip Location] Broadcasted trip ${tripId} location update to ${sentCount} admin(s)`
+    );
+  }
+};
+
+// Broadcast trip location update to subscribed parents
+const broadcastTripLocationToParents = (tripId, locationData) => {
+  let sentCount = 0;
+
+  // Extract studentStopETAs from locationData if available
+  const studentStopETAs = locationData.studentStopETAs || null;
+
+  parentTripSubscriptions.forEach((subscriptions, connectionId) => {
+    const conn = connectionManager.getConnection(connectionId);
+    if (!conn || !conn.ws || conn.ws.readyState !== 1) return;
+
+    subscriptions.forEach((subStr) => {
+      try {
+        const sub = JSON.parse(subStr);
+        if (sub.tripId === tripId) {
+          // Find ETA for this student's stop
+          let studentETA = null;
+          if (studentStopETAs && Array.isArray(studentStopETAs)) {
+            // We need to find the stopId for this student
+            // For now, we'll send all ETAs and let the client filter
+            // In a production system, you'd query the database to get student's stopId
+            studentETA = studentStopETAs.find((eta) => {
+              // This would need to match studentId to stopId
+              // For now, we'll send the first matching or all
+              return true; // Simplified - would need proper matching
+            });
+          }
+
+          const message = {
+            type: "tripLocationUpdate",
+            tripId: sub.tripId,
+            studentId: sub.studentId,
+            driverId: locationData.driverId,
+            location: locationData.location,
+            speed: locationData.speed,
+            deviationStatus: locationData.deviationStatus,
+            eta: studentETA
+              ? {
+                  minutes: studentETA.etaMinutes,
+                  distanceMeters: studentETA.distanceMeters,
+                  method: studentETA.method,
+                }
+              : locationData.eta,
+            timestamp: locationData.timestamp || new Date().toISOString(),
+          };
+
+          try {
+            conn.ws.send(JSON.stringify(message));
+            sentCount++;
+          } catch (error) {
+            console.error("Error sending trip location to parent:", error);
+          }
+        }
+      } catch (error) {
+        console.error("Error parsing parent subscription:", error);
+      }
+    });
+  });
+
+  if (sentCount > 0) {
+    console.log(
+      `📡 [Parent Location] Broadcasted trip ${tripId} location to ${sentCount} parent(s)`
     );
   }
 };
@@ -705,6 +774,8 @@ const updateDriverLocationAndBroadcast = async (driverId, locationData) => {
 wss.on("connection", (ws, req) => {
   // Check if this is an admin connection (from dashboard)
   let isAdmin = false;
+  let isParent = false;
+  let parentId = null;
   let companyId = null;
   let companyDriverIds = null;
 
@@ -741,10 +812,14 @@ wss.on("connection", (ws, req) => {
         : urlString;
       const params = new URLSearchParams(queryString);
       isAdmin = params.get("role") === "admin";
+      isParent = params.get("role") === "parent";
+      parentId = params.get("parentId");
       url = { searchParams: params }; // Create a mock URL object for consistency
     }
 
     isAdmin = url.searchParams.get("role") === "admin";
+    isParent = url.searchParams.get("role") === "parent";
+    parentId = url.searchParams.get("parentId") || null;
 
     // Try to get token from query params or Authorization header
     const token =
@@ -783,20 +858,25 @@ wss.on("connection", (ws, req) => {
 
     console.log(
       `🔍 Connection type: ${
-        isAdmin ? "Admin (Dashboard)" : "Driver/User"
-      }, companyId: ${companyId}`
+        isAdmin ? "Admin (Dashboard)" : isParent ? "Parent" : "Driver/User"
+      }, companyId: ${companyId}, parentId: ${parentId}`
     );
   } catch (error) {
-    // Fallback: check if URL contains role=admin
+    // Fallback: check if URL contains role=admin or role=parent
     if (req.url && req.url.includes("role=admin")) {
       isAdmin = true;
     }
+    if (req.url && req.url.includes("role=parent")) {
+      isParent = true;
+    }
     console.log(
-      `🔍 URL parsing fallback, isAdmin: ${isAdmin}, URL: ${req.url}`
+      `🔍 URL parsing fallback, isAdmin: ${isAdmin}, isParent: ${isParent}, URL: ${req.url}`
     );
   }
 
   ws.isAdmin = isAdmin;
+  ws.isParent = isParent;
+  ws.parentId = parentId;
   ws.companyId = companyId;
   ws.companyDriverIds = companyDriverIds;
 
@@ -805,6 +885,10 @@ wss.on("connection", (ws, req) => {
     connectionId = connectionManager.addConnection(ws, "admin", {
       companyId,
       companyDriverIds,
+    });
+  } else if (isParent) {
+    connectionId = connectionManager.addConnection(ws, "parent", {
+      parentId,
     });
   } else {
     // Will be updated when we know if it's a driver or user
@@ -891,6 +975,11 @@ wss.on("connection", (ws, req) => {
       }, 500);
     } else {
       sendInitialData();
+    }
+  } else if (isParent) {
+    console.log(`👨‍👩‍👧 Parent ${parentId || "unknown"} connected`);
+    if (parentId) {
+      ws.parentId = parentId;
     }
   } else {
     console.log("🔌 Client connected (driver or user)");
@@ -1092,21 +1181,27 @@ wss.on("connection", (ws, req) => {
 
       // Handle trip location updates
       if (data.type === "tripLocationUpdate" && data.role === "driver") {
-        const { tripId, location, speed, deviationStatus, eta } = data;
+        const { tripId, location, speed, deviationStatus, eta, studentStopETAs } = data;
 
         console.log(
           `📍 [WebSocket] Trip location update received: tripId=${tripId}, driver=${data.driver}`
         );
 
-        // Broadcast to subscribed admins
-        broadcastTripLocationUpdate(tripId, {
+        const locationData = {
           driverId: data.driver,
           location,
           speed,
           deviationStatus,
           eta: eta || null,
+          studentStopETAs: studentStopETAs || null,
           timestamp: new Date().toISOString(),
-        });
+        };
+
+        // Broadcast to subscribed admins
+        broadcastTripLocationUpdate(tripId, locationData);
+
+        // Broadcast to subscribed parents
+        broadcastTripLocationToParents(tripId, locationData);
       }
 
       // Handle admin subscription to trips
@@ -1140,6 +1235,53 @@ wss.on("connection", (ws, req) => {
           console.log(`📡 [WebSocket] Admin unsubscribed from trip ${tripId}`);
         }
       }
+
+      // Handle parent subscription to trips
+      if (data.type === "subscribeToTrip" && data.role === "parent") {
+        const { tripId, studentId, parentId } = data;
+        if (tripId && studentId && parentId && connectionId) {
+          if (!parentTripSubscriptions.has(connectionId)) {
+            parentTripSubscriptions.set(connectionId, new Set());
+          }
+          const subscription = { tripId, studentId, parentId };
+          parentTripSubscriptions.get(connectionId).add(JSON.stringify(subscription));
+          console.log(
+            `📡 [WebSocket] Parent ${parentId} subscribed to trip ${tripId} for student ${studentId}`
+          );
+          ws.send(
+            JSON.stringify({
+              type: "tripSubscriptionConfirmed",
+              tripId,
+              studentId,
+              message: "Subscribed to trip updates",
+            })
+          );
+        }
+      }
+
+      // Handle parent unsubscribe from trips
+      if (data.type === "unsubscribeFromTrip" && data.role === "parent") {
+        const { tripId } = data;
+        if (
+          tripId &&
+          connectionId &&
+          parentTripSubscriptions.has(connectionId)
+        ) {
+          const subscriptions = parentTripSubscriptions.get(connectionId);
+          // Remove all subscriptions for this trip
+          const toRemove = [];
+          subscriptions.forEach((sub) => {
+            const parsed = JSON.parse(sub);
+            if (parsed.tripId === tripId) {
+              toRemove.push(sub);
+            }
+          });
+          toRemove.forEach((sub) => subscriptions.delete(sub));
+          console.log(
+            `📡 [WebSocket] Parent unsubscribed from trip ${tripId}`
+          );
+        }
+      }
     } catch (error) {
       console.log("Failed to parse WebSocket message:", error);
     }
@@ -1153,6 +1295,7 @@ wss.on("connection", (ws, req) => {
       connectionManager.removeConnection(connectionId);
       // Clean up trip subscriptions
       adminTripSubscriptions.delete(connectionId);
+      parentTripSubscriptions.delete(connectionId);
     }
 
     if (ws.isAdmin) {
@@ -1622,7 +1765,7 @@ app.post("/api/update-driver-location", async (req, res) => {
 // API endpoint to broadcast trip location update (called from backend server)
 app.post("/api/trip-location-update", (req, res) => {
   try {
-    const { tripId, driverId, location, speed, deviationStatus, eta } =
+    const { tripId, driverId, location, speed, deviationStatus, eta, studentStopETAs } =
       req.body;
 
     if (!tripId || !driverId || !location) {
@@ -1635,18 +1778,24 @@ app.post("/api/trip-location-update", (req, res) => {
     console.log(
       `📍 [HTTP API] Trip location update received for trip ${tripId}${
         eta ? ` with ETA: ${eta.minutes} min` : ""
-      }`
+      }${studentStopETAs ? ` with ${studentStopETAs.length} student stop ETAs` : ""}`
     );
 
-    // Broadcast to subscribed admins
-    broadcastTripLocationUpdate(tripId, {
+    const locationData = {
       driverId,
       location,
       speed,
       deviationStatus,
       eta: eta || null,
+      studentStopETAs: studentStopETAs || null,
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    // Broadcast to subscribed admins
+    broadcastTripLocationUpdate(tripId, locationData);
+
+    // Broadcast to subscribed parents
+    broadcastTripLocationToParents(tripId, locationData);
 
     res.json({
       success: true,

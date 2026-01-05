@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import styles from "./styles";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { external } from "@/styles/external.style";
 import { windowHeight, windowWidth } from "@/themes/app.constant";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
@@ -1113,26 +1113,41 @@ export default function RidePlanScreen() {
                 pinColor="blue"
               />
             )}
-            {currentLocation && marker && (
-              <MapViewDirections
-                origin={currentLocation}
-                destination={marker}
-                apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
-                strokeWidth={4}
-                strokeColor="blue"
-                optimizeWaypoints={true}
-                onReady={(result) => {
-                  console.log("Directions ready:", result);
-                }}
-                onError={(errorMessage) => {
-                  // ZERO_RESULTS is expected in some cases (e.g., invalid coordinates, impossible routes)
-                  if (errorMessage.includes("ZERO_RESULTS")) {
-                    console.log("No route found between points - this may be normal");
-                  } else {
-                    console.error("Directions error:", errorMessage);
-                  }
-                }}
-              />
+            {useMemo(
+              () =>
+                currentLocation && marker ? (
+                  <MapViewDirections
+                    origin={currentLocation}
+                    destination={marker}
+                    apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                    strokeWidth={4}
+                    strokeColor="blue"
+                    optimizeWaypoints={true}
+                    onReady={(result) => {
+                      // Log API call for monitoring (can be disabled in production)
+                      if (__DEV__) {
+                        console.log("[Directions API] Route calculated at", new Date().toISOString());
+                      }
+                      console.log("Directions ready:", result);
+                    }}
+                    onError={(errorMessage) => {
+                      // ZERO_RESULTS is expected in some cases (e.g., invalid coordinates, impossible routes)
+                      if (errorMessage.includes("ZERO_RESULTS")) {
+                        console.log("No route found between points - this may be normal");
+                      } else {
+                        if (__DEV__) {
+                          console.error("[Directions API] Error:", errorMessage);
+                        }
+                      }
+                    }}
+                  />
+                ) : null,
+              [
+                currentLocation?.latitude,
+                currentLocation?.longitude,
+                marker?.latitude,
+                marker?.longitude,
+              ]
             )}
           </MapView>
           {/* Show loading indicator only briefly, then hide it so map can render */}
