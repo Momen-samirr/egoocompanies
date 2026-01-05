@@ -317,7 +317,7 @@ export const getParentStudents = async (
   next: NextFunction
 ) => {
   try {
-    const parentId = req.parent.id;
+    const parentId = req.parent!.id;
 
     const students = await prisma.parentStudent.findMany({
       where: { parentId },
@@ -341,7 +341,7 @@ export const getParentStudents = async (
 
     res.json({
       success: true,
-      students: students.map((ps) => ({
+      students: students.map((ps: typeof students[0]) => ({
         ...ps.student,
         relationship: ps.relationship,
         isPrimary: ps.isPrimary,
@@ -364,7 +364,7 @@ export const getStudentActiveTrip = async (
 ) => {
   try {
     const { studentId } = req.params;
-    const parentId = req.parent.id;
+    const parentId = req.parent!.id;
 
     // Verify parent has access to this student
     const parentStudent = await prisma.parentStudent.findFirst({
@@ -470,7 +470,7 @@ export const updateNotificationToken = async (
 ) => {
   try {
     const { notificationToken } = req.body;
-    const parentId = req.parent.id;
+    const parentId = req.parent!.id;
 
     if (!notificationToken) {
       return res.status(400).json({

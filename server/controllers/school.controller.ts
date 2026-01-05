@@ -897,7 +897,7 @@ export const getParents = async (req: any, res: Response) => {
       include: {
         _count: {
           select: {
-            students: true,
+            parentStudents: true,
           },
         },
       },
@@ -923,7 +923,7 @@ export const getParentById = async (req: any, res: Response) => {
     const parent = await prisma.parent.findUnique({
       where: { id },
       include: {
-        students: {
+        parentStudents: {
           include: {
             student: {
               include: {

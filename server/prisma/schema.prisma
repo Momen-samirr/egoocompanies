@@ -170,6 +170,7 @@ model ScheduledTrip {
   assignedCaptainId     String?                      @db.ObjectId
   createdById           String                       @db.ObjectId
   companyId             String?                      @db.ObjectId
+  routeId               String?                      @db.ObjectId
   price                 Float?                       @default(0)
   financialStatus       ScheduledTripFinancialStatus @default(NONE)
   financialRule         ScheduledTripFinancialRule   @default(NONE)
@@ -183,6 +184,7 @@ model ScheduledTrip {
   assignedCaptain       driver?                      @relation("AssignedCaptain", fields: [assignedCaptainId], references: [id])
   createdBy             Admin                        @relation("CreatedBy", fields: [createdById], references: [id])
   company               Company?                     @relation(fields: [companyId], references: [id])
+  route                 Route?                       @relation(fields: [routeId], references: [id])
   points                TripPoint[]
   progress              TripProgress?
   activationChecks      TripActivationCheck[]
@@ -199,10 +201,12 @@ model TripPoint {
   longitude       Float
   order           Int
   isFinalPoint    Boolean       @default(false)
+  stopId          String?       @db.ObjectId
   expectedTime    DateTime?
   reachedAt       DateTime?
   employees       Json? // Array of { name: string, employeeId?: string }
   scheduledTrip   ScheduledTrip @relation(fields: [scheduledTripId], references: [id], onDelete: Cascade)
+  stop            Stop?         @relation(fields: [stopId], references: [id])
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
@@ -365,6 +369,7 @@ model TripLocationHistory {
   etaToNextCheckpoint     Float?         // ETA to next checkpoint in minutes
   etaCalculatedAt         DateTime?      // When ETA was calculated
   etaMethod               String?        // 'google_maps' | 'simple_calculation'
+  studentStopETAs         Json?          // Array of { stopId: string, etaMinutes: number, distanceMeters: number, method: string }
   timestamp                DateTime       @default(now())
   isCheckpointReached      Boolean        @default(false)
   checkpointIndex          Int?          // Which checkpoint was reached at this location
@@ -378,4 +383,96 @@ model TripLocationHistory {
   @@index([timestamp])
   @@index([scheduledTripId, isRouteDeviation])
   @@index([scheduledTripId, isCheckpointReached])
+}
+
+// ==================== PARENT & STUDENT MODELS ====================
+
+model Parent {
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
+  phoneNumber       String?         @unique
+  email             String?         @unique
+  firstName         String
+  lastName          String
+  password          String
+  verificationCode  String?
+  isVerified        Boolean         @default(false)
+  notificationToken String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  parentStudents    ParentStudent[]
+}
+
+model School {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  address   String?
+  phoneNumber String?
+  email     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  routes    Route[]
+  students  Student[]
+}
+
+model Route {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  schoolId    String           @db.ObjectId
+  name        String
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  school      School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  stops       Stop[]
+  trips       ScheduledTrip[]
+}
+
+model Stop {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  routeId   String    @db.ObjectId
+  name      String
+  latitude  Float
+  longitude Float
+  order     Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  route     Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  students  Student[]
+  tripPoints TripPoint[]
+  
+  @@index([routeId])
+}
+
+model Student {
+  id           String          @id @default(auto()) @map("_id") @db.ObjectId
+  schoolId     String          @db.ObjectId
+  stopId       String?         @db.ObjectId
+  firstName    String
+  lastName     String
+  grade        String?
+  studentId    String?
+  photo        String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  school       School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  stop         Stop?           @relation(fields: [stopId], references: [id])
+  parents      ParentStudent[]
+  
+  @@index([schoolId])
+  @@index([stopId])
+}
+
+model ParentStudent {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  parentId     String   @db.ObjectId
+  studentId    String   @db.ObjectId
+  relationship String   // e.g., "parent", "guardian", "grandparent"
+  isPrimary    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  parent       Parent   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  @@unique([parentId, studentId])
+  @@index([parentId])
+  @@index([studentId])
 }
