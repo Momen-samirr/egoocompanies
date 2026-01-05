@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import api from "@/lib/api";
 
 //Test
@@ -66,28 +67,78 @@ export const useNotifications = () => {
         return;
       }
 
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
-      console.log("Push token:", token);
-
-      // Send token to backend
+      // Get device push token (FCM token on Android, APNs token on iOS)
+      // This works with Firebase and doesn't require Expo projectId
       try {
-        await api.put("/parent/notification-token", {
-          notificationToken: token,
-        });
-      } catch (error) {
-        console.error("Error updating notification token:", error);
+        let token: string;
+
+        if (Platform.OS === "android") {
+          // On Android, getDevicePushTokenAsync returns FCM token when Firebase is configured
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          token = tokenData.data;
+        } else {
+          // On iOS, use Expo push token (requires projectId) or device token
+          const projectId =
+            Constants.expoConfig?.extra?.eas?.projectId ||
+            Constants.expoConfig?.extra?.projectId;
+
+          if (projectId) {
+            const tokenData = await Notifications.getExpoPushTokenAsync({
+              projectId: projectId,
+            });
+            token = tokenData.data;
+          } else {
+            // Fallback to device token on iOS if no projectId
+            const tokenData = await Notifications.getDevicePushTokenAsync();
+            token = tokenData.data;
+          }
+        }
+
+        console.log("Push token:", token);
+
+        // Send token to backend
+        try {
+          await api.put("/parent/notification-token", {
+            notificationToken: token,
+          });
+        } catch (error) {
+          console.error("Error updating notification token:", error);
+        }
+      } catch (tokenError: any) {
+        // Handle Firebase initialization errors gracefully
+        if (
+          tokenError?.message?.includes("Firebase") ||
+          tokenError?.message?.includes("FirebaseApp")
+        ) {
+          console.warn(
+            "Firebase not initialized - push notifications may not work. This is expected if Firebase is not configured."
+          );
+          console.warn(
+            "To enable push notifications, configure Firebase in your app or use Expo's push notification service."
+          );
+        } else {
+          console.error("Error getting push token:", tokenError);
+        }
+        // Don't throw - allow app to continue without push notifications
+        return;
       }
 
       if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("default", {
-          name: "default",
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: "#FF231F7C",
-        });
+        try {
+          await Notifications.setNotificationChannelAsync("default", {
+            name: "default",
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: "#FF231F7C",
+          });
+        } catch (channelError) {
+          console.warn("Error setting notification channel:", channelError);
+        }
       }
     } catch (error) {
+      // Catch all other errors and log them without crashing
       console.error("Error registering for push notifications:", error);
+      // Don't rethrow - allow app to continue
     }
   };
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "264675962254",
+    "project_id": "egooparent",
+    "storage_bucket": "egooparent.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:264675962254:android:b73514fb8716eca82348df",
+        "android_client_info": {
+          "package_name": "com.becodemy.ridewaveparent"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD85ItSViCmsND890-voC_1l9QxDWlXSRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

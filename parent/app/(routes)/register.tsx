@@ -41,10 +41,12 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
       // #region agent log
+      console.log('[DEBUG] Starting registration request:', formData);
       fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register.tsx:43',message:'Starting registration request',data:{formData:JSON.stringify(formData)},timestamp:Date.now(),sessionId:'debug-session',runId:'register-attempt',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       const response = await api.post("/parent/register", formData);
       // #region agent log
+      console.log('[DEBUG] Registration response received:', { status: response.status, success: response.data?.success, message: response.data?.message, fullResponse: response.data });
       fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register.tsx:46',message:'Registration response received',data:{status:response.status,success:response.data?.success,message:response.data?.message,fullResponse:JSON.stringify(response.data)},timestamp:Date.now(),sessionId:'debug-session',runId:'register-attempt',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
 
@@ -71,6 +73,7 @@ export default function RegisterScreen() {
         );
       } else {
         // #region agent log
+        console.log('[DEBUG] Response success is false:', response.data);
         fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register.tsx:65',message:'Response success is false',data:{responseData:JSON.stringify(response.data)},timestamp:Date.now(),sessionId:'debug-session',runId:'register-attempt',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
         Alert.alert(
@@ -80,6 +83,14 @@ export default function RegisterScreen() {
       }
     } catch (error: any) {
       // #region agent log
+      console.error('[DEBUG] Registration error caught:', { 
+        errorMessage: error?.message, 
+        errorResponse: error?.response?.data, 
+        errorStatus: error?.response?.status, 
+        errorStatusText: error?.response?.statusText,
+        errorCode: error?.code,
+        fullError: error 
+      });
       fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register.tsx:72',message:'Registration error caught',data:{errorMessage:error?.message,errorResponse:error?.response?.data?JSON.stringify(error.response.data):'no response',errorStatus:error?.response?.status,errorStatusText:error?.response?.statusText,fullError:JSON.stringify(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'register-attempt',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
       Alert.alert(

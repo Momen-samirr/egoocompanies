@@ -59,6 +59,35 @@ import {
   getRoadDistanceToNextCheckpoint,
 } from "../controllers/trip-tracking.controller";
 import {
+  getSchools,
+  getSchoolById,
+  createSchool,
+  updateSchool,
+  deleteSchool,
+  getRoutes,
+  getRouteById,
+  createRoute,
+  updateRoute,
+  deleteRoute,
+  getStops,
+  getStopById,
+  createStop,
+  updateStop,
+  deleteStop,
+  getParents,
+  getParentById,
+  getStudents,
+  getStudentById,
+  createStudent,
+  updateStudent,
+  deleteStudent,
+  updateParent,
+  deleteParent,
+  linkStudentToParent,
+  unlinkStudentFromParent,
+  updateParentStudentLink,
+} from "../controllers/school.controller";
+import {
   isAuthenticatedAdmin,
   isAdminUser,
 } from "../middleware/isAuthenticated";
@@ -280,6 +309,53 @@ adminRouter.post(
   "/trip-templates/:id/create-trips",
   isAuthenticatedAdmin,
   createTripsFromTemplate
+);
+
+// Schools
+adminRouter.get("/schools", isAuthenticatedAdmin, getSchools);
+adminRouter.get("/schools/:id", isAuthenticatedAdmin, getSchoolById);
+adminRouter.post("/schools", isAuthenticatedAdmin, createSchool);
+adminRouter.put("/schools/:id", isAuthenticatedAdmin, updateSchool);
+adminRouter.delete("/schools/:id", isAuthenticatedAdmin, deleteSchool);
+
+// Routes
+adminRouter.get("/routes", isAuthenticatedAdmin, getRoutes);
+adminRouter.get("/routes/:id", isAuthenticatedAdmin, getRouteById);
+adminRouter.post("/routes", isAuthenticatedAdmin, createRoute);
+adminRouter.put("/routes/:id", isAuthenticatedAdmin, updateRoute);
+adminRouter.delete("/routes/:id", isAuthenticatedAdmin, deleteRoute);
+
+// Stops
+adminRouter.get("/stops", isAuthenticatedAdmin, getStops);
+adminRouter.get("/stops/:id", isAuthenticatedAdmin, getStopById);
+adminRouter.post("/stops", isAuthenticatedAdmin, createStop);
+adminRouter.put("/stops/:id", isAuthenticatedAdmin, updateStop);
+adminRouter.delete("/stops/:id", isAuthenticatedAdmin, deleteStop);
+
+// Students
+adminRouter.get("/students", isAuthenticatedAdmin, getStudents);
+adminRouter.get("/students/:id", isAuthenticatedAdmin, getStudentById);
+adminRouter.post("/students", isAuthenticatedAdmin, createStudent);
+adminRouter.put("/students/:id", isAuthenticatedAdmin, updateStudent);
+adminRouter.delete("/students/:id", isAuthenticatedAdmin, deleteStudent);
+
+// Parents
+adminRouter.get("/parents", isAuthenticatedAdmin, getParents);
+adminRouter.get("/parents/:id", isAuthenticatedAdmin, getParentById);
+adminRouter.put("/parents/:id", isAuthenticatedAdmin, updateParent);
+adminRouter.delete("/parents/:id", isAuthenticatedAdmin, deleteParent);
+
+// Parent-Student Links
+adminRouter.post("/parent-students", isAuthenticatedAdmin, linkStudentToParent);
+adminRouter.delete(
+  "/parent-students/:parentId/:studentId",
+  isAuthenticatedAdmin,
+  unlinkStudentFromParent
+);
+adminRouter.put(
+  "/parent-students/:parentId/:studentId",
+  isAuthenticatedAdmin,
+  updateParentStudentLink
 );
 
 export default adminRouter;

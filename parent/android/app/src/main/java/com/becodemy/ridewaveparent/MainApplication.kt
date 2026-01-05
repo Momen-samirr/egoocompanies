@@ -16,6 +16,8 @@ import com.facebook.soloader.SoLoader
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
+import com.google.firebase.FirebaseApp
+
 class MainApplication : Application(), ReactApplication {
 
   override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
@@ -54,6 +56,14 @@ class MainApplication : Application(), ReactApplication {
       Log.e("RideWaveParent", "MainApplication.onCreate: START")
       super.onCreate()
       Log.e("RideWaveParent", "MainApplication.onCreate: super.onCreate() completed")
+      
+      // Initialize Firebase
+      try {
+        FirebaseApp.initializeApp(this)
+        Log.e("RideWaveParent", "MainApplication.onCreate: Firebase initialized successfully")
+      } catch (e: Exception) {
+        Log.e("RideWaveParent", "MainApplication.onCreate: Firebase initialization failed", e)
+      }
       
       Log.e("RideWaveParent", "MainApplication.onCreate: Starting SoLoader.init")
       SoLoader.init(this, false)
