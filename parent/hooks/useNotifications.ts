@@ -3,6 +3,8 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import api from "@/lib/api";
 
+//Test
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -93,10 +95,3 @@ export const useNotifications = () => {
     registerForPushNotifications,
   };
 };
-
-
-
-
-
-
-
