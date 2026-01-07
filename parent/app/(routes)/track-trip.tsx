@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -148,7 +148,9 @@ const calculateETAToStudentStop = async (
 export default function TrackTripScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { tripId, studentId } = params;
+  // Ensure tripId and studentId are strings (Expo Router params can be arrays)
+  const tripId = Array.isArray(params.tripId) ? params.tripId[0] : params.tripId;
+  const studentId = Array.isArray(params.studentId) ? params.studentId[0] : params.studentId;
 
   const [trip, setTrip] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -160,6 +162,25 @@ export default function TrackTripScreen() {
   const rotationAnim = useRef(new Animated.Value(0)).current;
   const previousHeading = useRef<number | null>(null);
   const lastCalculatedLocation = useRef<{ latitude: number; longitude: number } | null>(null);
+  const renderCountRef = useRef(0);
+  const tripUpdateCountRef = useRef(0);
+  const tripRef = useRef(trip);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchTripDetailsRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
+  const isFetchingRef = useRef(false); // Prevent concurrent fetches
+  
+  // Update ref when trip changes
+  useEffect(() => {
+    tripRef.current = trip;
+  }, [trip]);
+  
+  // Track component renders
+  renderCountRef.current += 1;
+  // #region agent log
+  if (renderCountRef.current <= 10 || renderCountRef.current % 5 === 0) {
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:render',message:'Component render',data:{renderCount:renderCountRef.current,hasTrip:!!trip,tripId:trip?.id,hasLocation:!!location?.location,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'render',hypothesisId:'E'})}).catch(()=>{});
+  }
+  // #endregion
 
   const { location, connected, error: wsError } = useTripTracking({
     tripId: tripId as string,
@@ -168,18 +189,90 @@ export default function TrackTripScreen() {
   });
 
   useEffect(() => {
-    fetchTripDetails();
+    // #region agent log
+    const effectId = Date.now();
+    const hasExistingInterval = !!refreshIntervalRef.current;
+    const prevStudentId = (global as any).__prevTrackTripStudentId;
+    const prevTripId = (global as any).__prevTrackTripTripId;
+    const studentIdChanged = prevStudentId !== studentId;
+    const tripIdChanged = prevTripId !== tripId;
+    const hasFetchTripDetailsRef = !!fetchTripDetailsRef.current;
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:190',message:'Initial fetchTripDetails effect - setting up interval',data:{tripId,studentId,effectId,hasExistingInterval,prevStudentId,prevTripId,studentIdChanged,tripIdChanged,hasFetchTripDetailsRef},timestamp:Date.now(),sessionId:'debug-session',runId:'init-effect',hypothesisId:'A'})}).catch(()=>{});
+    (global as any).__prevTrackTripStudentId = studentId;
+    (global as any).__prevTrackTripTripId = tripId;
+    // #endregion
+    
+    // Early return if tripId or studentId are missing
+    if (!tripId || !studentId) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:199',message:'Skipping effect - missing tripId or studentId',data:{tripId,studentId,effectId},timestamp:Date.now(),sessionId:'debug-session',runId:'skip-effect',hypothesisId:'V'})}).catch(()=>{});
+      // #endregion
+      return;
+    }
+    
+    // Clear any existing interval first
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:207',message:'Cleared existing interval before setting up new one',data:{tripId,studentId,effectId},timestamp:Date.now(),sessionId:'debug-session',runId:'clear-existing-interval',hypothesisId:'T'})}).catch(()=>{});
+      // #endregion
+    }
+    
+    // Call fetchTripDetails directly - it's stable via useCallback with [studentId, tripId] deps
+    // The ref is only needed for the interval callback to access the latest function
+    // We need to call it here to ensure initial fetch happens, but we can't depend on fetchTripDetails
+    // in the dependency array because that would cause the effect to re-run when it's recreated
+    // So we use a small delay to ensure fetchTripDetails is defined
+    const doFetch = () => {
+      if (fetchTripDetailsRef.current) {
+        fetchTripDetailsRef.current();
+      }
+    };
+    
+    // Try immediately, fallback to next tick if ref not set yet
+    if (fetchTripDetailsRef.current) {
+      doFetch();
+    } else {
+      // Ref not set yet - wait for it (should be set by the effect at line 660)
+      const timeoutId = setTimeout(() => {
+        doFetch();
+      }, 10);
+      return () => {
+        clearTimeout(timeoutId);
+        if (refreshIntervalRef.current) {
+          clearInterval(refreshIntervalRef.current);
+          refreshIntervalRef.current = null;
+        }
+      };
+    }
     
     // Refresh trip details periodically to get updated reachedAt status
     // This ensures we detect when driver presses "Reached"
-    const refreshInterval = setInterval(() => {
-      fetchTripDetails(true); // Silent refresh (don't show loading)
+    refreshIntervalRef.current = setInterval(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:225',message:'Periodic refresh interval triggered',data:{tripId,studentId,intervalId:refreshIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-trigger',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      // Use ref to get latest fetchTripDetails function
+      if (fetchTripDetailsRef.current) {
+        fetchTripDetailsRef.current(true); // Silent refresh (don't show loading)
+      }
     }, 5000); // Refresh every 5 seconds
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:231',message:'Interval set up successfully',data:{tripId,studentId,effectId,intervalId:refreshIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-setup-success',hypothesisId:'U'})}).catch(()=>{});
+    // #endregion
+    
     return () => {
-      clearInterval(refreshInterval);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:234',message:'Cleaning up refresh interval',data:{tripId,studentId,effectId,intervalId:refreshIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'cleanup',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
     };
-  }, []);
+  }, [studentId, tripId]); // Depend on stable values instead of fetchTripDetails
 
   // Update driver marker rotation based on heading
   useEffect(() => {
@@ -217,16 +310,91 @@ export default function TrackTripScreen() {
     }
   }, [location?.location?.heading]);
 
+  // Create stable reference for trip points to avoid unnecessary effect triggers
+  // Use a ref to track previous key and only recalculate when content actually changes
+  const tripPointsKeyRef = useRef<string>('');
+  // Calculate the key string from trip points
+  const tripPointsKeyString = trip?.points 
+    ? trip.points.map((p: any) => `${p.id}:${p.reachedAt || ''}`).join(',')
+    : '';
+  
+  const tripPointsKey = useMemo(() => {
+    // #region agent log
+    const prevKey = tripPointsKeyRef.current;
+    // #endregion
+    if (!tripPointsKeyString) {
+      tripPointsKeyRef.current = '';
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:231',message:'tripPointsKey useMemo - no points',data:{prevKey,newKey:''},timestamp:Date.now(),sessionId:'debug-session',runId:'tripPointsKey-memo',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return '';
+    }
+    if (tripPointsKeyString !== tripPointsKeyRef.current) {
+      tripPointsKeyRef.current = tripPointsKeyString;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:238',message:'tripPointsKey useMemo - key changed',data:{prevKey,newKey:tripPointsKeyString,pointsCount:trip?.points?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'tripPointsKey-memo',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return tripPointsKeyString;
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:242',message:'tripPointsKey useMemo - key unchanged',data:{prevKey,newKey:tripPointsKeyString,pointsCount:trip?.points?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'tripPointsKey-memo',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    return tripPointsKeyRef.current;
+  }, [tripPointsKeyString]);
+  
+  // Create stable reference for studentPoint reachedAt to avoid unnecessary effect triggers
+  const studentPointReachedAtKey = useMemo(() => {
+    return trip?.studentPoint?.reachedAt || '';
+  }, [trip?.studentPoint?.reachedAt]);
+
   // Update map region to show all relevant points
+  // Only update when trip ID or location actually changes, not on every trip reference change
+  const tripIdForMap = trip?.id;
+  const locationLat = location?.location?.latitude;
+  const locationLng = location?.location?.longitude;
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:251',message:'Map region update effect triggered',data:{hasTrip:!!trip,hasPoints:!!trip?.points,pointsCount:trip?.points?.length,hasLocation:!!location?.location,tripId:tripIdForMap},timestamp:Date.now(),sessionId:'debug-session',runId:'map-region-effect',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     if (trip?.points && trip.points.length > 0) {
       updateMapRegion();
     }
-  }, [location, trip]);
+  }, [tripIdForMap, locationLat, locationLng]);
 
   // Calculate ETA using Google Maps Directions API when driver location or target point changes
   // Use debouncing to prevent too many API calls
   useEffect(() => {
+    // #region agent log
+    const prevTripId = (global as any).__prevTripId;
+    const prevTripPointsLength = (global as any).__prevTripPointsLength;
+    const prevTripPointsRef = (global as any).__prevTripPointsRef;
+    const prevReachedAt = (global as any).__prevReachedAt;
+    const prevCurrentPointIndex = (global as any).__prevCurrentPointIndex;
+    const prevDriverLat = (global as any).__prevDriverLat;
+    const prevDriverLng = (global as any).__prevDriverLng;
+    const currentTripId = trip?.id;
+    const currentTripPointsLength = trip?.points?.length;
+    const currentTripPointsRef = trip?.points ? String(trip.points) : null;
+    const currentReachedAt = trip?.studentPoint?.reachedAt;
+    const currentCurrentPointIndex = trip?.progress?.currentPointIndex;
+    const currentDriverLat = location?.location?.latitude;
+    const currentDriverLng = location?.location?.longitude;
+    const tripIdChanged = prevTripId !== currentTripId;
+    const tripPointsLengthChanged = prevTripPointsLength !== currentTripPointsLength;
+    const tripPointsRefChanged = prevTripPointsRef !== currentTripPointsRef;
+    const reachedAtChanged = prevReachedAt !== currentReachedAt;
+    const currentPointIndexChanged = prevCurrentPointIndex !== currentCurrentPointIndex;
+    const driverLatChanged = prevDriverLat !== currentDriverLat;
+    const driverLngChanged = prevDriverLng !== currentDriverLng;
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:229',message:'ETA calculation effect triggered',data:{hasTrip:!!trip,tripId:currentTripId,prevTripId,tripIdChanged,tripPointsLength:currentTripPointsLength,prevTripPointsLength,tripPointsLengthChanged,tripPointsRefChanged,reachedAt:currentReachedAt,prevReachedAt,reachedAtChanged,currentPointIndex:currentCurrentPointIndex,prevCurrentPointIndex,currentPointIndexChanged,driverLat:currentDriverLat,prevDriverLat,driverLatChanged,driverLng:currentDriverLng,prevDriverLng,driverLngChanged},timestamp:Date.now(),sessionId:'debug-session',runId:'eta-effect-trigger',hypothesisId:'D'})}).catch(()=>{});
+    (global as any).__prevTripId = currentTripId;
+    (global as any).__prevTripPointsLength = currentTripPointsLength;
+    (global as any).__prevTripPointsRef = currentTripPointsRef;
+    (global as any).__prevReachedAt = currentReachedAt;
+    (global as any).__prevCurrentPointIndex = currentCurrentPointIndex;
+    (global as any).__prevDriverLat = currentDriverLat;
+    (global as any).__prevDriverLng = currentDriverLng;
+    // #endregion
     if (!trip) return;
     
     const studentPoint = trip?.studentPoint || trip?.points?.[0];
@@ -367,7 +535,7 @@ export default function TrackTripScreen() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [location?.location?.latitude, location?.location?.longitude, trip?.id, trip?.progress?.currentPointIndex, trip?.studentPoint?.reachedAt, trip?.points]);
+  }, [location?.location?.latitude, location?.location?.longitude, trip?.id, trip?.progress?.currentPointIndex, studentPointReachedAtKey, tripPointsKey]);
 
   const updateMapRegion = () => {
     const allPoints: Array<{ latitude: number; longitude: number }> = [];
@@ -433,18 +601,62 @@ export default function TrackTripScreen() {
     }
   };
 
-  const fetchTripDetails = async (silent = false) => {
+  const fetchTripDetails = useCallback(async (silent = false) => {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current && !silent) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:592',message:'fetchTripDetails skipped - already fetching',data:{silent,studentId,tripId},timestamp:Date.now(),sessionId:'debug-session',runId:'fetch-skipped',hypothesisId:'W'})}).catch(()=>{});
+      // #endregion
+      return;
+    }
+    
+    // #region agent log
+    const callStack = new Error().stack;
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:595',message:'fetchTripDetails called',data:{silent,studentId,tripId,callStack:callStack?.split('\n').slice(0,5).join(' | ')},timestamp:Date.now(),sessionId:'debug-session',runId:'fetch-call',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    isFetchingRef.current = true;
     try {
       if (!silent) {
         setLoading(true);
       }
       const response = await api.get(`/parent/students/${studentId}/trip`);
       if (response.data.success && response.data.trip) {
+        // Use ref to get latest trip value without causing dependency issues
+        const currentTrip = tripRef.current;
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:410',message:'Fetched trip details',data:{tripId:response.data.trip.id,tripName:response.data.trip.name,hasStudentPoint:!!response.data.trip.studentPoint,studentPointReachedAt:response.data.trip.studentPoint?.reachedAt,pointsCount:response.data.trip.points?.length,pointsReachedAt:response.data.trip.points?.map((p:any)=>({id:p.id,name:p.name,reachedAt:p.reachedAt})),currentPointIndex:response.data.trip.progress?.currentPointIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'trip-fetch',hypothesisId:'I'})}).catch(()=>{});
+        const prevTripId = currentTrip?.id;
+        const prevTripPointsLength = currentTrip?.points?.length;
+        const prevReachedAt = currentTrip?.studentPoint?.reachedAt;
+        const prevCurrentPointIndex = currentTrip?.progress?.currentPointIndex;
+        const newTripId = response.data.trip.id;
+        const newTripPointsLength = response.data.trip.points?.length;
+        const newReachedAt = response.data.trip.studentPoint?.reachedAt;
+        const newCurrentPointIndex = response.data.trip.progress?.currentPointIndex;
+        const tripIdChanged = prevTripId !== newTripId;
+        const pointsLengthChanged = prevTripPointsLength !== newTripPointsLength;
+        const reachedAtChanged = prevReachedAt !== newReachedAt;
+        const currentPointIndexChanged = prevCurrentPointIndex !== newCurrentPointIndex;
+        // Check if points data actually changed (compare IDs and reachedAt)
+        const prevPointsKey = currentTrip?.points ? currentTrip.points.map((p: any) => `${p.id}:${p.reachedAt || ''}`).join(',') : '';
+        const newPointsKey = response.data.trip.points ? response.data.trip.points.map((p: any) => `${p.id}:${p.reachedAt || ''}`).join(',') : '';
+        const pointsDataChanged = prevPointsKey !== newPointsKey;
+        const shouldUpdateTrip = tripIdChanged || pointsLengthChanged || reachedAtChanged || currentPointIndexChanged || pointsDataChanged || !currentTrip;
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:587',message:'Fetched trip details - checking if update needed',data:{tripId:newTripId,tripName:response.data.trip.name,hasStudentPoint:!!response.data.trip.studentPoint,studentPointReachedAt:newReachedAt,pointsCount:newTripPointsLength,pointsReachedAt:response.data.trip.points?.map((p:any)=>({id:p.id,name:p.name,reachedAt:p.reachedAt})),currentPointIndex:newCurrentPointIndex,prevTripId,tripIdChanged,prevTripPointsLength,pointsLengthChanged,prevReachedAt,reachedAtChanged,prevCurrentPointIndex,currentPointIndexChanged,pointsDataChanged,shouldUpdateTrip,hasTrip:!!currentTrip},timestamp:Date.now(),sessionId:'debug-session',runId:'trip-fetch',hypothesisId:'F'})}).catch(()=>{});
         // #endregion
         
-        setTrip(response.data.trip);
+        // Only update trip state if data actually changed to prevent unnecessary re-renders
+        if (shouldUpdateTrip) {
+          tripUpdateCountRef.current += 1;
+          setTrip(response.data.trip);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:590',message:'setTrip called - state update queued',data:{tripId:newTripId,tripUpdateCount:tripUpdateCountRef.current,reason:tripIdChanged?'tripIdChanged':pointsLengthChanged?'pointsLengthChanged':reachedAtChanged?'reachedAtChanged':currentPointIndexChanged?'currentPointIndexChanged':pointsDataChanged?'pointsDataChanged':'noTrip'},timestamp:Date.now(),sessionId:'debug-session',runId:'setTrip-call',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:597',message:'Skipping setTrip - no data changes detected',data:{tripId:newTripId},timestamp:Date.now(),sessionId:'debug-session',runId:'setTrip-skipped',hypothesisId:'H'})}).catch(()=>{});
+          // #endregion
+        }
 
         // Set initial map region only on first load
         if (!silent) {
@@ -462,11 +674,17 @@ export default function TrackTripScreen() {
     } catch (error) {
       console.error("Error fetching trip:", error);
     } finally {
+      isFetchingRef.current = false;
       if (!silent) {
         setLoading(false);
       }
     }
-  };
+  }, [studentId, tripId]);
+  
+  // Update ref when fetchTripDetails changes
+  useEffect(() => {
+    fetchTripDetailsRef.current = fetchTripDetails;
+  }, [fetchTripDetails]);
 
   const handleCallDriver = () => {
     if (trip?.assignedCaptain?.phone_number) {

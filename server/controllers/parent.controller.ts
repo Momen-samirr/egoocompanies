@@ -477,11 +477,10 @@ export const getStudentActiveTrip = async (
       })),
     });
 
-    // Find active trip that includes this stop
-    // First try to match by stopId
+    // Find active or scheduled trip that includes this stop by stopId
     let activeTrip = await prisma.scheduledTrip.findFirst({
       where: {
-        status: "ACTIVE",
+        status: { in: ["ACTIVE", "SCHEDULED"] },
         points: {
           some: {
             stopId: student.stop.id,
@@ -515,104 +514,28 @@ export const getStudentActiveTrip = async (
       },
     });
 
-    // If no trip found by stopId, try matching by point name (case-insensitive)
-    // This handles cases where trip points have stopId: null but match by name
-    if (!activeTrip) {
-      console.log('[DEBUG] getStudentActiveTrip: No trip found by stopId, trying to match by point name');
-      const stopNameLower = student.stop.name.toLowerCase().trim();
-      
-      // Get all active trips with all their points
-      const allActiveTripsWithPoints = await prisma.scheduledTrip.findMany({
-        where: {
-          status: "ACTIVE",
-        },
-        include: {
-          assignedCaptain: {
-            select: {
-              id: true,
-              name: true,
-              phone_number: true,
-              selfiePhoto: true,
-              vehicle_type: true,
-              registration_number: true,
-              vehicle_color: true,
-              ratings: true,
-            },
-          },
-          points: {
-            orderBy: {
-              order: "asc",
-            },
-          },
-          progress: true,
-          route: {
-            include: {
-              school: true,
-            },
-          },
-        },
-      });
-
-      // Find trip with matching point name
-      for (const trip of allActiveTripsWithPoints) {
-        const matchingPoint = trip.points.find(point => {
-          const pointNameLower = point.name?.toLowerCase().trim() || '';
-          // Match exact name or check if names are similar (handles spelling variations)
-          return pointNameLower === stopNameLower || 
-                 pointNameLower.includes(stopNameLower) || 
-                 stopNameLower.includes(pointNameLower);
-        });
-
-        if (matchingPoint) {
-          console.log('[DEBUG] getStudentActiveTrip: Found trip by point name match', {
-            tripId: trip.id,
-            tripName: trip.name,
-            stopName: student.stop.name,
-            pointName: matchingPoint.name,
-            pointId: matchingPoint.id,
-          });
-          // Return the trip with all points (matching point is identified separately)
-          activeTrip = trip;
-          break;
-        }
-      }
-    }
-
-    console.log('[DEBUG] getStudentActiveTrip: Active trip query result', {
-      foundActiveTrip: !!activeTrip,
-      activeTripId: activeTrip?.id,
-      activeTripStatus: activeTrip?.status,
-      activeTripName: activeTrip?.name,
-      matchedBy: activeTrip ? (activeTrip.points[0]?.stopId ? 'stopId' : 'pointName') : 'none',
+    console.log('[DEBUG] getStudentActiveTrip: Trip query result', {
+      foundTrip: !!activeTrip,
+      tripId: activeTrip?.id,
+      tripStatus: activeTrip?.status,
+      tripName: activeTrip?.name,
     });
 
     if (!activeTrip) {
-      console.log('[DEBUG] getStudentActiveTrip: No active trip found - checking if any trips exist with different status');
+      console.log('[DEBUG] getStudentActiveTrip: No active or scheduled trip found');
       return res.json({
         success: true,
         trip: null,
-        message: "No active trip found",
+        message: "No active or scheduled trip found",
       });
     }
 
-    // Get student's specific point in the trip
-    // First try to find by stopId, then by name match
+    // Get student's specific point in the trip by stopId
     let studentPoint = activeTrip.points.find(
       (p: any) => p.stopId === student.stop.id
     );
     
-    // If not found by stopId, try matching by name
-    if (!studentPoint) {
-      const stopNameLower = student.stop.name.toLowerCase().trim();
-      studentPoint = activeTrip.points.find((p: any) => {
-        const pointNameLower = p.name?.toLowerCase().trim() || '';
-        return pointNameLower === stopNameLower || 
-               pointNameLower.includes(stopNameLower) || 
-               stopNameLower.includes(pointNameLower);
-      });
-    }
-    
-    // Fallback to first point if still not found
+    // Fallback to first point if not found
     if (!studentPoint) {
       studentPoint = activeTrip.points[0];
     }

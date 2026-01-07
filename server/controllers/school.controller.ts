@@ -493,7 +493,7 @@ export const getStopById = async (req: any, res: Response) => {
 
 export const createStop = async (req: any, res: Response) => {
   try {
-    const { routeId, name, latitude, longitude, order, studentIds } = req.body;
+    const { routeId, name, latitude, longitude, order, studentIds, stopType } = req.body;
 
     if (!routeId || !name || latitude === undefined || longitude === undefined) {
       return res.status(400).json({
@@ -510,6 +510,24 @@ export const createStop = async (req: any, res: Response) => {
       return res.status(404).json({
         success: false,
         message: "Route not found",
+      });
+    }
+
+    // Validate stopType if provided
+    const validStopTypes = ["PICKUP", "DROP_OFF", "FINAL_STOP"];
+    const finalStopType = stopType || "PICKUP";
+    if (!validStopTypes.includes(finalStopType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid stopType. Must be one of: PICKUP, DROP_OFF, FINAL_STOP",
+      });
+    }
+
+    // Validate that FINAL_STOP cannot have students assigned
+    if (finalStopType === "FINAL_STOP" && studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot assign students to a Final Stop. Final Stops are drop-off only and cannot have boarding students.",
       });
     }
 
@@ -531,11 +549,12 @@ export const createStop = async (req: any, res: Response) => {
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),
         order: stopOrder,
+        stopType: finalStopType as any,
       },
     });
 
-    // Assign students to this stop if studentIds are provided
-    if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
+    // Assign students to this stop if studentIds are provided and stop is not FINAL_STOP
+    if (finalStopType !== "FINAL_STOP" && studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
       // Validate that all students exist and belong to the route's school
       const students = await prisma.student.findMany({
         where: {
@@ -579,7 +598,7 @@ export const createStop = async (req: any, res: Response) => {
 export const updateStop = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, latitude, longitude, order, studentIds } = req.body;
+    const { name, latitude, longitude, order, studentIds, stopType } = req.body;
 
     const stop = await prisma.stop.findUnique({
       where: { id },
@@ -599,19 +618,58 @@ export const updateStop = async (req: any, res: Response) => {
       });
     }
 
+    // Validate stopType if provided
+    const validStopTypes = ["PICKUP", "DROP_OFF", "FINAL_STOP"];
+    const newStopType = stopType !== undefined ? stopType : stop.stopType;
+    if (stopType !== undefined && !validStopTypes.includes(stopType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid stopType. Must be one of: PICKUP, DROP_OFF, FINAL_STOP",
+      });
+    }
+
+    // If updating to FINAL_STOP, we need to unassign all students
+    if (stopType === "FINAL_STOP") {
+      // If there are students assigned, unassign them
+      const currentStudents = await prisma.student.findMany({
+        where: { stopId: id },
+        select: { id: true },
+      });
+
+      if (currentStudents.length > 0) {
+        await prisma.student.updateMany({
+          where: {
+            stopId: id,
+          },
+          data: {
+            stopId: null,
+          },
+        });
+      }
+
+      // If trying to assign students to a FINAL_STOP, reject
+      if (studentIds !== undefined && Array.isArray(studentIds) && studentIds.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot assign students to a Final Stop. Final Stops are drop-off only and cannot have boarding students.",
+        });
+      }
+    }
+
     const data: any = {};
     if (name) data.name = name;
     if (latitude !== undefined) data.latitude = parseFloat(latitude);
     if (longitude !== undefined) data.longitude = parseFloat(longitude);
     if (order !== undefined) data.order = parseInt(order);
+    if (stopType !== undefined) data.stopType = stopType;
 
     const updatedStop = await prisma.stop.update({
       where: { id },
       data,
     });
 
-    // Handle student assignment updates if studentIds are provided
-    if (studentIds !== undefined && Array.isArray(studentIds)) {
+    // Handle student assignment updates if studentIds are provided and stop is not FINAL_STOP
+    if (newStopType !== "FINAL_STOP" && studentIds !== undefined && Array.isArray(studentIds)) {
       // Get current students assigned to this stop
       const currentStudents = await prisma.student.findMany({
         where: { stopId: id },
@@ -668,6 +726,12 @@ export const updateStop = async (req: any, res: Response) => {
           },
         });
       }
+    } else if (newStopType === "FINAL_STOP" && studentIds !== undefined && Array.isArray(studentIds) && studentIds.length > 0) {
+      // If stop is FINAL_STOP and trying to assign students, reject
+      return res.status(400).json({
+        success: false,
+        message: "Cannot assign students to a Final Stop. Final Stops are drop-off only and cannot have boarding students.",
+      });
     }
 
     res.status(200).json({

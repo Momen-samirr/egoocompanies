@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import api from "@/lib/api";
 import { getParentData } from "@/lib/auth";
@@ -37,79 +38,195 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTrips, setActiveTrips] = useState<Map<string, any>>(new Map());
+  const checkTripsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isCheckingTripsRef = useRef(false);
+  const studentsRef = useRef<Student[]>([]);
+  const lastStudentCountRef = useRef<number>(0);
+  const activeTripsRef = useRef<Map<string, any>>(new Map());
+  const isScreenFocusedRef = useRef(true);
+  
+  // Update ref when activeTrips changes
+  useEffect(() => {
+    activeTripsRef.current = activeTrips;
+  }, [activeTrips]);
+  
+  // Pause interval when screen is not focused (user navigated away)
+  useFocusEffect(
+    useCallback(() => {
+      isScreenFocusedRef.current = true;
+      return () => {
+        isScreenFocusedRef.current = false;
+        // Clear interval when screen loses focus
+        if (checkTripsIntervalRef.current) {
+          clearInterval(checkTripsIntervalRef.current);
+          checkTripsIntervalRef.current = null;
+        }
+      };
+    }, [])
+  );
+
+  // #region agent log
+  console.log('[DEBUG] HomeScreen: Component render/re-render', { 
+    timestamp: new Date().toISOString(),
+    renderCount: (global as any).__homeScreenRenderCount = ((global as any).__homeScreenRenderCount || 0) + 1
+  });
+  // #endregion
 
   // Register for push notifications
   useNotifications();
 
   useEffect(() => {
+    // #region agent log
+    console.log('[DEBUG] HomeScreen: Initial mount - calling fetchStudents');
+    // #endregion
     fetchStudents();
   }, []);
 
+  // Update ref when students change
   useEffect(() => {
-    // Check for active trips for each student
-    const checkActiveTrips = async () => {
-      // #region agent log
-      console.log('[DEBUG] checkActiveTrips: Starting', { studentCount: students.length, studentIds: students.map(s => s.id) });
-      // #endregion
-      const trips = new Map();
-      for (const student of students) {
-        try {
-          // #region agent log
-          console.log('[DEBUG] checkActiveTrips: Checking trip for student', { studentId: student.id, studentName: `${student.firstName} ${student.lastName}` });
-          // #endregion
-          const response = await api.get(`/parent/students/${student.id}/trip`);
-          // #region agent log
-          console.log('[DEBUG] checkActiveTrips: API response received', { 
-            studentId: student.id, 
-            status: response.status, 
-            success: response.data?.success, 
-            hasTrip: !!response.data?.trip,
-            trip: response.data?.trip ? { id: response.data.trip.id, status: response.data.trip.status, name: response.data.trip.name } : null,
-            message: response.data?.message,
-            fullResponse: JSON.stringify(response.data)
-          });
-          // #endregion
-          if (response.data.success && response.data.trip) {
-            // #region agent log
-            console.log('[DEBUG] checkActiveTrips: Adding trip to map', { studentId: student.id, tripId: response.data.trip.id });
-            // #endregion
-            trips.set(student.id, response.data.trip);
-          } else {
-            // #region agent log
-            console.log('[DEBUG] checkActiveTrips: No trip found or invalid response', { 
-              studentId: student.id, 
-              success: response.data?.success, 
-              hasTrip: !!response.data?.trip,
-              message: response.data?.message 
-            });
-            // #endregion
-          }
-        } catch (error: any) {
-          // #region agent log
-          console.error('[DEBUG] checkActiveTrips: Error fetching trip', { 
-            studentId: student.id, 
-            errorMessage: error?.message, 
-            errorResponse: error?.response?.data,
-            errorStatus: error?.response?.status
-          });
-          // #endregion
-          // No active trip for this student
-        }
-      }
-      // #region agent log
-      console.log('[DEBUG] checkActiveTrips: Completed', { tripsFound: trips.size, tripStudentIds: Array.from(trips.keys()) });
-      // #endregion
-      setActiveTrips(trips);
-    };
-
-    if (students.length > 0) {
-      checkActiveTrips();
-      const interval = setInterval(checkActiveTrips, 30000); // Check every 30 seconds
-      return () => clearInterval(interval);
-    }
+    studentsRef.current = students;
   }, [students]);
 
+  useEffect(() => {
+    // #region agent log
+    const effectRunId = Date.now();
+    const prevStudentCount = lastStudentCountRef.current;
+    const currentStudentCount = students.length;
+    const studentCountChanged = prevStudentCount !== currentStudentCount;
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:67',message:'checkActiveTrips effect triggered',data:{effectRunId,prevStudentCount,currentStudentCount,studentCountChanged,hasInterval:!!checkTripsIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'home-effect-trigger',hypothesisId:'I'})}).catch(()=>{});
+    // #endregion
+    
+    // Check for active trips for each student
+    const checkActiveTrips = async () => {
+      // Prevent concurrent executions
+      if (isCheckingTripsRef.current) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:69',message:'checkActiveTrips: Skipped - already checking',data:{effectRunId},timestamp:Date.now(),sessionId:'debug-session',runId:'check-skipped',hypothesisId:'J'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+      
+      const currentStudents = studentsRef.current;
+      if (currentStudents.length === 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:75',message:'checkActiveTrips: Skipped - no students',data:{effectRunId},timestamp:Date.now(),sessionId:'debug-session',runId:'check-skipped-no-students',hypothesisId:'J'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+      
+      // Skip if screen is not focused (user navigated away)
+      if (!isScreenFocusedRef.current) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:93',message:'checkActiveTrips: Skipped - screen not focused',data:{effectRunId},timestamp:Date.now(),sessionId:'debug-session',runId:'check-skipped-not-focused',hypothesisId:'R'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+
+      isCheckingTripsRef.current = true;
+      
+      try {
+        // #region agent log
+        const checkId = Date.now();
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:83',message:'checkActiveTrips: Starting',data:{checkId,effectRunId,studentCount:currentStudents.length,studentIds:currentStudents.map(s => s.id)},timestamp:Date.now(),sessionId:'debug-session',runId:'check-start',hypothesisId:'K'})}).catch(()=>{});
+        // #endregion
+        const trips = new Map();
+        for (const student of currentStudents) {
+          try {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:88',message:'checkActiveTrips: API call starting',data:{checkId,studentId:student.id,studentName:`${student.firstName} ${student.lastName}`},timestamp:Date.now(),sessionId:'debug-session',runId:'api-call-start',hypothesisId:'L'})}).catch(()=>{});
+            // #endregion
+            const response = await api.get(`/parent/students/${student.id}/trip`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:92',message:'checkActiveTrips: API response received',data:{checkId,studentId:student.id,status:response.status,success:response.data?.success,hasTrip:!!response.data?.trip,tripId:response.data?.trip?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'api-response',hypothesisId:'L'})}).catch(()=>{});
+            // #endregion
+            if (response.data.success && response.data.trip) {
+              trips.set(student.id, response.data.trip);
+            }
+          } catch (error: any) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:119',message:'checkActiveTrips: API error',data:{checkId,studentId:student.id,errorMessage:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'api-error',hypothesisId:'L'})}).catch(()=>{});
+            // #endregion
+          }
+        }
+        // #region agent log
+        const prevTrips = activeTripsRef.current;
+        const prevTripsSize = prevTrips.size;
+        const newTripsSize = trips.size;
+        // Compare trip data to see if it actually changed
+        const tripsChanged = prevTripsSize !== newTripsSize || Array.from(trips.keys()).some(id => {
+          const prevTrip = prevTrips.get(id);
+          const newTrip = trips.get(id);
+          return !prevTrip || prevTrip.id !== newTrip?.id || prevTrip.status !== newTrip?.status;
+        });
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:131',message:'checkActiveTrips: Completed - about to setActiveTrips',data:{checkId,effectRunId,tripsFound:trips.size,tripStudentIds:Array.from(trips.keys()),prevTripsSize,newTripsSize,tripsChanged},timestamp:Date.now(),sessionId:'debug-session',runId:'check-completed',hypothesisId:'M'})}).catch(()=>{});
+        // #endregion
+        // Only update state if trip data actually changed to prevent unnecessary re-renders
+        if (tripsChanged) {
+          setActiveTrips(trips);
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:134',message:'checkActiveTrips: Skipping setActiveTrips - no changes',data:{checkId,effectRunId},timestamp:Date.now(),sessionId:'debug-session',runId:'check-skip-update',hypothesisId:'M'})}).catch(()=>{});
+          // #endregion
+        }
+      } finally {
+        isCheckingTripsRef.current = false;
+      }
+    };
+
+    // Only re-initialize if student count actually changed AND we don't already have an interval
+    if (students.length !== lastStudentCountRef.current) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:140',message:'checkActiveTrips effect: Student count changed - reinitializing',data:{effectRunId,prevStudentCount,currentStudentCount,hasExistingInterval:!!checkTripsIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'effect-reinit',hypothesisId:'N'})}).catch(()=>{});
+      // #endregion
+      lastStudentCountRef.current = students.length;
+      
+      // Clear any existing interval before setting up a new one
+      if (checkTripsIntervalRef.current) {
+        clearInterval(checkTripsIntervalRef.current);
+        checkTripsIntervalRef.current = null;
+      }
+
+      if (students.length > 0 && isScreenFocusedRef.current) {
+        // Initial check
+        checkActiveTrips();
+        // Set up interval for periodic checks (only one interval should exist)
+        // Double-check we don't already have an interval
+        if (!checkTripsIntervalRef.current) {
+          checkTripsIntervalRef.current = setInterval(checkActiveTrips, 30000); // Check every 30 seconds
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:154',message:'checkActiveTrips effect: Interval set up',data:{effectRunId,intervalSet:true,intervalId:checkTripsIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-setup',hypothesisId:'O'})}).catch(()=>{});
+          // #endregion
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:157',message:'checkActiveTrips effect: Interval already exists - skipping setup',data:{effectRunId,existingIntervalId:checkTripsIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-skip',hypothesisId:'S'})}).catch(()=>{});
+          // #endregion
+        }
+      }
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:156',message:'checkActiveTrips effect: Student count unchanged - skipping reinit',data:{effectRunId,prevStudentCount,currentStudentCount,hasInterval:!!checkTripsIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'effect-skip',hypothesisId:'P'})}).catch(()=>{});
+      // #endregion
+    }
+
+    // Cleanup function
+    return () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:159',message:'checkActiveTrips effect: Cleanup',data:{effectRunId,clearingInterval:!!checkTripsIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'effect-cleanup',hypothesisId:'Q'})}).catch(()=>{});
+      // #endregion
+      if (checkTripsIntervalRef.current) {
+        clearInterval(checkTripsIntervalRef.current);
+        checkTripsIntervalRef.current = null;
+      }
+    };
+  }, [students.length]); // Only re-run when student count changes
+
   const fetchStudents = async () => {
+    // #region agent log
+    console.log('[DEBUG] fetchStudents: Called', { 
+      timestamp: new Date().toISOString(),
+      stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
+    });
+    // #endregion
     try {
       setLoading(true);
       const response = await api.get("/parent/students");
@@ -125,6 +242,9 @@ export default function HomeScreen() {
   };
 
   const onRefresh = () => {
+    // #region agent log
+    console.log('[DEBUG] onRefresh: User pulled to refresh - calling fetchStudents');
+    // #endregion
     setRefreshing(true);
     fetchStudents();
   };
@@ -207,15 +327,32 @@ export default function HomeScreen() {
                 {activeTrip ? (
                   <View style={styles.tripCard}>
                     <View style={styles.tripHeader}>
-                      <Ionicons name="car" size={20} color="#10b981" />
-                      <Text style={styles.tripStatus}>Active Trip</Text>
+                      <Ionicons 
+                        name={activeTrip.status === "ACTIVE" ? "car" : "time-outline"} 
+                        size={20} 
+                        color={activeTrip.status === "ACTIVE" ? "#10b981" : "#6366f1"} 
+                      />
+                      <Text style={[
+                        styles.tripStatus,
+                        activeTrip.status === "SCHEDULED" && styles.tripStatusScheduled
+                      ]}>
+                        {activeTrip.status === "ACTIVE" ? "Active Trip" : "Scheduled Trip"}
+                      </Text>
                     </View>
                     <Text style={styles.tripName}>{activeTrip.name}</Text>
+                    {activeTrip.studentPoint && activeTrip.studentPoint.stopId === student.stop?.id && (
+                      <View style={styles.stopIncludedBadge}>
+                        <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                        <Text style={styles.stopIncludedText}>Stop included</Text>
+                      </View>
+                    )}
                     <TouchableOpacity
                       style={styles.trackButton}
                       onPress={() => handleTrackTrip(student, activeTrip)}
                     >
-                      <Text style={styles.trackButtonText}>Track Trip</Text>
+                      <Text style={styles.trackButtonText}>
+                        {activeTrip.status === "ACTIVE" ? "Track Trip" : "View Trip"}
+                      </Text>
                       <Ionicons name="arrow-forward" size={20} color="#fff" />
                     </TouchableOpacity>
                   </View>
@@ -351,10 +488,30 @@ const styles = StyleSheet.create({
     color: "#10b981",
     marginLeft: 6,
   },
+  tripStatusScheduled: {
+    color: "#6366f1",
+  },
   tripName: {
     fontSize: 14,
     color: "#166534",
     marginBottom: 10,
+  },
+  stopIncludedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#d1fae5",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#10b981",
+  },
+  stopIncludedText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#065f46",
+    marginLeft: 6,
   },
   trackButton: {
     backgroundColor: "#6366f1",

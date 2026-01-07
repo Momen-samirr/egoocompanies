@@ -216,7 +216,7 @@ export default function CreateSchoolTripPage() {
           latitude: stop.latitude,
           longitude: stop.longitude,
           order: stop.order,
-          isFinalPoint: index === routeStops.length - 1, // Mark last stop as final point
+          isFinalPoint: stop.stopType === "FINAL_STOP" || index === routeStops.length - 1, // Mark FINAL_STOP or last stop as final point
           employees: [],
           stopId: stop.id,
         }));

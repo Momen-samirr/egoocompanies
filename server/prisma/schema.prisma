@@ -127,6 +127,12 @@ enum TripType {
   DEPARTURE
 }
 
+enum StopType {
+  PICKUP
+  DROP_OFF
+  FINAL_STOP
+}
+
 enum NotificationType {
   DOCUMENT_UPLOAD
   DOCUMENT_UPDATE
@@ -433,6 +439,7 @@ model Stop {
   latitude  Float
   longitude Float
   order     Int
+  stopType  StopType  @default(PICKUP)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   route     Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)

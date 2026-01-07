@@ -2117,6 +2117,7 @@ export const createScheduledTrip = async (req: any, res: Response) => {
               longitude: parseFloat(point.longitude),
               order: point.order !== undefined ? point.order : index,
               isFinalPoint: point.isFinalPoint === true,
+              ...(point.stopId && { stopId: point.stopId }),
               ...(expectedTimeValue && { expectedTime: expectedTimeValue }),
               ...(employeesValue &&
                 employeesValue.length > 0 && { employees: employeesValue }),
@@ -4074,6 +4075,7 @@ export const createTripsFromTemplate = async (req: any, res: Response) => {
                         : point.longitude,
                     order: point.order,
                     isFinalPoint: point.isFinalPoint,
+                    ...(tripData.pointOverrides?.[index]?.stopId && { stopId: tripData.pointOverrides[index].stopId }),
                     ...(expectedTimeValue && {
                       expectedTime: expectedTimeValue,
                     }),

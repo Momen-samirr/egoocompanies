@@ -46,6 +46,7 @@ interface Stop {
   longitude: number;
   order: number;
   routeId: string;
+  stopType?: "PICKUP" | "DROP_OFF" | "FINAL_STOP";
   _count?: {
     students: number;
   };
@@ -75,6 +76,7 @@ interface StopFormState {
   latitude: string;
   longitude: string;
   order: string;
+  stopType: "PICKUP" | "DROP_OFF" | "FINAL_STOP";
 }
 
 export default function RoutesPage() {
@@ -98,6 +100,7 @@ export default function RoutesPage() {
     latitude: "",
     longitude: "",
     order: "",
+    stopType: "PICKUP",
   });
   const [stopLocation, setStopLocation] = useState<LocationData | null>(null);
 
@@ -219,6 +222,7 @@ export default function RoutesPage() {
       latitude: "",
       longitude: "",
       order: "",
+      stopType: "PICKUP",
     });
     setStopLocation(null);
     setSelectedStudentIds([]);
@@ -305,11 +309,15 @@ export default function RoutesPage() {
         latitude: stopLocation.latitude,
         longitude: stopLocation.longitude,
         order: stopFormState.order ? parseInt(stopFormState.order) : undefined,
+        stopType: stopFormState.stopType,
       };
 
-      // Include studentIds if any are selected
-      if (selectedStudentIds.length > 0) {
+      // Include studentIds if any are selected and stop is not FINAL_STOP
+      if (stopFormState.stopType !== "FINAL_STOP" && selectedStudentIds.length > 0) {
         payload.studentIds = selectedStudentIds;
+      } else if (stopFormState.stopType === "FINAL_STOP") {
+        // Ensure no students are assigned to FINAL_STOP
+        payload.studentIds = [];
       }
 
       if (editingStop) {
@@ -342,6 +350,7 @@ export default function RoutesPage() {
       latitude: stop.latitude.toString(),
       longitude: stop.longitude.toString(),
       order: stop.order.toString(),
+      stopType: stop.stopType || "PICKUP",
     });
     setStopLocation({
       latitude: stop.latitude,
@@ -352,7 +361,8 @@ export default function RoutesPage() {
     try {
       const response = await api.get(`/admin/stops/${stop.id}`);
       const stopDetails = response.data.stop;
-      if (stopDetails.students) {
+      // Only set students if stop is not FINAL_STOP
+      if (stopDetails.stopType !== "FINAL_STOP" && stopDetails.students) {
         setSelectedStudentIds(stopDetails.students.map((s: Student) => s.id));
       } else {
         setSelectedStudentIds([]);
@@ -650,12 +660,56 @@ export default function RoutesPage() {
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                   />
                 </FormField>
+                <FormField label="Stop Type" required>
+                  <select
+                    value={stopFormState.stopType}
+                    onChange={(e) => {
+                      const newStopType = e.target.value as "PICKUP" | "DROP_OFF" | "FINAL_STOP";
+                      setStopFormState({ ...stopFormState, stopType: newStopType });
+                      // Clear selected students if switching to FINAL_STOP
+                      if (newStopType === "FINAL_STOP") {
+                        setSelectedStudentIds([]);
+                      }
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
+                  >
+                    <option value="PICKUP">Pickup Stop</option>
+                    <option value="DROP_OFF">Drop-Off Stop</option>
+                    <option value="FINAL_STOP">Final Stop (Drop-Off Only)</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {stopFormState.stopType === "FINAL_STOP"
+                      ? "Final Stops are drop-off only and cannot have boarding students."
+                      : stopFormState.stopType === "DROP_OFF"
+                      ? "Drop-Off stops allow both pickup and drop-off."
+                      : "Pickup stops are where students board the bus."}
+                  </p>
+                </FormField>
                 <FormField
                   label="Assign Students"
-                  hint="Select students who will be picked up at this stop"
+                  hint={
+                    stopFormState.stopType === "FINAL_STOP"
+                      ? "Final Stops cannot have boarding students. Students can only be dropped off here."
+                      : "Select students who will be picked up at this stop"
+                  }
                 >
-                  <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto">
-                    {students.length === 0 ? (
+                  <div
+                    className={`border border-gray-300 rounded-lg max-h-60 overflow-y-auto ${
+                      stopFormState.stopType === "FINAL_STOP"
+                        ? "bg-gray-50 opacity-60"
+                        : ""
+                    }`}
+                  >
+                    {stopFormState.stopType === "FINAL_STOP" ? (
+                      <div className="p-4 text-center text-sm text-gray-500 bg-gray-50">
+                        <p className="text-gray-600 font-medium mb-1">
+                          Final Stop - No Boarding
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Students cannot board from Final Stops. This stop is for drop-off only.
+                        </p>
+                      </div>
+                    ) : students.length === 0 ? (
                       <div className="p-4 text-center text-sm text-gray-500">
                         No students found for this school
                       </div>
@@ -664,12 +718,18 @@ export default function RoutesPage() {
                         {students.map((student) => (
                           <label
                             key={student.id}
-                            className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer"
+                            className={`flex items-center p-2 hover:bg-gray-50 rounded ${
+                              stopFormState.stopType === "FINAL_STOP"
+                                ? "cursor-not-allowed opacity-50"
+                                : "cursor-pointer"
+                            }`}
                           >
                             <input
                               type="checkbox"
                               checked={selectedStudentIds.includes(student.id)}
+                              disabled={stopFormState.stopType === "FINAL_STOP"}
                               onChange={(e) => {
+                                if (stopFormState.stopType === "FINAL_STOP") return;
                                 if (e.target.checked) {
                                   setSelectedStudentIds([
                                     ...selectedStudentIds,
@@ -683,7 +743,7 @@ export default function RoutesPage() {
                                   );
                                 }
                               }}
-                              className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                              className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:opacity-50"
                             />
                             <span className="text-sm text-gray-700">
                               {student.firstName} {student.lastName}
@@ -765,16 +825,40 @@ export default function RoutesPage() {
                             {stop.order + 1}
                           </div>
                           <div className="flex-1">
-                            <h3 className="text-lg font-medium text-gray-900">
-                              {stop.name}
-                            </h3>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-lg font-medium text-gray-900">
+                                {stop.name}
+                              </h3>
+                              {stop.stopType && (
+                                <span
+                                  className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                    stop.stopType === "FINAL_STOP"
+                                      ? "bg-red-100 text-red-700 border border-red-200"
+                                      : stop.stopType === "DROP_OFF"
+                                      ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                      : "bg-green-100 text-green-700 border border-green-200"
+                                  }`}
+                                >
+                                  {stop.stopType === "FINAL_STOP"
+                                    ? "Final Stop"
+                                    : stop.stopType === "DROP_OFF"
+                                    ? "Drop-Off"
+                                    : "Pickup"}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm text-gray-500">
                               {stop.latitude.toFixed(6)},{" "}
                               {stop.longitude.toFixed(6)}
-                              {stop._count && (
+                              {stop._count && stop.stopType !== "FINAL_STOP" && (
                                 <span className="ml-2">
                                   • {stop._count.students} student
                                   {stop._count.students !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                              {stop.stopType === "FINAL_STOP" && (
+                                <span className="ml-2 text-red-600">
+                                  • Drop-off only
                                 </span>
                               )}
                             </p>

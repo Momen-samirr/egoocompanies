@@ -41,8 +41,10 @@ api.interceptors.request.use(
   async (config) => {
     const token = await AsyncStorage.getItem("parentToken");
     // #region agent log
-    console.log('[DEBUG] API request:', { url: config.url, method: config.method, baseURL: config.baseURL, hasToken: !!token });
-    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:40',message:'API request interceptor',data:{url:config.url,method:config.method,baseURL:config.baseURL,hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'api-request',hypothesisId:'F'})}).catch(()=>{});
+    const stackTrace = new Error().stack;
+    const callerInfo = stackTrace?.split('\n').slice(1, 6).join(' | ') || 'unknown';
+    console.log('[DEBUG] API request:', { url: config.url, method: config.method, baseURL: config.baseURL, hasToken: !!token, caller: callerInfo });
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:40',message:'API request interceptor',data:{url:config.url,method:config.method,baseURL:config.baseURL,hasToken:!!token,caller:callerInfo,stackTrace:stackTrace?.split('\n').slice(1,10).join(' | ')},timestamp:Date.now(),sessionId:'debug-session',runId:'api-request',hypothesisId:'F'})}).catch(()=>{});
     // #endregion
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
