@@ -1954,13 +1954,13 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       companyId,
       price,
       tripType,
+      routeId,
     } = req.body;
 
     if (
       !name ||
       !tripDate ||
       !scheduledTime ||
-      !companyId ||
       !points ||
       !Array.isArray(points) ||
       points.length === 0
@@ -1968,7 +1968,18 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       return res.status(400).json({
         success: false,
         message:
-          "Name, tripDate, scheduledTime, companyId, and points are required",
+          "Name, tripDate, scheduledTime, and points are required",
+      });
+    }
+
+    // companyId is optional - required only for non-school trips
+    // If routeId is provided (school trip), companyId is optional
+    // Otherwise, companyId is required
+    if (!routeId && !companyId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Company ID is required for non-school trips. For school trips, provide routeId instead.",
       });
     }
 
@@ -2016,27 +2027,42 @@ export const createScheduledTrip = async (req: any, res: Response) => {
       }
     }
 
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-    });
+    // Handle company and price - optional for school trips
+    let resolvedCompanyId = companyId || null;
+    let resolvedPrice = 0;
 
-    if (!company) {
-      return res.status(404).json({
-        success: false,
-        message: "Company not found",
+    if (companyId) {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
       });
-    }
 
-    const resolvedPrice =
-      price !== undefined && price !== null
-        ? parseFloat(price)
-        : company.defaultScheduledTripPrice;
+      if (!company) {
+        return res.status(404).json({
+          success: false,
+          message: "Company not found",
+        });
+      }
 
-    if (isNaN(resolvedPrice) || resolvedPrice <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Trip price must be a positive number",
-      });
+      resolvedPrice =
+        price !== undefined && price !== null
+          ? parseFloat(price)
+          : company.defaultScheduledTripPrice;
+
+      if (isNaN(resolvedPrice) || resolvedPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Trip price must be a positive number",
+        });
+      }
+    } else if (price !== undefined && price !== null) {
+      // If price is provided without company, use it directly
+      resolvedPrice = parseFloat(price);
+      if (isNaN(resolvedPrice) || resolvedPrice < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Trip price must be a positive number",
+        });
+      }
     }
 
     const scheduledDateTime = new Date(`${tripDate}T${scheduledTime}`);
@@ -2049,8 +2075,8 @@ export const createScheduledTrip = async (req: any, res: Response) => {
         ...(tripType && { tripType }),
         ...(assignedCaptainId && { assignedCaptainId }),
         createdById: req.admin.id,
-        companyId,
-        price: resolvedPrice,
+        ...(resolvedCompanyId && { companyId: resolvedCompanyId }),
+        ...(resolvedPrice > 0 && { price: resolvedPrice }),
         points: {
           create: points.map((point: any, index: number) => {
             // Parse expectedTime if provided

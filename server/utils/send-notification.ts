@@ -183,3 +183,100 @@ export async function sendNotificationToCaptain(
   }
 }
 
+/**
+ * Send push notification to a parent
+ * @param parentId The ID of the parent to notify
+ * @param title Notification title
+ * @param body Notification body
+ * @param data Additional data to include
+ * @returns Success status and message
+ */
+export async function sendNotificationToParent(
+  parentId: string,
+  title: string,
+  body: string,
+  data?: any
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const parent = await prisma.parent.findUnique({
+      where: { id: parentId },
+      select: { notificationToken: true, firstName: true, lastName: true },
+    });
+
+    if (!parent) {
+      return {
+        success: false,
+        message: "Parent not found",
+      };
+    }
+
+    if (!parent.notificationToken) {
+      return {
+        success: false,
+        message: "Parent has no notification token",
+      };
+    }
+
+    // Check if token is Expo push token or FCM token
+    const isExpoToken = parent.notificationToken.startsWith("ExponentPushToken[");
+    const isFCMToken = parent.notificationToken.startsWith("ExpoToken:") || 
+                      (!isExpoToken && parent.notificationToken.length > 20);
+
+    let message: any;
+    let endpoint: string;
+
+    if (isExpoToken) {
+      // Expo push notification
+      endpoint = EXPO_PUSH_ENDPOINT;
+      message = {
+        to: parent.notificationToken,
+        sound: "default",
+        title,
+        body,
+        data: data || {},
+        priority: "high",
+      };
+    } else {
+      // FCM token - use Expo push service with FCM token format
+      endpoint = EXPO_PUSH_ENDPOINT;
+      message = {
+        to: parent.notificationToken,
+        sound: "default",
+        title,
+        body,
+        data: data || {},
+        priority: "high",
+      };
+    }
+
+    const response = await axios.post(endpoint, message, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      timeout: 10000,
+    });
+
+    if (response.data?.data?.status === "ok") {
+      console.log(`✅ Notification sent to parent ${parentId} (${parent.firstName} ${parent.lastName})`);
+      return {
+        success: true,
+        message: "Notification sent successfully",
+      };
+    } else {
+      console.warn(`⚠️ Failed to send notification to parent ${parentId}:`, response.data);
+      return {
+        success: false,
+        message: "Failed to send notification",
+      };
+    }
+  } catch (error: any) {
+    console.error(`Error sending notification to parent ${parentId}:`, error);
+    return {
+      success: false,
+      message: error.message || "Error sending notification",
+    };
+  }
+}
+

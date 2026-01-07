@@ -387,7 +387,16 @@ export const getStudentActiveTrip = async (
       include: { stop: true },
     });
 
+    console.log('[DEBUG] getStudentActiveTrip: Student data', {
+      studentId,
+      hasStudent: !!student,
+      hasStop: !!student?.stop,
+      stopId: student?.stop?.id,
+      stopName: student?.stop?.name,
+    });
+
     if (!student || !student.stop) {
+      console.log('[DEBUG] getStudentActiveTrip: Student has no stop assigned');
       return res.json({
         success: true,
         trip: null,
@@ -395,8 +404,82 @@ export const getStudentActiveTrip = async (
       });
     }
 
+    // Check all trips for this stop (for debugging)
+    const allTripsForStop = await prisma.scheduledTrip.findMany({
+      where: {
+        points: {
+          some: {
+            stopId: student.stop.id,
+          },
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        name: true,
+      },
+    });
+    console.log('[DEBUG] getStudentActiveTrip: All trips for stop', {
+      stopId: student.stop.id,
+      tripsCount: allTripsForStop.length,
+      trips: allTripsForStop,
+    });
+
+    // Check all ACTIVE trips (regardless of stop) to see what exists
+    const allActiveTrips = await prisma.scheduledTrip.findMany({
+      where: {
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        points: {
+          select: {
+            id: true,
+            name: true,
+            stopId: true,
+            order: true,
+          },
+        },
+      },
+    });
+    const tripsWithDetails = allActiveTrips.map(trip => ({
+      id: trip.id,
+      name: trip.name,
+      pointsCount: trip.points.length,
+      points: trip.points.map(p => ({ id: p.id, name: p.name, stopId: p.stopId, order: p.order })),
+      hasMatchingStop: trip.points.some(p => p.stopId === student.stop.id),
+    }));
+    
+    console.log('[DEBUG] getStudentActiveTrip: All ACTIVE trips in system', {
+      activeTripsCount: allActiveTrips.length,
+      studentStopId: student.stop.id,
+      studentStopName: student.stop.name,
+      activeTrips: JSON.stringify(tripsWithDetails, null, 2),
+    });
+    
+    // Check which trip (if any) has points matching the student's stop
+    const tripsWithMatchingStop = allActiveTrips.filter(trip => 
+      trip.points.some(p => p.stopId === student.stop.id)
+    );
+    console.log('[DEBUG] getStudentActiveTrip: Trips with matching stop', {
+      matchingTripsCount: tripsWithMatchingStop.length,
+      matchingTrips: tripsWithMatchingStop.map(trip => ({
+        id: trip.id,
+        name: trip.name,
+        matchingPoints: trip.points.filter(p => p.stopId === student.stop.id).map(p => ({
+          id: p.id,
+          name: p.name,
+          stopId: p.stopId,
+          order: p.order,
+        })),
+      })),
+    });
+
     // Find active trip that includes this stop
-    const activeTrip = await prisma.scheduledTrip.findFirst({
+    // First try to match by stopId
+    let activeTrip = await prisma.scheduledTrip.findFirst({
       where: {
         status: "ACTIVE",
         points: {
@@ -419,9 +502,6 @@ export const getStudentActiveTrip = async (
           },
         },
         points: {
-          where: {
-            stopId: student.stop.id,
-          },
           orderBy: {
             order: "asc",
           },
@@ -435,7 +515,79 @@ export const getStudentActiveTrip = async (
       },
     });
 
+    // If no trip found by stopId, try matching by point name (case-insensitive)
+    // This handles cases where trip points have stopId: null but match by name
     if (!activeTrip) {
+      console.log('[DEBUG] getStudentActiveTrip: No trip found by stopId, trying to match by point name');
+      const stopNameLower = student.stop.name.toLowerCase().trim();
+      
+      // Get all active trips with all their points
+      const allActiveTripsWithPoints = await prisma.scheduledTrip.findMany({
+        where: {
+          status: "ACTIVE",
+        },
+        include: {
+          assignedCaptain: {
+            select: {
+              id: true,
+              name: true,
+              phone_number: true,
+              selfiePhoto: true,
+              vehicle_type: true,
+              registration_number: true,
+              vehicle_color: true,
+              ratings: true,
+            },
+          },
+          points: {
+            orderBy: {
+              order: "asc",
+            },
+          },
+          progress: true,
+          route: {
+            include: {
+              school: true,
+            },
+          },
+        },
+      });
+
+      // Find trip with matching point name
+      for (const trip of allActiveTripsWithPoints) {
+        const matchingPoint = trip.points.find(point => {
+          const pointNameLower = point.name?.toLowerCase().trim() || '';
+          // Match exact name or check if names are similar (handles spelling variations)
+          return pointNameLower === stopNameLower || 
+                 pointNameLower.includes(stopNameLower) || 
+                 stopNameLower.includes(pointNameLower);
+        });
+
+        if (matchingPoint) {
+          console.log('[DEBUG] getStudentActiveTrip: Found trip by point name match', {
+            tripId: trip.id,
+            tripName: trip.name,
+            stopName: student.stop.name,
+            pointName: matchingPoint.name,
+            pointId: matchingPoint.id,
+          });
+          // Return the trip with all points (matching point is identified separately)
+          activeTrip = trip;
+          break;
+        }
+      }
+    }
+
+    console.log('[DEBUG] getStudentActiveTrip: Active trip query result', {
+      foundActiveTrip: !!activeTrip,
+      activeTripId: activeTrip?.id,
+      activeTripStatus: activeTrip?.status,
+      activeTripName: activeTrip?.name,
+      matchedBy: activeTrip ? (activeTrip.points[0]?.stopId ? 'stopId' : 'pointName') : 'none',
+    });
+
+    if (!activeTrip) {
+      console.log('[DEBUG] getStudentActiveTrip: No active trip found - checking if any trips exist with different status');
       return res.json({
         success: true,
         trip: null,
@@ -444,7 +596,26 @@ export const getStudentActiveTrip = async (
     }
 
     // Get student's specific point in the trip
-    const studentPoint = activeTrip.points[0];
+    // First try to find by stopId, then by name match
+    let studentPoint = activeTrip.points.find(
+      (p: any) => p.stopId === student.stop.id
+    );
+    
+    // If not found by stopId, try matching by name
+    if (!studentPoint) {
+      const stopNameLower = student.stop.name.toLowerCase().trim();
+      studentPoint = activeTrip.points.find((p: any) => {
+        const pointNameLower = p.name?.toLowerCase().trim() || '';
+        return pointNameLower === stopNameLower || 
+               pointNameLower.includes(stopNameLower) || 
+               stopNameLower.includes(pointNameLower);
+      });
+    }
+    
+    // Fallback to first point if still not found
+    if (!studentPoint) {
+      studentPoint = activeTrip.points[0];
+    }
 
     res.json({
       success: true,

@@ -16,6 +16,7 @@ import {
   sendTripStatusToOperations,
 } from "../utils/send-whatsapp-group";
 import { queueTripStatusChange } from "../utils/whatsapp-report-queue";
+import { calculateDistanceToCheckpoint } from "../utils/route-calculator";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken, {
@@ -1130,6 +1131,152 @@ export const startScheduledTrip = async (req: any, res: Response) => {
       // Optionally, you could store this in a queue for retry
     }
 
+    // Send push notifications to parents when trip starts
+    try {
+      const { sendNotificationToParent } = await import("../utils/send-notification");
+      
+      // Get all stop IDs from trip points
+      const stopIds = updatedTrip.points
+        .map((p: any) => p.stopId)
+        .filter((id: string | null) => id !== null) as string[];
+
+      if (stopIds.length > 0) {
+        // Find all students at these stops
+        const students = await prisma.student.findMany({
+          where: {
+            stopId: { in: stopIds },
+          },
+          include: {
+            parents: {
+              include: {
+                parent: {
+                  select: {
+                    id: true,
+                    notificationToken: true,
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        // Get unique parents (a parent might have multiple students)
+        const parentMap = new Map<string, any>();
+        students.forEach((student) => {
+          student.parents.forEach((parentStudent) => {
+            const parent = parentStudent.parent;
+            if (parent && parent.notificationToken && !parentMap.has(parent.id)) {
+              parentMap.set(parent.id, {
+                ...parent,
+                studentName: `${student.firstName} ${student.lastName}`,
+              });
+            }
+          });
+        });
+
+        // #region agent log
+        const fs = require('fs');
+        const logPath = '/home/momen-samir/Work/ecar (Copy)/.cursor/debug.log';
+        const logEntry = {
+          location: 'driver.controller.ts:1140',
+          message: 'Sending trip start notifications to parents',
+          data: {
+            tripId,
+            tripName: updatedTrip.name,
+            stopIds,
+            studentsFound: students.length,
+            uniqueParents: parentMap.size,
+            parentIds: Array.from(parentMap.keys()),
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          runId: 'trip-start-notifications',
+          hypothesisId: 'A'
+        };
+        fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+        // #endregion
+
+        // Send notifications to all parents
+        const notificationPromises = Array.from(parentMap.values()).map(async (parent) => {
+          try {
+            const result = await sendNotificationToParent(
+              parent.id,
+              "Trip Started",
+              `The trip "${updatedTrip.name}" has started. You can now track your child's ride in real-time.`,
+              {
+                type: "tripStarted",
+                tripId: tripId,
+                tripName: updatedTrip.name,
+                studentName: parent.studentName,
+              }
+            );
+
+            // #region agent log
+            const logEntry2 = {
+              location: 'driver.controller.ts:1175',
+              message: 'Parent notification result',
+              data: {
+                parentId: parent.id,
+                parentName: `${parent.firstName} ${parent.lastName}`,
+                studentName: parent.studentName,
+                success: result.success,
+                message: result.message,
+                hasToken: !!parent.notificationToken,
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'trip-start-notifications',
+              hypothesisId: 'B'
+            };
+            fs.appendFileSync(logPath, JSON.stringify(logEntry2) + '\n');
+            // #endregion
+
+            return result;
+          } catch (error: any) {
+            console.error(`Error sending notification to parent ${parent.id}:`, error);
+            // #region agent log
+            const logEntry3 = {
+              location: 'driver.controller.ts:1195',
+              message: 'Parent notification error',
+              data: {
+                parentId: parent.id,
+                parentName: `${parent.firstName} ${parent.lastName}`,
+                error: error?.message,
+                errorStack: error?.stack,
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'trip-start-notifications',
+              hypothesisId: 'C'
+            };
+            fs.appendFileSync(logPath, JSON.stringify(logEntry3) + '\n');
+            // #endregion
+            return { success: false, message: error.message };
+          }
+        });
+
+        const results = await Promise.allSettled(notificationPromises);
+        const successCount = results.filter(
+          (r) => r.status === "fulfilled" && r.value.success
+        ).length;
+        const failureCount = results.length - successCount;
+
+        console.log(
+          `📱 Sent trip start notifications to ${successCount} parents (${failureCount} failed) for trip ${tripId}`
+        );
+      } else {
+        console.log(`⚠️ No stops found in trip ${tripId}, skipping parent notifications`);
+      }
+    } catch (parentNotificationError: any) {
+      // Log error but don't fail the trip start if parent notifications fail
+      console.error(
+        "Failed to send parent notifications:",
+        parentNotificationError.message || parentNotificationError
+      );
+    }
+
     // Helper function to parse employees JSON field
     const parseEmployees = (
       employees: any
@@ -1529,7 +1676,7 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
       });
     }
 
-    // Update location in any active trip progress
+    // Update location in any active trip progress and broadcast to parents
     const activeTrips = await prisma.scheduledTrip.findMany({
       where: {
         assignedCaptainId: captainId,
@@ -1537,6 +1684,9 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
       },
       include: {
         progress: true,
+        points: {
+          orderBy: { order: "asc" },
+        },
       },
     });
 
@@ -1550,6 +1700,130 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
             lastLongitude: longitude,
           },
         });
+
+        // Broadcast location update to parents via WebSocket server
+        try {
+          const wsUrl = process.env.WEBSOCKET_URL || "http://localhost:8080";
+          const locationSpeed = speed !== undefined ? speed : 0; // Use provided speed or default to 0
+          
+          // Calculate basic ETA to next checkpoint (simplified calculation)
+          const currentCheckpointIndex = trip.progress.currentPointIndex || 0;
+          const nextCheckpoint = trip.points[currentCheckpointIndex];
+          let etaToNextCheckpoint: { minutes: number; distanceMeters: number; method: string } | null = null;
+          
+          // #region agent log
+          const fs = require('fs');
+          const logPath = '/home/momen-samir/Work/ecar (Copy)/.cursor/debug.log';
+          const logEntry = {
+            location: 'driver.controller.ts:1563',
+            message: 'ETA calculation inputs',
+            data: {
+              tripId: trip.id,
+              currentCheckpointIndex,
+              nextCheckpointExists: !!nextCheckpoint,
+              nextCheckpointName: nextCheckpoint?.name,
+              driverLocation: { latitude, longitude },
+              locationSpeed,
+              speedProvided: speed !== undefined,
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            runId: 'eta-calculation',
+            hypothesisId: 'A'
+          };
+          fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+          // #endregion
+          
+          if (nextCheckpoint && nextCheckpoint.latitude && nextCheckpoint.longitude) {
+            const distanceToCheckpoint = calculateDistanceToCheckpoint(
+              { latitude, longitude },
+              { 
+                latitude: nextCheckpoint.latitude, 
+                longitude: nextCheckpoint.longitude,
+                order: nextCheckpoint.order || currentCheckpointIndex
+              }
+            );
+            
+            // Simple ETA calculation: assume average speed of 30 km/h if speed is 0
+            const avgSpeedKmh = locationSpeed > 0 ? locationSpeed : 30;
+            const etaMinutes = (distanceToCheckpoint / 1000) / (avgSpeedKmh / 60);
+            
+            // #region agent log
+            const logEntry2 = {
+              location: 'driver.controller.ts:1580',
+              message: 'ETA calculation results',
+              data: {
+                tripId: trip.id,
+                distanceToCheckpointMeters: distanceToCheckpoint,
+                distanceToCheckpointKm: distanceToCheckpoint / 1000,
+                locationSpeed,
+                avgSpeedKmh,
+                etaMinutes,
+                etaMinutesRounded: Math.round(etaMinutes),
+                nextCheckpointName: nextCheckpoint.name,
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'eta-calculation',
+              hypothesisId: 'B'
+            };
+            fs.appendFileSync(logPath, JSON.stringify(logEntry2) + '\n');
+            // #endregion
+            
+            etaToNextCheckpoint = {
+              minutes: Math.round(etaMinutes),
+              distanceMeters: Math.round(distanceToCheckpoint),
+              method: "estimated",
+            };
+          }
+
+          const broadcastPayload = {
+            tripId: trip.id,
+            driverId: captainId,
+            location: { latitude, longitude, heading: heading !== undefined ? heading : null },
+            speed: locationSpeed,
+            deviationStatus: {
+              isDeviated: false, // Simplified - could be enhanced with route calculation
+              distance: 0,
+            },
+            eta: etaToNextCheckpoint,
+            studentStopETAs: null, // Could be calculated if needed
+            timestamp: new Date().toISOString(),
+          };
+          
+          console.log(`[DEBUG] Broadcasting trip location update to WebSocket server for trip ${trip.id}`, {
+            tripId: trip.id,
+            driverId: captainId,
+            hasLocation: !!broadcastPayload.location,
+            location: broadcastPayload.location,
+            wsUrl
+          });
+          
+          await fetch(`${wsUrl}/api/trip-location-update`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(broadcastPayload),
+          })
+          .then(async (response) => {
+            if (response.ok) {
+              console.log(`[DEBUG] Successfully broadcasted trip ${trip.id} location update to WebSocket server`);
+            } else {
+              const errorText = await response.text();
+              console.warn(`[DEBUG] WebSocket server returned error for trip ${trip.id}:`, response.status, errorText);
+            }
+          })
+          .catch((error) => {
+            console.warn(
+              `[DEBUG] WebSocket server not available for trip ${trip.id} location update:`,
+              error.message
+            );
+          });
+        } catch (error: any) {
+          // Silently fail - WebSocket broadcast is optional
+          console.debug(`Error broadcasting trip ${trip.id} location update:`, error.message);
+        }
       }
     }
 

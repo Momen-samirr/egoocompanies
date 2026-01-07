@@ -103,10 +103,17 @@ export default function ParentsPage() {
       const response = await api.get(`/admin/parents/${parentId}`);
       const parent = response.data.parent;
       // Transform the response to match the expected structure
-      setSelectedParent({
+      // Backend returns parentStudents, but frontend expects students
+      const transformedParent = {
         ...parent,
-        students: parent.students || [], // Backend returns students as ParentStudent links
+        students: parent.parentStudents || [], // Backend returns parentStudents array
+      };
+      console.log("Fetched parent detail:", {
+        parentId,
+        studentsCount: transformedParent.students.length,
+        students: transformedParent.students,
       });
+      setSelectedParent(transformedParent);
     } catch (error) {
       console.error("Error fetching parent detail:", error);
       const errorMessage =
@@ -228,7 +235,7 @@ export default function ParentsPage() {
 
     try {
       setSaving(true);
-      await api.post("/admin/parents/students/link", {
+      await api.post("/admin/parent-students", {
         parentId: selectedParent.id,
         studentId: linkFormState.studentId,
         relationship: linkFormState.relationship,
@@ -254,7 +261,7 @@ export default function ParentsPage() {
 
     try {
       await api.delete(
-        `/admin/parents/${selectedParent.id}/students/${studentId}`
+        `/admin/parent-students/${selectedParent.id}/${studentId}`
       );
       toast.success("Student unlinked");
       fetchParentDetail(selectedParent.id);
@@ -274,7 +281,7 @@ export default function ParentsPage() {
 
     try {
       await api.put(
-        `/admin/parents/${selectedParent.id}/students/${studentId}`,
+        `/admin/parent-students/${selectedParent.id}/${studentId}`,
         {
           relationship,
           isPrimary,

@@ -84,12 +84,13 @@ export const tripFormSchema = z
     }),
     tripType: z.enum(["ARRIVAL", "DEPARTURE"]),
     assignedCaptainId: z.string().optional(),
-    companyId: z.string().min(1, "Company is required"),
+    companyId: z.string().optional(),
     price: z
       .number({
         message: "Price must be a number",
       })
-      .positive("Price must be greater than zero"),
+      .nonnegative("Price must be zero or greater")
+      .optional(),
     points: z
       .array(tripPointSchema)
       .min(1, "At least one checkpoint is required")

@@ -49,6 +49,19 @@ interface Stop {
   _count?: {
     students: number;
   };
+  students?: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+  }>;
+}
+
+interface Student {
+  id: string;
+  firstName: string;
+  lastName: string;
+  grade?: string;
+  studentId?: string;
 }
 
 interface RouteFormState {
@@ -69,6 +82,8 @@ export default function RoutesPage() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingRoute, setEditingRoute] = useState<Route | null>(null);
@@ -167,13 +182,26 @@ export default function RoutesPage() {
     fetchRoutes();
   }, [fetchSchools, fetchRoutes]);
 
+  const fetchStudents = useCallback(async (schoolId: string) => {
+    try {
+      const response = await api.get("/admin/students", {
+        params: { schoolId },
+      });
+      setStudents(response.data.students || []);
+    } catch (error) {
+      console.error("Error fetching students:", error);
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedRoute) {
       fetchStops(selectedRoute.id);
+      fetchStudents(selectedRoute.schoolId);
     } else {
       setStops([]);
+      setStudents([]);
     }
-  }, [selectedRoute, fetchStops]);
+  }, [selectedRoute, fetchStops, fetchStudents]);
 
   const resetRouteForm = () => {
     setEditingRoute(null);
@@ -193,6 +221,7 @@ export default function RoutesPage() {
       order: "",
     });
     setStopLocation(null);
+    setSelectedStudentIds([]);
   };
 
   const handleRouteSubmit = async (event: React.FormEvent) => {
@@ -271,27 +300,32 @@ export default function RoutesPage() {
 
     try {
       setSaving(true);
+      const payload: any = {
+        name: stopFormState.name,
+        latitude: stopLocation.latitude,
+        longitude: stopLocation.longitude,
+        order: stopFormState.order ? parseInt(stopFormState.order) : undefined,
+      };
+
+      // Include studentIds if any are selected
+      if (selectedStudentIds.length > 0) {
+        payload.studentIds = selectedStudentIds;
+      }
+
       if (editingStop) {
-        await api.put(`/admin/stops/${editingStop.id}`, {
-          name: stopFormState.name,
-          latitude: stopLocation.latitude,
-          longitude: stopLocation.longitude,
-          order: stopFormState.order ? parseInt(stopFormState.order) : undefined,
-        });
+        await api.put(`/admin/stops/${editingStop.id}`, payload);
         toast.success("Stop updated");
       } else {
         await api.post("/admin/stops", {
           routeId: selectedRoute.id,
-          name: stopFormState.name,
-          latitude: stopLocation.latitude,
-          longitude: stopLocation.longitude,
-          order: stopFormState.order ? parseInt(stopFormState.order) : undefined,
+          ...payload,
         });
         toast.success("Stop created");
       }
       resetStopForm();
       if (selectedRoute) {
         fetchStops(selectedRoute.id);
+        fetchStudents(selectedRoute.schoolId);
       }
     } catch (error) {
       console.error("Error saving stop:", error);
@@ -301,7 +335,7 @@ export default function RoutesPage() {
     }
   };
 
-  const handleStopEdit = (stop: Stop) => {
+  const handleStopEdit = async (stop: Stop) => {
     setEditingStop(stop);
     setStopFormState({
       name: stop.name,
@@ -313,6 +347,20 @@ export default function RoutesPage() {
       latitude: stop.latitude,
       longitude: stop.longitude,
     });
+
+    // Fetch stop details to get assigned students
+    try {
+      const response = await api.get(`/admin/stops/${stop.id}`);
+      const stopDetails = response.data.stop;
+      if (stopDetails.students) {
+        setSelectedStudentIds(stopDetails.students.map((s: Student) => s.id));
+      } else {
+        setSelectedStudentIds([]);
+      }
+    } catch (error) {
+      console.error("Error fetching stop details:", error);
+      setSelectedStudentIds([]);
+    }
   };
 
   const handleStopDelete = async (stop: Stop) => {
@@ -601,6 +649,61 @@ export default function RoutesPage() {
                     placeholder="Auto-assigned if empty"
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
                   />
+                </FormField>
+                <FormField
+                  label="Assign Students"
+                  hint="Select students who will be picked up at this stop"
+                >
+                  <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto">
+                    {students.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-gray-500">
+                        No students found for this school
+                      </div>
+                    ) : (
+                      <div className="p-2 space-y-1">
+                        {students.map((student) => (
+                          <label
+                            key={student.id}
+                            className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedStudentIds.includes(student.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedStudentIds([
+                                    ...selectedStudentIds,
+                                    student.id,
+                                  ]);
+                                } else {
+                                  setSelectedStudentIds(
+                                    selectedStudentIds.filter(
+                                      (id) => id !== student.id
+                                    )
+                                  );
+                                }
+                              }}
+                              className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                            <span className="text-sm text-gray-700">
+                              {student.firstName} {student.lastName}
+                              {student.grade && (
+                                <span className="text-gray-500 ml-1">
+                                  (Grade {student.grade})
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {selectedStudentIds.length > 0 && (
+                    <p className="mt-2 text-sm text-indigo-600">
+                      {selectedStudentIds.length} student
+                      {selectedStudentIds.length !== 1 ? "s" : ""} selected
+                    </p>
+                  )}
                 </FormField>
                 <Button type="submit" disabled={saving} className="w-full">
                   {saving

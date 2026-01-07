@@ -159,6 +159,12 @@ export default function ScheduledTripsOverviewPage() {
             Templates
           </Button>
           <Button
+            variant="outline"
+            onClick={() => router.push("/dashboard/trips/create-school")}
+          >
+            Create School Trip
+          </Button>
+          <Button
             onClick={() => router.push("/dashboard/trips/create")}
             icon={PlusIcon}
           >

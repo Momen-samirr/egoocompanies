@@ -493,7 +493,7 @@ export const getStopById = async (req: any, res: Response) => {
 
 export const createStop = async (req: any, res: Response) => {
   try {
-    const { routeId, name, latitude, longitude, order } = req.body;
+    const { routeId, name, latitude, longitude, order, studentIds } = req.body;
 
     if (!routeId || !name || latitude === undefined || longitude === undefined) {
       return res.status(400).json({
@@ -534,6 +534,35 @@ export const createStop = async (req: any, res: Response) => {
       },
     });
 
+    // Assign students to this stop if studentIds are provided
+    if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
+      // Validate that all students exist and belong to the route's school
+      const students = await prisma.student.findMany({
+        where: {
+          id: { in: studentIds },
+          schoolId: route.schoolId,
+        },
+      });
+
+      if (students.length !== studentIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Some students not found or don't belong to this route's school",
+        });
+      }
+
+      // Update all selected students to be assigned to this stop
+      // This will automatically unassign them from any previous stops
+      await prisma.student.updateMany({
+        where: {
+          id: { in: studentIds },
+        },
+        data: {
+          stopId: stop.id,
+        },
+      });
+    }
+
     res.status(201).json({
       success: true,
       stop,
@@ -550,10 +579,17 @@ export const createStop = async (req: any, res: Response) => {
 export const updateStop = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, latitude, longitude, order } = req.body;
+    const { name, latitude, longitude, order, studentIds } = req.body;
 
     const stop = await prisma.stop.findUnique({
       where: { id },
+      include: {
+        route: {
+          select: {
+            schoolId: true,
+          },
+        },
+      },
     });
 
     if (!stop) {
@@ -573,6 +609,66 @@ export const updateStop = async (req: any, res: Response) => {
       where: { id },
       data,
     });
+
+    // Handle student assignment updates if studentIds are provided
+    if (studentIds !== undefined && Array.isArray(studentIds)) {
+      // Get current students assigned to this stop
+      const currentStudents = await prisma.student.findMany({
+        where: { stopId: id },
+        select: { id: true },
+      });
+      const currentStudentIds = currentStudents.map((s) => s.id);
+
+      // Find students to remove (in current but not in new list)
+      const studentsToRemove = currentStudentIds.filter(
+        (studentId) => !studentIds.includes(studentId)
+      );
+
+      // Find students to add (in new but not in current list)
+      const studentsToAdd = studentIds.filter(
+        (studentId) => !currentStudentIds.includes(studentId)
+      );
+
+      // Unassign students who should be removed
+      if (studentsToRemove.length > 0) {
+        await prisma.student.updateMany({
+          where: {
+            id: { in: studentsToRemove },
+            stopId: id, // Ensure we only unassign from this stop
+          },
+          data: {
+            stopId: null,
+          },
+        });
+      }
+
+      // Assign new students to this stop (this will automatically unassign them from previous stops)
+      if (studentsToAdd.length > 0) {
+        // Validate that all students belong to the route's school
+        const studentsToValidate = await prisma.student.findMany({
+          where: {
+            id: { in: studentsToAdd },
+            schoolId: stop.route.schoolId,
+          },
+        });
+
+        if (studentsToValidate.length !== studentsToAdd.length) {
+          return res.status(400).json({
+            success: false,
+            message: "Some students not found or don't belong to this route's school",
+          });
+        }
+
+        await prisma.student.updateMany({
+          where: {
+            id: { in: studentsToAdd },
+          },
+          data: {
+            stopId: id,
+          },
+        });
+      }
+    }
 
     res.status(200).json({
       success: true,

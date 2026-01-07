@@ -41,10 +41,19 @@ export default function TripsViewLayout({
         <div className="flex items-center gap-3">
           {actions}
           {showCreateButton && (
-            <Button onClick={() => router.push("/dashboard/trips/create")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Trip
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard/trips/create-school")}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create School Trip
+              </Button>
+              <Button onClick={() => router.push("/dashboard/trips/create")}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Trip
+              </Button>
+            </>
           )}
         </div>
       </div>

@@ -26,9 +26,6 @@ import { Company } from "@/types";
 export default function CreateTripPage() {
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [routes, setRoutes] = useState<any[]>([]);
-  const [selectedRouteId, setSelectedRouteId] = useState<string>("");
-  const [routeStops, setRouteStops] = useState<any[]>([]);
   const [checkpointLocations, setCheckpointLocations] = useState<
     Map<number, LocationData | null>
   >(new Map());
@@ -36,6 +33,16 @@ export default function CreateTripPage() {
   const { form, handleSubmit, handleDraftSave, isSubmitting, isDirty } =
     useTripForm({
       onSubmit: async (data) => {
+        // Validate companyId is required for regular trips (non-school trips)
+        if (!data.companyId) {
+          toast.error("Company is required for regular trips");
+          form.setError("companyId", {
+            type: "manual",
+            message: "Company is required",
+          });
+          return;
+        }
+
         // Get timezone offset for time preservation
         const now = new Date();
         const timezoneOffset = -now.getTimezoneOffset();
@@ -56,11 +63,7 @@ export default function CreateTripPage() {
           assignedCaptainId: data.assignedCaptainId || undefined,
           companyId: data.companyId,
           price: data.price,
-          routeId: selectedRouteId || undefined,
-          points: data.points.map((point: any, index: number) => ({
-            ...point,
-            stopId: (point as any).stopId || undefined,
-          })),
+          points: data.points,
         });
 
         if (response.data.success) {
@@ -107,37 +110,6 @@ export default function CreateTripPage() {
     };
     fetchCompanies();
   }, []);
-
-  useEffect(() => {
-    const fetchRoutes = async () => {
-      try {
-        const response = await api.get("/admin/routes");
-        setRoutes(response.data.routes || []);
-      } catch (error) {
-        console.error("Error fetching routes:", error);
-      }
-    };
-    fetchRoutes();
-  }, []);
-
-  useEffect(() => {
-    const fetchStops = async () => {
-      if (!selectedRouteId) {
-        setRouteStops([]);
-        return;
-      }
-      try {
-        const response = await api.get("/admin/stops", {
-          params: { routeId: selectedRouteId },
-        });
-        setRouteStops(response.data.stops || []);
-      } catch (error) {
-        console.error("Error fetching stops:", error);
-        setRouteStops([]);
-      }
-    };
-    fetchStops();
-  }, [selectedRouteId]);
 
   useEffect(() => {
     if (companies.length > 0 && !form.getValues("companyId")) {
@@ -380,30 +352,6 @@ export default function CreateTripPage() {
                     />
                   </FormField>
                 </div>
-
-                <FormField
-                  label="Route (Optional)"
-                  hint="Link this trip to a route to enable stop and student tracking"
-                >
-                  <select
-                    value={selectedRouteId}
-                    onChange={(e) => {
-                      setSelectedRouteId(e.target.value);
-                      // Clear stop selections when route changes
-                      fields.forEach((_, index) => {
-                        form.setValue(`points.${index}.stopId`, "");
-                      });
-                    }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                  >
-                    <option value="">No route (manual points)</option>
-                    {routes.map((route) => (
-                      <option key={route.id} value={route.id}>
-                        {route.school.name} - {route.name}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
               </div>
             </CardContent>
           </Card>
@@ -545,64 +493,6 @@ export default function CreateTripPage() {
                             />
                           </FormField>
                         </div>
-                        {selectedRouteId && routeStops.length > 0 && (
-                          <div>
-                            <FormField
-                              label="Link to Stop (Optional)"
-                              hint="Link this checkpoint to a route stop to enable student tracking"
-                            >
-                              <select
-                                {...form.register(`points.${index}.stopId`)}
-                                onChange={(e) => {
-                                  form.setValue(`points.${index}.stopId`, e.target.value);
-                                  // Auto-fill location and name from stop
-                                  if (e.target.value) {
-                                    const stop = routeStops.find(
-                                      (s) => s.id === e.target.value
-                                    );
-                                    if (stop) {
-                                      form.setValue(`points.${index}.name`, stop.name);
-                                      form.setValue(
-                                        `points.${index}.latitude`,
-                                        stop.latitude
-                                      );
-                                      form.setValue(
-                                        `points.${index}.longitude`,
-                                        stop.longitude
-                                      );
-                                      handleLocationChange(index, {
-                                        latitude: stop.latitude,
-                                        longitude: stop.longitude,
-                                      });
-                                    }
-                                  }
-                                }}
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-white"
-                              >
-                                <option value="">No stop linked</option>
-                                {routeStops.map((stop) => (
-                                  <option key={stop.id} value={stop.id}>
-                                    Stop {stop.order + 1}: {stop.name}
-                                    {stop._count?.students
-                                      ? ` (${stop._count.students} student${
-                                          stop._count.students !== 1 ? "s" : ""
-                                        })`
-                                      : ""}
-                                  </option>
-                                ))}
-                              </select>
-                            </FormField>
-                            {form.watch(`points.${index}.stopId`) && (
-                              <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                <p className="text-sm text-indigo-700">
-                                  ✓ Linked to route stop - Students at this stop will
-                                  receive location updates
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
                         <div>
                           <Controller
                             control={form.control}

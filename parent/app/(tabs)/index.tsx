@@ -48,17 +48,57 @@ export default function HomeScreen() {
   useEffect(() => {
     // Check for active trips for each student
     const checkActiveTrips = async () => {
+      // #region agent log
+      console.log('[DEBUG] checkActiveTrips: Starting', { studentCount: students.length, studentIds: students.map(s => s.id) });
+      // #endregion
       const trips = new Map();
       for (const student of students) {
         try {
+          // #region agent log
+          console.log('[DEBUG] checkActiveTrips: Checking trip for student', { studentId: student.id, studentName: `${student.firstName} ${student.lastName}` });
+          // #endregion
           const response = await api.get(`/parent/students/${student.id}/trip`);
+          // #region agent log
+          console.log('[DEBUG] checkActiveTrips: API response received', { 
+            studentId: student.id, 
+            status: response.status, 
+            success: response.data?.success, 
+            hasTrip: !!response.data?.trip,
+            trip: response.data?.trip ? { id: response.data.trip.id, status: response.data.trip.status, name: response.data.trip.name } : null,
+            message: response.data?.message,
+            fullResponse: JSON.stringify(response.data)
+          });
+          // #endregion
           if (response.data.success && response.data.trip) {
+            // #region agent log
+            console.log('[DEBUG] checkActiveTrips: Adding trip to map', { studentId: student.id, tripId: response.data.trip.id });
+            // #endregion
             trips.set(student.id, response.data.trip);
+          } else {
+            // #region agent log
+            console.log('[DEBUG] checkActiveTrips: No trip found or invalid response', { 
+              studentId: student.id, 
+              success: response.data?.success, 
+              hasTrip: !!response.data?.trip,
+              message: response.data?.message 
+            });
+            // #endregion
           }
-        } catch (error) {
+        } catch (error: any) {
+          // #region agent log
+          console.error('[DEBUG] checkActiveTrips: Error fetching trip', { 
+            studentId: student.id, 
+            errorMessage: error?.message, 
+            errorResponse: error?.response?.data,
+            errorStatus: error?.response?.status
+          });
+          // #endregion
           // No active trip for this student
         }
       }
+      // #region agent log
+      console.log('[DEBUG] checkActiveTrips: Completed', { tripsFound: trips.size, tripStudentIds: Array.from(trips.keys()) });
+      // #endregion
       setActiveTrips(trips);
     };
 

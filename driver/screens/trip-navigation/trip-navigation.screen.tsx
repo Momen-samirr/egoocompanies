@@ -154,6 +154,62 @@ export default function TripNavigationScreen() {
     60000 // 60 seconds threshold
   );
 
+  // Memoized MapViewDirections for fallback route display
+  const memoizedDirections = useMemo(() => {
+    if (!throttledOrigin || !trip) {
+      return null;
+    }
+
+    const currentPointIndex = trip.progress?.currentPointIndex || 0;
+    const currentPoint = trip.points[currentPointIndex];
+
+    if (!currentPoint || currentPoint.reachedAt) {
+      return null;
+    }
+
+    return (
+      <MapViewDirections
+        origin={throttledOrigin}
+        destination={{
+          latitude: currentPoint.latitude,
+          longitude: currentPoint.longitude,
+        }}
+        apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+        strokeWidth={5}
+        strokeColor={color.primary}
+        lineCap="round"
+        lineJoin="round"
+        onReady={(result) => {
+          // MapViewDirections is used for route visualization only
+          // Distance/ETA should be calculated from driver's current location, not throttled origin
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:182',message:'MapViewDirections onReady',data:{hasDistance:!!result.distance,hasDuration:!!result.duration,distance:result.distance,duration:result.duration,throttledOriginLat:throttledOrigin?.latitude,throttledOriginLng:throttledOrigin?.longitude,currentLocationLat:currentLocation?.coords?.latitude,currentLocationLng:currentLocation?.coords?.longitude,isNavigationMode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+          // Don't use MapViewDirections results for distance/ETA calculation
+          // because it uses throttled coordinates which may be stale.
+          // Instead, rely on updateDistanceAndETA which uses current location.
+          // Only use as fallback if we don't have current location yet AND distance is reasonable
+          if (result.distance && result.duration && !isNavigationMode && !currentLocation) {
+            const distanceKm = result.distance / 1000;
+            // Only use if distance is reasonable (not suspiciously small)
+            if (distanceKm >= 0.01) { // At least 10 meters
+              // No current location yet, use MapViewDirections result as temporary fallback
+              setDistanceToCheckpoint(distanceKm);
+              setEtaToCheckpoint(result.duration / 60); // Convert to minutes
+            }
+          }
+          // If we have current location, immediately recalculate with it to override any stale values
+          if (currentLocation) {
+            updateDistanceAndETA(currentLocation);
+          }
+        }}
+        onError={(errorMessage) => {
+          console.error("MapViewDirections error:", errorMessage);
+        }}
+      />
+    );
+  }, [throttledOrigin, trip]);
+
   // Manually control navigation start/stop based on isNavigationMode
   useEffect(() => {
     if (isNavigationMode && navigationOrigin && navigationDestination) {
@@ -237,6 +293,10 @@ export default function TripNavigationScreen() {
     if (trip) {
       const currentPointIndex = trip.progress?.currentPointIndex || 0;
       const currentPoint = trip.points[currentPointIndex];
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:275',message:'Checkpoint changed',data:{currentPointIndex,hasCurrentPoint:!!currentPoint,currentPointName:currentPoint?.name,isReached:!!currentPoint?.reachedAt,pointLat:currentPoint?.latitude,pointLng:currentPoint?.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
       if (currentPoint && !currentPoint.reachedAt) {
         setNavigationDestination({
@@ -376,6 +436,7 @@ export default function TripNavigationScreen() {
     // Get initial location
     const location = await Location.getCurrentPositionAsync({});
     setCurrentLocation(location);
+    // Immediately calculate distance/ETA with current location
     updateDistanceAndETA(location);
 
     // Watch location updates
@@ -387,6 +448,9 @@ export default function TripNavigationScreen() {
         mayShowUserSettingsDialog: true,
       },
       (location) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:428',message:'Location update received',data:{lat:location.coords.latitude,lng:location.coords.longitude,heading:location.coords.heading,accuracy:location.coords.accuracy,timestamp:location.timestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         setCurrentLocation(location);
         updateDistanceAndETA(location);
 
@@ -474,22 +538,39 @@ export default function TripNavigationScreen() {
   };
 
   const updateDistanceAndETA = (location: Location.LocationObject) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:525',message:'updateDistanceAndETA called',data:{hasTrip:!!trip,hasLocation:!!location,locationLat:location?.coords?.latitude,locationLng:location?.coords?.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     if (!trip || !location) return;
 
     const currentPointIndex = trip.progress?.currentPointIndex || 0;
     const currentPoint = trip.points[currentPointIndex];
 
-    if (!currentPoint || currentPoint.reachedAt) return;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:532',message:'Checkpoint info',data:{currentPointIndex,hasCurrentPoint:!!currentPoint,currentPointName:currentPoint?.name,currentPointLat:currentPoint?.latitude,currentPointLng:currentPoint?.longitude,isReached:!!currentPoint?.reachedAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+
+    if (!currentPoint || currentPoint.reachedAt) {
+      // No active checkpoint, clear distance/ETA
+      setDistanceToCheckpoint(undefined);
+      setEtaToCheckpoint(undefined);
+      return;
+    }
 
     // Use navigation state if available, otherwise calculate manually
     if (
       isNavigationMode &&
       navigationState.isActive &&
-      navigationState.distanceToDestination
+      navigationState.distanceToDestination !== undefined &&
+      navigationState.distanceToDestination > 0
     ) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:545',message:'Using navigation state distance/ETA',data:{isNavigationMode,isActive:navigationState.isActive,hasDistance:!!navigationState.distanceToDestination,distance:navigationState.distanceToDestination,eta:navigationState.etaToDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       setDistanceToCheckpoint(navigationState.distanceToDestination);
       setEtaToCheckpoint(navigationState.etaToDestination);
     } else {
+      // Always calculate from driver's current location to next checkpoint
       const distance = calculateDistance(
         location.coords.latitude,
         location.coords.longitude,
@@ -497,6 +578,22 @@ export default function TripNavigationScreen() {
         currentPoint.longitude
       );
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:552',message:'Manual distance calculation',data:{driverLat:location.coords.latitude,driverLng:location.coords.longitude,checkpointLat:currentPoint.latitude,checkpointLng:currentPoint.longitude,distanceMeters:distance,distanceKm:distance/1000,estimatedSpeed:30,etaMinutes:(distance/1000/30)*60},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+
+      // Validate distance is reasonable (not suspiciously small)
+      // If distance is less than 10 meters, it's likely a calculation error
+      if (distance < 10) {
+        console.warn(`⚠️ Suspiciously small distance calculated: ${distance}m. Driver: (${location.coords.latitude}, ${location.coords.longitude}), Checkpoint: (${currentPoint.latitude}, ${currentPoint.longitude})`);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:565',message:'Suspiciously small distance detected',data:{distanceMeters:distance,driverLat:location.coords.latitude,driverLng:location.coords.longitude,checkpointLat:currentPoint.latitude,checkpointLng:currentPoint.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        // Don't update with suspicious values - keep previous values or set to undefined
+        return;
+      }
+
+      // Always update with calculated values (this ensures we use current location, not stale throttled origin)
       setDistanceToCheckpoint(distance / 1000); // Convert to km
 
       // Estimate ETA (assuming average speed of 30 km/h in city)
