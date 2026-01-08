@@ -5,6 +5,27 @@ import prisma from "../utils/prisma";
 import jwt from "jsonwebtoken";
 import { sendToken } from "../utils/send-token";
 import { sendEmail } from "../utils/send-email";
+import * as fs from "fs";
+import * as path from "path";
+
+// Helper function to safely write to debug log file
+const safeLogToFile = (logEntry: any) => {
+  try {
+    const logPath = '/home/momen-samir/Work/ecar (Copy)/.cursor/debug.log';
+    const logDir = path.dirname(logPath);
+    
+    // Ensure directory exists
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    
+    // Append to file (creates file if it doesn't exist)
+    fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+  } catch (error: any) {
+    // Silently fail - logging should not break the application
+    console.debug('[Debug Log] Failed to write to log file:', error.message);
+  }
+};
 import {
   applyEmergencyTerminationPenalty,
   applyTripCompletionPayout,
@@ -1177,9 +1198,7 @@ export const startScheduledTrip = async (req: any, res: Response) => {
         });
 
         // #region agent log
-        const fs = require('fs');
-        const logPath = '/home/momen-samir/Work/ecar (Copy)/.cursor/debug.log';
-        const logEntry = {
+        safeLogToFile({
           location: 'driver.controller.ts:1140',
           message: 'Sending trip start notifications to parents',
           data: {
@@ -1194,8 +1213,7 @@ export const startScheduledTrip = async (req: any, res: Response) => {
           sessionId: 'debug-session',
           runId: 'trip-start-notifications',
           hypothesisId: 'A'
-        };
-        fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+        });
         // #endregion
 
         // Send notifications to all parents
@@ -1230,14 +1248,14 @@ export const startScheduledTrip = async (req: any, res: Response) => {
               runId: 'trip-start-notifications',
               hypothesisId: 'B'
             };
-            fs.appendFileSync(logPath, JSON.stringify(logEntry2) + '\n');
+            safeLogToFile(logEntry2);
             // #endregion
 
             return result;
           } catch (error: any) {
             console.error(`Error sending notification to parent ${parent.id}:`, error);
             // #region agent log
-            const logEntry3 = {
+            safeLogToFile({
               location: 'driver.controller.ts:1195',
               message: 'Parent notification error',
               data: {
@@ -1250,8 +1268,7 @@ export const startScheduledTrip = async (req: any, res: Response) => {
               sessionId: 'debug-session',
               runId: 'trip-start-notifications',
               hypothesisId: 'C'
-            };
-            fs.appendFileSync(logPath, JSON.stringify(logEntry3) + '\n');
+            });
             // #endregion
             return { success: false, message: error.message };
           }
@@ -1716,9 +1733,7 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
           let etaToNextCheckpoint: { minutes: number; distanceMeters: number; method: string } | null = null;
           
           // #region agent log
-          const fs = require('fs');
-          const logPath = '/home/momen-samir/Work/ecar (Copy)/.cursor/debug.log';
-          const logEntry = {
+          safeLogToFile({
             location: 'driver.controller.ts:1563',
             message: 'ETA calculation inputs',
             data: {
@@ -1734,8 +1749,7 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
             sessionId: 'debug-session',
             runId: 'eta-calculation',
             hypothesisId: 'A'
-          };
-          fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+          });
           // #endregion
           
           if (nextCheckpoint && nextCheckpoint.latitude && nextCheckpoint.longitude) {
@@ -1753,7 +1767,7 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
             const etaMinutes = (distanceToCheckpoint / 1000) / (avgSpeedKmh / 60);
             
             // #region agent log
-            const logEntry2 = {
+            safeLogToFile({
               location: 'driver.controller.ts:1580',
               message: 'ETA calculation results',
               data: {
@@ -1770,8 +1784,7 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
               sessionId: 'debug-session',
               runId: 'eta-calculation',
               hypothesisId: 'B'
-            };
-            fs.appendFileSync(logPath, JSON.stringify(logEntry2) + '\n');
+            });
             // #endregion
             
             etaToNextCheckpoint = {
