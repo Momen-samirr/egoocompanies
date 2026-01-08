@@ -154,15 +154,20 @@ export const registerParent = async (
     // Handle Prisma unique constraint errors
     if (error.code === 'P2002') {
       // Prisma unique constraint violation
-      const field = error.meta?.target?.[0] || 'field';
+      const targetFields = error.meta?.target || [];
+      const field = Array.isArray(targetFields) ? targetFields[0] : (typeof targetFields === 'string' ? targetFields : 'field');
       let message = "Registration failed";
       
-      if (field === 'phoneNumber') {
+      // Normalize field name to handle variations
+      const normalizedField = String(field).toLowerCase();
+      
+      if (normalizedField === 'phonenumber' || normalizedField === 'phone_number' || normalizedField.includes('phone')) {
         message = "This phone number is already registered. Please use a different phone number or try logging in.";
-      } else if (field === 'email') {
+      } else if (normalizedField === 'email' || normalizedField.includes('email')) {
         message = "This email is already registered. Please use a different email or try logging in.";
       } else {
-        message = `This ${field} is already in use. Please use a different ${field}.`;
+        // Fallback: provide a clear, user-friendly message
+        message = "This information is already in use. Please use different credentials or try logging in.";
       }
       
       return res.status(400).json({
