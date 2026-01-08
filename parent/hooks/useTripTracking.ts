@@ -9,10 +9,26 @@ const getWebSocketUrl = (): string => {
     let url = process.env.EXPO_PUBLIC_WEBSOCKET_URL.trim();
     // Remove any leading slashes
     url = url.replace(/^\/+/, '');
-    // Add ws:// if no scheme is present
-    if (!url.match(/^wss?:\/\//)) {
-      url = `ws://${url}`;
+    
+    // Check if URL already has a scheme
+    const hasWss = url.match(/^wss:\/\//i);
+    const hasWs = url.match(/^ws:\/\//i);
+    
+    if (!hasWss && !hasWs) {
+      // No scheme present - determine based on API URL
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || '';
+      // If API URL uses https, use wss:// for WebSocket
+      if (apiUrl.startsWith('https://')) {
+        url = `wss://${url}`;
+      } else {
+        url = `ws://${url}`;
+      }
     }
+    
+    console.log('[WebSocket] Using WebSocket URL:', url.replace(/wss?:\/\//, '***://'));
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:6',message:'WebSocket URL determined',data:{envUrl:process.env.EXPO_PUBLIC_WEBSOCKET_URL,finalUrl:url.replace(/wss?:\/\//, '***://'),apiUrl:process.env.EXPO_PUBLIC_API_URL?.replace(/https?:\/\//, '***://'),platform:Platform.OS},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-url-config',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return url;
   }
   
@@ -111,7 +127,7 @@ export const useTripTracking = ({
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-          console.log("[WebSocket] Connected");
+          console.log("[WebSocket] Connected successfully to:", wsUrl.replace(/wss?:\/\//, '***://'));
           setConnected(true);
           setError(null);
           reconnectAttempts.current = 0;
@@ -126,9 +142,17 @@ export const useTripTracking = ({
           };
           console.log("[WebSocket] Sending subscription:", subscriptionMessage);
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:120',message:'Sending subscription message',data:subscriptionMessage,timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe',hypothesisId:'F'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:129',message:'WebSocket connected and sending subscription',data:{wsUrl:wsUrl.replace(/wss?:\/\//, '***://'),subscriptionMessage,parentId:parent.id},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe',hypothesisId:'F'})}).catch(()=>{});
           // #endregion
-          ws.send(JSON.stringify(subscriptionMessage));
+          try {
+            ws.send(JSON.stringify(subscriptionMessage));
+            console.log("[WebSocket] Subscription message sent successfully");
+          } catch (sendError) {
+            console.error("[WebSocket] Error sending subscription:", sendError);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:142',message:'Error sending subscription',data:{error:sendError?.message,subscriptionMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe-error',hypothesisId:'G'})}).catch(()=>{});
+            // #endregion
+          }
         };
 
         ws.onmessage = (event) => {
@@ -182,7 +206,7 @@ export const useTripTracking = ({
                 // #endregion
               }
             } else if (data.type === "tripSubscriptionConfirmed") {
-              console.log("[WebSocket] Subscribed to trip updates", { 
+              console.log("[WebSocket] ✅ Subscription confirmed!", { 
                 confirmedTripId: data.tripId, 
                 confirmedStudentId: data.studentId,
                 subscribedTripId: tripId,
@@ -190,7 +214,7 @@ export const useTripTracking = ({
                 matches: data.tripId === tripId && data.studentId === studentId
               });
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:137',message:'Subscription confirmed',data:{confirmedTripId:data.tripId,confirmedStudentId:data.studentId,subscribedTripId:tripId,subscribedStudentId:studentId,matches:data.tripId===tripId&&data.studentId===studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscription',hypothesisId:'B'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:184',message:'Subscription confirmed',data:{confirmedTripId:data.tripId,confirmedStudentId:data.studentId,subscribedTripId:tripId,subscribedStudentId:studentId,matches:data.tripId===tripId&&data.studentId===studentId,message:data.message},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscription-confirmed',hypothesisId:'B'})}).catch(()=>{});
               // #endregion
             } else {
               // #region agent log
@@ -208,24 +232,43 @@ export const useTripTracking = ({
 
         ws.onerror = (err) => {
           // #region agent log
-          console.error("[WebSocket] Error:", err);
+          console.error("[WebSocket] ❌ Connection error:", err);
           const errorMessage = err.message || "WebSocket connection error";
-          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:97',message:'WebSocket error',data:{error:errorMessage,wsUrl,err:JSON.stringify(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-error',hypothesisId:'E'})}).catch(()=>{});
+          const errorDetails = {
+            error: errorMessage,
+            wsUrl: wsUrl.replace(/wss?:\/\//, '***://'),
+            readyState: ws.readyState,
+            url: ws.url?.replace(/wss?:\/\//, '***://'),
+            protocol: ws.protocol,
+            extensions: ws.extensions
+          };
+          console.error("[WebSocket] Error details:", errorDetails);
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:209',message:'WebSocket error',data:errorDetails,timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-error',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
           setError(errorMessage);
           setConnected(false);
         };
 
-        ws.onclose = () => {
-          console.log("[WebSocket] Disconnected");
+        ws.onclose = (event) => {
+          console.log("[WebSocket] Disconnected", { 
+            code: event.code, 
+            reason: event.reason || 'No reason provided',
+            wasClean: event.wasClean 
+          });
           setConnected(false);
+
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:219',message:'WebSocket disconnected',data:{code:event.code,reason:event.reason,wasClean:event.wasClean,reconnectAttempts:reconnectAttempts.current,wsUrl:wsUrl.replace(/wss?:\/\//, '***://')},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-disconnect',hypothesisId:'H'})}).catch(()=>{});
+          // #endregion
 
           // Attempt to reconnect
           if (reconnectAttempts.current < 5) {
             reconnectAttempts.current += 1;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+            console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/5)`);
             reconnectTimeoutRef.current = setTimeout(connect, delay);
           } else {
+            console.error("[WebSocket] Max reconnection attempts reached");
             setError("Failed to reconnect. Please refresh.");
           }
         };
