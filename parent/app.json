@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Ridewave Parent",
-    "slug": "Ridewave-Parent",
+    "slug": "ridewave-parent",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -37,7 +37,9 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "INTERNET",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -68,14 +70,10 @@
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "d295abef-8c43-4e00-90da-cddd1f9bead8"
       }
     }
   }
 }
-
-
-
-
-
-
-

@@ -404,12 +404,15 @@ export const getStudentActiveTrip = async (
       });
     }
 
+    // Extract stop after null check for TypeScript
+    const studentStop = student.stop;
+
     // Check all trips for this stop (for debugging)
     const allTripsForStop = await prisma.scheduledTrip.findMany({
       where: {
         points: {
           some: {
-            stopId: student.stop.id,
+            stopId: studentStop.id,
           },
         },
       },
@@ -420,7 +423,7 @@ export const getStudentActiveTrip = async (
       },
     });
     console.log('[DEBUG] getStudentActiveTrip: All trips for stop', {
-      stopId: student.stop.id,
+      stopId: studentStop.id,
       tripsCount: allTripsForStop.length,
       trips: allTripsForStop,
     });
@@ -449,26 +452,26 @@ export const getStudentActiveTrip = async (
       name: trip.name,
       pointsCount: trip.points.length,
       points: trip.points.map(p => ({ id: p.id, name: p.name, stopId: p.stopId, order: p.order })),
-      hasMatchingStop: trip.points.some(p => p.stopId === student.stop.id),
+      hasMatchingStop: trip.points.some(p => p.stopId === studentStop.id),
     }));
     
     console.log('[DEBUG] getStudentActiveTrip: All ACTIVE trips in system', {
       activeTripsCount: allActiveTrips.length,
-      studentStopId: student.stop.id,
-      studentStopName: student.stop.name,
+      studentStopId: studentStop.id,
+      studentStopName: studentStop.name,
       activeTrips: JSON.stringify(tripsWithDetails, null, 2),
     });
     
     // Check which trip (if any) has points matching the student's stop
     const tripsWithMatchingStop = allActiveTrips.filter(trip => 
-      trip.points.some(p => p.stopId === student.stop.id)
+      trip.points.some(p => p.stopId === studentStop.id)
     );
     console.log('[DEBUG] getStudentActiveTrip: Trips with matching stop', {
       matchingTripsCount: tripsWithMatchingStop.length,
       matchingTrips: tripsWithMatchingStop.map(trip => ({
         id: trip.id,
         name: trip.name,
-        matchingPoints: trip.points.filter(p => p.stopId === student.stop.id).map(p => ({
+        matchingPoints: trip.points.filter(p => p.stopId === studentStop.id).map(p => ({
           id: p.id,
           name: p.name,
           stopId: p.stopId,
@@ -483,7 +486,7 @@ export const getStudentActiveTrip = async (
         status: { in: ["ACTIVE", "SCHEDULED"] },
         points: {
           some: {
-            stopId: student.stop.id,
+            stopId: studentStop.id,
           },
         },
       },
@@ -532,7 +535,7 @@ export const getStudentActiveTrip = async (
 
     // Get student's specific point in the trip by stopId
     let studentPoint = activeTrip.points.find(
-      (p: any) => p.stopId === student.stop.id
+      (p: any) => p.stopId === studentStop.id
     );
     
     // Fallback to first point if not found

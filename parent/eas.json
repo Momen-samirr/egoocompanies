@@ -1,0 +1,37 @@
+{
+  "cli": {
+    "version": ">= 16.27.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "node": "20.18.0",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.egoobus.com/api/v1",
+        "EXPO_PUBLIC_WEBSOCKET_URL": "wss://ws.egoobus.com",
+        "EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY": "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+
