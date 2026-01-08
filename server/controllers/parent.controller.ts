@@ -55,25 +55,34 @@ export const registerParent = async (
     // Check if parent already exists
     if (phoneNumber) {
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      console.log(`[Parent Registration] Checking for existing parent with phone: ${normalizedPhone}`);
+      
       const existingByPhone = await prisma.parent.findUnique({
         where: { phoneNumber: normalizedPhone },
       });
+      
       if (existingByPhone) {
+        console.log(`[Parent Registration] Phone number already exists: ${normalizedPhone}`);
         return res.status(400).json({
           success: false,
-          message: "Phone number already registered",
+          message: "This phone number is already registered. Please use a different phone number or try logging in.",
         });
       }
     }
 
     if (email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      console.log(`[Parent Registration] Checking for existing parent with email: ${normalizedEmail}`);
+      
       const existingByEmail = await prisma.parent.findUnique({
-        where: { email },
+        where: { email: normalizedEmail },
       });
+      
       if (existingByEmail) {
+        console.log(`[Parent Registration] Email already exists: ${normalizedEmail}`);
         return res.status(400).json({
           success: false,
-          message: "Email already registered",
+          message: "This email is already registered. Please use a different email or try logging in.",
         });
       }
     }
@@ -85,10 +94,15 @@ export const registerParent = async (
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Create parent
+    const normalizedPhone = phoneNumber ? normalizePhoneNumber(phoneNumber) : undefined;
+    const normalizedEmail = email ? email.trim().toLowerCase() : undefined;
+    
+    console.log(`[Parent Registration] Creating parent with phone: ${normalizedPhone}, email: ${normalizedEmail}`);
+    
     const parent = await prisma.parent.create({
       data: {
-        phoneNumber: phoneNumber ? normalizePhoneNumber(phoneNumber) : undefined,
-        email: email || undefined,
+        phoneNumber: normalizedPhone,
+        email: normalizedEmail,
         firstName,
         lastName,
         password: hashedPassword,
@@ -96,6 +110,8 @@ export const registerParent = async (
         isVerified: false,
       },
     });
+    
+    console.log(`[Parent Registration] Parent created successfully with ID: ${parent.id}`);
 
     // Send verification code via SMS or Email
     if (phoneNumber && process.env.TWILIO_SERVICE_SID) {
@@ -134,9 +150,31 @@ export const registerParent = async (
     });
   } catch (error: any) {
     console.error("Registration error:", error);
+    
+    // Handle Prisma unique constraint errors
+    if (error.code === 'P2002') {
+      // Prisma unique constraint violation
+      const field = error.meta?.target?.[0] || 'field';
+      let message = "Registration failed";
+      
+      if (field === 'phoneNumber') {
+        message = "This phone number is already registered. Please use a different phone number or try logging in.";
+      } else if (field === 'email') {
+        message = "This email is already registered. Please use a different email or try logging in.";
+      } else {
+        message = `This ${field} is already in use. Please use a different ${field}.`;
+      }
+      
+      return res.status(400).json({
+        success: false,
+        message: message,
+      });
+    }
+    
+    // Handle other errors
     res.status(400).json({
       success: false,
-      message: error.message || "Registration failed",
+      message: error.message || "Registration failed. Please try again.",
     });
   }
 };
