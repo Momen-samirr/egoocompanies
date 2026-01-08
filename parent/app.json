@@ -28,6 +28,8 @@
       },
       "package": "com.becodemy.ridewaveparent",
       "googleServicesFile": "./google-services.json",
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q"
