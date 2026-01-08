@@ -31,10 +31,19 @@ export const registerParent = async (
   try {
     const { phoneNumber, email, firstName, lastName, password } = req.body;
 
-    if (!phoneNumber && !email) {
+    // Email is required for registration (verification codes are sent via email)
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Phone number or email is required",
+        message: "Email is required for registration. Verification codes are sent via email.",
+      });
+    }
+
+    // Check if email service is configured
+    if (!process.env.EMAIL_USER) {
+      return res.status(500).json({
+        success: false,
+        message: "Email service is not configured. Please contact support.",
       });
     }
 
@@ -126,33 +135,50 @@ export const registerParent = async (
     
     console.log(`[Parent Registration] Parent created successfully with ID: ${parent.id}`);
 
-    // Send verification code via SMS or Email
-    if (phoneNumber && process.env.TWILIO_SERVICE_SID) {
-      try {
-        await client.verify.v2
-          .services(process.env.TWILIO_SERVICE_SID!)
-          .verifications.create({
-            channel: "sms",
-            to: normalizePhoneNumber(phoneNumber),
+    // Send verification code via Email (email is required for registration)
+    try {
+      await sendEmail({
+        to: email,
+        name: `${firstName} ${lastName}`,
+        subject: "Verify your parent account",
+        html: `
+          <p>Hi ${firstName},</p>
+          <p>Your verification code is <strong>${verificationCode}</strong>.</p>
+          <p>This code will expire in 10 minutes.</p>
+          <p>Thanks,<br>School Transportation Team</p>
+        `,
+      });
+      console.log(`[Parent Registration] Verification code sent to email: ${email}`);
+    } catch (error) {
+      console.error("Failed to send email verification:", error);
+      // If email fails and phone is available, fallback to SMS
+      if (phoneNumber && process.env.TWILIO_SERVICE_SID) {
+        try {
+          await client.verify.v2
+            .services(process.env.TWILIO_SERVICE_SID!)
+            .verifications.create({
+              channel: "sms",
+              to: normalizePhoneNumber(phoneNumber),
+            });
+          console.log(`[Parent Registration] Email failed, sent verification code via SMS to: ${phoneNumber}`);
+        } catch (smsError) {
+          console.error("Failed to send SMS verification as fallback:", smsError);
+          // Parent is already created, return success but warn about verification code delivery
+          return res.status(201).json({
+            success: true,
+            message: "Registration successful, but failed to send verification code. Please contact support.",
+            parentId: parent.id,
+            verificationCode: verificationCode, // Include code in response as fallback
           });
-      } catch (error) {
-        console.error("Failed to send SMS verification:", error);
-      }
-    } else if (email && process.env.EMAIL_USER) {
-      try {
-        await sendEmail({
-          to: email,
-          name: `${firstName} ${lastName}`,
-          subject: "Verify your parent account",
-          html: `
-            <p>Hi ${firstName},</p>
-            <p>Your verification code is <strong>${verificationCode}</strong>.</p>
-            <p>This code will expire in 10 minutes.</p>
-            <p>Thanks,<br>School Transportation Team</p>
-          `,
+        }
+      } else {
+        // Parent is already created, return success but warn about verification code delivery
+        return res.status(201).json({
+          success: true,
+          message: "Registration successful, but failed to send verification code via email. Please contact support.",
+          parentId: parent.id,
+          verificationCode: verificationCode, // Include code in response as fallback
         });
-      } catch (error) {
-        console.error("Failed to send email verification:", error);
       }
     }
 
