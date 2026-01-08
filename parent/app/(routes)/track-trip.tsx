@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Linking,
   Animated,
+  Image,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import MapView, { Marker, Polyline, Region } from "react-native-maps";
@@ -158,27 +159,45 @@ export default function TrackTripScreen() {
   const [directionsError, setDirectionsError] = useState(false);
   const [calculatedETA, setCalculatedETA] = useState<{ minutes: number; distanceMeters: number } | null>(null);
   const [calculatingETA, setCalculatingETA] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
   const mapRef = useRef<MapView>(null);
   const rotationAnim = useRef(new Animated.Value(0)).current;
   const previousHeading = useRef<number | null>(null);
   const lastCalculatedLocation = useRef<{ latitude: number; longitude: number } | null>(null);
+  const lastCalculatedTargetPointId = useRef<string | null>(null);
   const renderCountRef = useRef(0);
   const tripUpdateCountRef = useRef(0);
   const tripRef = useRef(trip);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const fetchTripDetailsRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
   const isFetchingRef = useRef(false); // Prevent concurrent fetches
+  const prevTripIdRef = useRef<string | null>(null);
+  const prevCurrentPointIndexRef = useRef<number | null>(null);
+  const tripPointsKeyRef = useRef<string>(''); // Track trip points key for memoization
   
   // Update ref when trip changes
+  // CRITICAL: Update the ref whenever trip changes, not just when assignedCaptain.id changes
+  // This ensures tripRef.current always has the latest trip data for comparisons in fetchTripDetails
   useEffect(() => {
     tripRef.current = trip;
-  }, [trip]);
+    // Reset image load error when trip changes
+    if (trip?.assignedCaptain?.id) {
+      setImageLoadError(false);
+    }
+  }, [trip]); // Changed from [trip?.assignedCaptain?.id] to [trip] to update ref on ANY trip change
   
   // Track component renders
   renderCountRef.current += 1;
   // #region agent log
+  const tripIdChanged = prevTripIdRef.current !== trip?.id;
+  const currentPointIndexChanged = prevCurrentPointIndexRef.current !== (trip?.progress?.currentPointIndex ?? 0);
+  if (tripIdChanged || currentPointIndexChanged) {
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:render',message:'Component render - trip state changed',data:{renderCount:renderCountRef.current,hasTrip:!!trip,tripId:trip?.id,prevTripId:prevTripIdRef.current,tripIdChanged,currentPointIndex:trip?.progress?.currentPointIndex ?? 0,prevCurrentPointIndex:prevCurrentPointIndexRef.current,currentPointIndexChanged,hasLocation:!!location?.location,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'render-state-change',hypothesisId:'E'})}).catch(()=>{});
+    prevTripIdRef.current = trip?.id || null;
+    prevCurrentPointIndexRef.current = trip?.progress?.currentPointIndex ?? 0;
+  }
   if (renderCountRef.current <= 10 || renderCountRef.current % 5 === 0) {
-    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:render',message:'Component render',data:{renderCount:renderCountRef.current,hasTrip:!!trip,tripId:trip?.id,hasLocation:!!location?.location,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'render',hypothesisId:'E'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:render',message:'Component render',data:{renderCount:renderCountRef.current,hasTrip:!!trip,tripId:trip?.id,currentPointIndex:trip?.progress?.currentPointIndex ?? 0,hasLocation:!!location?.location,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'render',hypothesisId:'E'})}).catch(()=>{});
   }
   // #endregion
 
@@ -221,43 +240,47 @@ export default function TrackTripScreen() {
     
     // Call fetchTripDetails directly - it's stable via useCallback with [studentId, tripId] deps
     // The ref is only needed for the interval callback to access the latest function
-    // We need to call it here to ensure initial fetch happens, but we can't depend on fetchTripDetails
-    // in the dependency array because that would cause the effect to re-run when it's recreated
-    // So we use a small delay to ensure fetchTripDetails is defined
-    const doFetch = () => {
+    // Try immediately if ref is set, otherwise wait for it
+    const doInitialFetch = () => {
       if (fetchTripDetailsRef.current) {
-        fetchTripDetailsRef.current();
+        console.log('[PARENT-DEBUG] Calling initial fetchTripDetails');
+        fetchTripDetailsRef.current(false); // Show loading on initial fetch
+      } else {
+        console.log('[PARENT-DEBUG] fetchTripDetailsRef.current not ready, scheduling initial fetch');
+        // Ref not set yet - wait for it (should be set by the effect at line 799)
+        setTimeout(() => {
+          if (fetchTripDetailsRef.current) {
+            console.log('[PARENT-DEBUG] Calling delayed initial fetchTripDetails');
+            fetchTripDetailsRef.current(false);
+          }
+        }, 50);
       }
     };
     
-    // Try immediately, fallback to next tick if ref not set yet
-    if (fetchTripDetailsRef.current) {
-      doFetch();
-    } else {
-      // Ref not set yet - wait for it (should be set by the effect at line 660)
-      const timeoutId = setTimeout(() => {
-        doFetch();
-      }, 10);
-      return () => {
-        clearTimeout(timeoutId);
-        if (refreshIntervalRef.current) {
-          clearInterval(refreshIntervalRef.current);
-          refreshIntervalRef.current = null;
-        }
-      };
-    }
+    // Call initial fetch
+    doInitialFetch();
     
-    // Refresh trip details periodically to get updated reachedAt status
-    // This ensures we detect when driver presses "Reached"
+    // CRITICAL: ALWAYS set up the interval, even if fetchTripDetailsRef is not ready yet
+    // The interval callback will check if the ref is ready when it runs
+    // This ensures the interval is set up and will work once fetchTripDetails is available
+    console.log('[PARENT-DEBUG] Setting up 5-second refresh interval');
     refreshIntervalRef.current = setInterval(() => {
+      console.log('[PARENT-DEBUG] Interval tick - calling fetchTripDetails via ref');
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:225',message:'Periodic refresh interval triggered',data:{tripId,studentId,intervalId:refreshIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-trigger',hypothesisId:'B'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:225',message:'Periodic refresh interval triggered',data:{tripId,studentId,intervalId:refreshIntervalRef.current,hasFetchTripDetailsRef:!!fetchTripDetailsRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-trigger',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       // Use ref to get latest fetchTripDetails function
       if (fetchTripDetailsRef.current) {
+        console.log('[PARENT-DEBUG] Calling fetchTripDetailsRef.current(true) from interval');
         fetchTripDetailsRef.current(true); // Silent refresh (don't show loading)
+      } else {
+        console.log('[PARENT-DEBUG] WARNING: fetchTripDetailsRef.current is null in interval callback!');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:282',message:'Interval callback - fetchTripDetailsRef is null',data:{tripId,studentId,intervalId:refreshIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-ref-null',hypothesisId:'X'})}).catch(()=>{});
+        // #endregion
       }
     }, 5000); // Refresh every 5 seconds
+    console.log('[PARENT-DEBUG] Interval set up successfully with ID:', refreshIntervalRef.current);
     
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:231',message:'Interval set up successfully',data:{tripId,studentId,effectId,intervalId:refreshIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-setup-success',hypothesisId:'U'})}).catch(()=>{});
@@ -310,13 +333,50 @@ export default function TrackTripScreen() {
     }
   }, [location?.location?.heading]);
 
-  // Create stable reference for trip points to avoid unnecessary effect triggers
-  // Use a ref to track previous key and only recalculate when content actually changes
-  const tripPointsKeyRef = useRef<string>('');
-  // Calculate the key string from trip points
-  const tripPointsKeyString = trip?.points 
-    ? trip.points.map((p: any) => `${p.id}:${p.reachedAt || ''}`).join(',')
-    : '';
+  // Memoize student point and related values BEFORE conditional returns
+  // This ensures hooks are always called in the same order
+  const studentPoint = useMemo(() => trip?.studentPoint || trip?.points?.[0], [trip?.studentPoint?.id, trip?.points?.[0]?.id]);
+  const studentPointId = useMemo(() => studentPoint?.id || null, [studentPoint?.id]);
+  const currentPointIndex = trip?.progress?.currentPointIndex ?? 0;
+  
+  // Calculate the key string from trip points - MUST be before allPoints so it can be used in dependencies
+  // CRITICAL: Memoize this to ensure React detects changes
+  // IMPORTANT: We need to depend on the actual content, not just the array reference
+  // Create a stable string representation that changes when content changes
+  const tripPointsKeyString = useMemo(() => {
+    if (!trip?.points) return '';
+    // Create a key that includes both reachedAt and currentPointIndex to detect all changes
+    const pointsKey = trip.points.map((p: any) => `${p.id}:${p.reachedAt || ''}`).join(',');
+    const currentIdx = trip?.progress?.currentPointIndex ?? 0;
+    const key = `${pointsKey}|idx:${currentIdx}`;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:336',message:'tripPointsKeyString calculated',data:{key,pointsKey,currentIdx,pointsCount:trip.points.length,pointsReachedAt:trip.points.map((p:any)=>({id:p.id,name:p.name,reachedAt:p.reachedAt})),tripId:trip?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'tripPointsKeyString-calc',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    return key;
+  }, [trip?.points, trip?.id, trip?.progress?.currentPointIndex]); // Include currentPointIndex in dependencies
+  
+  // CRITICAL FIX: allPoints must depend on tripPointsKeyString to update when content changes (reachedAt, currentPointIndex)
+  // Previously only depended on length and ID, which don't change when driver confirms stops
+  const allPoints = useMemo(() => {
+    const points = trip?.points || [];
+    const currentIdx = trip?.progress?.currentPointIndex ?? 0;
+    console.log('[PARENT-DEBUG] allPoints useMemo recalculating', {
+      pointsCount: points.length,
+      currentPointIndex: currentIdx,
+      tripId: trip?.id,
+      pointsReachedAt: points.map((p: any) => ({ id: p.id, name: p.name, reachedAt: p.reachedAt }))
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:323',message:'allPoints useMemo recalculating',data:{pointsCount:points.length,pointsKey:tripPointsKeyString,currentPointIndex:currentIdx,hasTrip:!!trip,tripId:trip?.id,pointsReachedAt:points.map((p:any)=>({id:p.id,name:p.name,reachedAt:p.reachedAt}))},timestamp:Date.now(),sessionId:'debug-session',runId:'allPoints-memo',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    return points;
+  }, [trip?.points, trip?.id, tripPointsKeyString, currentPointIndex]); // Depend on trip.points reference AND tripPointsKeyString for content changes
+  
+  // Find the index of the student's stop in the trip points (before conditional returns)
+  const studentPointIndex = useMemo(() => {
+    if (!studentPoint || !studentPointId || !allPoints.length) return -1;
+    return allPoints.findIndex((p: any) => p.id === studentPointId);
+  }, [studentPointId, allPoints.length, studentPoint]);
   
   const tripPointsKey = useMemo(() => {
     // #region agent log
@@ -475,7 +535,13 @@ export default function TrackTripScreen() {
     // #endregion
     
     if (!targetPoint || !targetPoint.latitude || !targetPoint.longitude) {
+      console.log('[PARENT-DEBUG] Invalid target point - clearing ETA', {
+        hasTargetPoint: !!targetPoint,
+        hasLat: !!targetPoint?.latitude,
+        hasLng: !!targetPoint?.longitude
+      });
       setCalculatedETA(null);
+      lastCalculatedTargetPointId.current = null; // Reset target point tracking
       return;
     }
     
@@ -495,8 +561,23 @@ export default function TrackTripScreen() {
       Math.abs(driverLocation.latitude - lastCalculatedLocation.current.latitude) > 0.0005 || // ~50 meters
       Math.abs(driverLocation.longitude - lastCalculatedLocation.current.longitude) > 0.0005;
     
-    if (!hasLocationChanged && calculatedETA) {
-      // Location hasn't changed significantly, skip recalculation
+    // CRITICAL: Also check if target point changed (e.g., from pickup to drop-off)
+    // This ensures ETA recalculates when driver confirms a stop, even if location hasn't moved
+    const targetPointId = targetPoint?.id || null;
+    const hasTargetPointChanged = lastCalculatedTargetPointId.current !== targetPointId;
+    
+    console.log('[PARENT-DEBUG] ETA recalculation check', {
+      hasLocationChanged,
+      hasTargetPointChanged,
+      targetPointId,
+      lastTargetPointId: lastCalculatedTargetPointId.current,
+      targetPointName: targetPoint?.name,
+      isPickedUp
+    });
+    
+    if (!hasLocationChanged && !hasTargetPointChanged && calculatedETA) {
+      // Neither location nor target point has changed, skip recalculation
+      console.log('[PARENT-DEBUG] Skipping ETA recalculation - no changes detected');
       return;
     }
     
@@ -505,20 +586,38 @@ export default function TrackTripScreen() {
       // Check if we're still calculating (prevent race conditions)
       if (calculatingETA) return;
       
-      // Double-check location hasn't changed during debounce
+      // Double-check location and target point haven't changed during debounce
+      const currentTargetPointId = targetPoint?.id || null;
       if (lastCalculatedLocation.current &&
+          lastCalculatedTargetPointId.current === currentTargetPointId &&
           Math.abs(driverLocation.latitude - lastCalculatedLocation.current.latitude) < 0.0005 &&
           Math.abs(driverLocation.longitude - lastCalculatedLocation.current.longitude) < 0.0005 &&
           calculatedETA) {
+        console.log('[PARENT-DEBUG] Skipping ETA calculation - no changes during debounce');
         return;
       }
+      
+      console.log('[PARENT-DEBUG] Calculating ETA to target point', {
+        targetPointName: targetPoint?.name,
+        targetPointId: currentTargetPointId,
+        isPickedUp,
+        driverLocation: { lat: driverLocation.latitude, lng: driverLocation.longitude }
+      });
       
       setCalculatingETA(true);
       try {
         const eta = await calculateETAToStudentStop(driverLocation, targetPoint, GOOGLE_MAPS_API_KEY);
         if (eta) {
+          console.log('[PARENT-DEBUG] ETA calculated successfully', {
+            minutes: eta.minutes,
+            distanceMeters: eta.distanceMeters,
+            targetPointName: targetPoint?.name
+          });
           setCalculatedETA(eta);
           lastCalculatedLocation.current = { ...driverLocation };
+          lastCalculatedTargetPointId.current = currentTargetPointId; // Track target point ID
+        } else {
+          console.log('[PARENT-DEBUG] ETA calculation returned null');
         }
       } catch (error: any) {
         console.error('Error calculating ETA:', error);
@@ -526,6 +625,7 @@ export default function TrackTripScreen() {
         fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:260',message:'ETA calculation error in useEffect',data:{error:error?.message,errorStack:error?.stack,driverLocation,targetPoint},timestamp:Date.now(),sessionId:'debug-session',runId:'eta-calculation-error',hypothesisId:'G'})}).catch(()=>{});
         // #endregion
         setCalculatedETA(null);
+        lastCalculatedTargetPointId.current = null; // Reset target point tracking on error
       } finally {
         setCalculatingETA(false);
       }
@@ -602,14 +702,19 @@ export default function TrackTripScreen() {
   };
 
   const fetchTripDetails = useCallback(async (silent = false) => {
+    // CRITICAL: Log to console FIRST before any fetch calls
+    console.log('[PARENT-DEBUG] fetchTripDetails called', { silent, studentId, tripId, timestamp: Date.now() });
+    
     // Prevent concurrent fetches
     if (isFetchingRef.current && !silent) {
+      console.log('[PARENT-DEBUG] fetchTripDetails skipped - already fetching');
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:592',message:'fetchTripDetails skipped - already fetching',data:{silent,studentId,tripId},timestamp:Date.now(),sessionId:'debug-session',runId:'fetch-skipped',hypothesisId:'W'})}).catch(()=>{});
       // #endregion
       return;
     }
     
+    console.log('[PARENT-DEBUG] fetchTripDetails proceeding with fetch');
     // #region agent log
     const callStack = new Error().stack;
     fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:595',message:'fetchTripDetails called',data:{silent,studentId,tripId,callStack:callStack?.split('\n').slice(0,5).join(' | ')},timestamp:Date.now(),sessionId:'debug-session',runId:'fetch-call',hypothesisId:'E'})}).catch(()=>{});
@@ -620,7 +725,17 @@ export default function TrackTripScreen() {
       if (!silent) {
         setLoading(true);
       }
+      console.log('[PARENT-DEBUG] Making API call to fetch trip', { studentId, url: `/parent/students/${studentId}/trip` });
       const response = await api.get(`/parent/students/${studentId}/trip`);
+      console.log('[PARENT-DEBUG] API call successful', { 
+        success: response.data.success, 
+        hasTrip: !!response.data.trip,
+        tripId: response.data.trip?.id,
+        currentPointIndex: response.data.trip?.progress?.currentPointIndex,
+        pointsCount: response.data.trip?.points?.length,
+        pointsIds: response.data.trip?.points?.map((p: any) => p.id),
+        pointsReachedAt: response.data.trip?.points?.map((p: any) => ({ id: p.id, name: p.name, reachedAt: p.reachedAt }))
+      });
       if (response.data.success && response.data.trip) {
         // Use ref to get latest trip value without causing dependency issues
         const currentTrip = tripRef.current;
@@ -641,20 +756,71 @@ export default function TrackTripScreen() {
         const prevPointsKey = currentTrip?.points ? currentTrip.points.map((p: any) => `${p.id}:${p.reachedAt || ''}`).join(',') : '';
         const newPointsKey = response.data.trip.points ? response.data.trip.points.map((p: any) => `${p.id}:${p.reachedAt || ''}`).join(',') : '';
         const pointsDataChanged = prevPointsKey !== newPointsKey;
+        
+        console.log('[PARENT-DEBUG] Points key comparison', {
+          prevPointsCount: currentTrip?.points?.length,
+          newPointsCount: response.data.trip.points?.length,
+          prevPointsKey: prevPointsKey.substring(0, 100),
+          newPointsKey: newPointsKey.substring(0, 100),
+          pointsDataChanged
+        });
+        
+        // CRITICAL: Always update if currentPointIndex changed, even if other checks fail
+        // This ensures the UI updates when driver confirms a stop
         const shouldUpdateTrip = tripIdChanged || pointsLengthChanged || reachedAtChanged || currentPointIndexChanged || pointsDataChanged || !currentTrip;
+        
+        // #region agent log
+        // Log detailed comparison to debug why updates might be skipped
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:686',message:'Detailed trip comparison',data:{tripId:newTripId,prevTripId,tripIdChanged,prevTripPointsLength,newTripPointsLength,pointsLengthChanged,prevReachedAt,newReachedAt,reachedAtChanged,prevCurrentPointIndex,newCurrentPointIndex,currentPointIndexChanged,prevPointsKey,newPointsKey,pointsDataChanged,shouldUpdateTrip,hasCurrentTrip:!!currentTrip,prevPointsReachedAt:currentTrip?.points?.map((p:any)=>({id:p.id,reachedAt:p.reachedAt})),newPointsReachedAt:response.data.trip.points?.map((p:any)=>({id:p.id,reachedAt:p.reachedAt}))},timestamp:Date.now(),sessionId:'debug-session',runId:'trip-comparison-detailed',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
         fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:587',message:'Fetched trip details - checking if update needed',data:{tripId:newTripId,tripName:response.data.trip.name,hasStudentPoint:!!response.data.trip.studentPoint,studentPointReachedAt:newReachedAt,pointsCount:newTripPointsLength,pointsReachedAt:response.data.trip.points?.map((p:any)=>({id:p.id,name:p.name,reachedAt:p.reachedAt})),currentPointIndex:newCurrentPointIndex,prevTripId,tripIdChanged,prevTripPointsLength,pointsLengthChanged,prevReachedAt,reachedAtChanged,prevCurrentPointIndex,currentPointIndexChanged,pointsDataChanged,shouldUpdateTrip,hasTrip:!!currentTrip},timestamp:Date.now(),sessionId:'debug-session',runId:'trip-fetch',hypothesisId:'F'})}).catch(()=>{});
         // #endregion
+        
+        // CRITICAL: Compare BEFORE updating ref - we need to compare OLD vs NEW data
+        // The ref should be updated AFTER comparison but BEFORE setTrip
+        // This ensures the next interval run has the latest data for comparison
+        
+        // CRITICAL: Update ref AFTER comparison but BEFORE setTrip
+        // This ensures:
+        // 1. Comparison uses OLD data from ref (correct)
+        // 2. Ref is updated with NEW data for next comparison (correct)
+        // 3. State is updated if needed (triggers re-render)
+        tripRef.current = response.data.trip;
+        console.log('[PARENT-DEBUG] tripRef.current updated with latest trip data', { 
+          tripId: newTripId,
+          currentPointIndex: newCurrentPointIndex,
+          pointsCount: newTripPointsLength,
+          prevCurrentPointIndex,
+          currentPointIndexChanged
+        });
         
         // Only update trip state if data actually changed to prevent unnecessary re-renders
         if (shouldUpdateTrip) {
           tripUpdateCountRef.current += 1;
-          setTrip(response.data.trip);
+          const updateReason = tripIdChanged?'tripIdChanged':pointsLengthChanged?'pointsLengthChanged':reachedAtChanged?'reachedAtChanged':currentPointIndexChanged?'currentPointIndexChanged':pointsDataChanged?'pointsDataChanged':'noTrip';
+          console.log('[PARENT-DEBUG] setTrip WILL BE CALLED - state will update', { 
+            tripId: newTripId, 
+            reason: updateReason,
+            newCurrentPointIndex,
+            prevCurrentPointIndex,
+            currentPointIndexChanged
+          });
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:590',message:'setTrip called - state update queued',data:{tripId:newTripId,tripUpdateCount:tripUpdateCountRef.current,reason:tripIdChanged?'tripIdChanged':pointsLengthChanged?'pointsLengthChanged':reachedAtChanged?'reachedAtChanged':currentPointIndexChanged?'currentPointIndexChanged':pointsDataChanged?'pointsDataChanged':'noTrip'},timestamp:Date.now(),sessionId:'debug-session',runId:'setTrip-call',hypothesisId:'C'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:590',message:'setTrip called - state update queued',data:{tripId:newTripId,tripUpdateCount:tripUpdateCountRef.current,reason:updateReason,newCurrentPointIndex,newReachedAt,newPointsKey},timestamp:Date.now(),sessionId:'debug-session',runId:'setTrip-call',hypothesisId:'C'})}).catch(()=>{});
           // #endregion
+          setTrip(response.data.trip);
+          console.log('[PARENT-DEBUG] setTrip COMPLETED - state update queued', { tripId: newTripId });
         } else {
+          console.log('[PARENT-DEBUG] setTrip SKIPPED - no changes detected', {
+            tripId: newTripId,
+            prevCurrentPointIndex,
+            newCurrentPointIndex,
+            prevPointsKey: prevPointsKey.substring(0, 50),
+            newPointsKey: newPointsKey.substring(0, 50),
+            note: 'tripRef.current updated but setTrip skipped - no state change needed'
+          });
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:597',message:'Skipping setTrip - no data changes detected',data:{tripId:newTripId},timestamp:Date.now(),sessionId:'debug-session',runId:'setTrip-skipped',hypothesisId:'H'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:597',message:'Skipping setTrip - no data changes detected',data:{tripId:newTripId,prevPointsKey,newPointsKey,prevReachedAt,newReachedAt,prevCurrentPointIndex,newCurrentPointIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'setTrip-skipped',hypothesisId:'H'})}).catch(()=>{});
           // #endregion
         }
 
@@ -672,12 +838,14 @@ export default function TrackTripScreen() {
         }
       }
     } catch (error) {
-      console.error("Error fetching trip:", error);
+      console.error("[PARENT-DEBUG] Error fetching trip:", error);
+      console.log('[PARENT-DEBUG] API call failed', { error: error?.message || String(error) });
     } finally {
       isFetchingRef.current = false;
       if (!silent) {
         setLoading(false);
       }
+      console.log('[PARENT-DEBUG] fetchTripDetails completed');
     }
   }, [studentId, tripId]);
   
@@ -685,6 +853,95 @@ export default function TrackTripScreen() {
   useEffect(() => {
     fetchTripDetailsRef.current = fetchTripDetails;
   }, [fetchTripDetails]);
+
+  // Track trip state changes to verify updates are being detected
+  useEffect(() => {
+    if (trip) {
+      const currentIdx = trip.progress?.currentPointIndex ?? 0;
+      const pointsReachedAt = trip.points?.map((p: any) => ({ id: p.id, name: p.name, reachedAt: p.reachedAt })) || [];
+      console.log('[PARENT-DEBUG] Trip state changed - UI should update', {
+        tripId: trip.id,
+        currentPointIndex: currentIdx,
+        pointsCount: trip.points?.length,
+        pointsReachedAt: pointsReachedAt.map((p: any) => ({ id: p.id, name: p.name, reachedAt: p.reachedAt })),
+        tripUpdateCount: tripUpdateCountRef.current
+      });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:721',message:'Trip state changed',data:{tripId:trip.id,tripName:trip.name,currentPointIndex:currentIdx,pointsCount:trip.points?.length,pointsReachedAt,studentPointReachedAt:trip.studentPoint?.reachedAt,tripUpdateCount:tripUpdateCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'trip-state-change',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+    }
+  }, [trip?.id, trip?.progress?.currentPointIndex, tripPointsKeyString, trip?.studentPoint?.reachedAt]);
+
+  // #region agent log
+  // Track driverLocation changes and marker rendering
+  // CRITICAL: These hooks MUST be before conditional returns
+  const prevDriverLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const driverLocation = location?.location;
+  useEffect(() => {
+    if (driverLocation) {
+      const prev = prevDriverLocationRef.current;
+      const coordsChanged = !prev || 
+        Math.abs(prev.latitude - driverLocation.latitude) > 0.0001 ||
+        Math.abs(prev.longitude - driverLocation.longitude) > 0.0001;
+      const refChanged = prev !== driverLocation;
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:707',message:'driverLocation changed',data:{hasDriverLocation:!!driverLocation,lat:driverLocation?.latitude,lng:driverLocation?.longitude,prevLat:prev?.latitude,prevLng:prev?.longitude,coordsChanged,refChanged,locationObjectRef:location?.location===driverLocation},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-location-change',hypothesisId:'A'})}).catch(()=>{});
+      prevDriverLocationRef.current = { latitude: driverLocation.latitude, longitude: driverLocation.longitude };
+    } else {
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:707',message:'driverLocation is null/undefined',data:{hasLocation:!!location,hasLocationLocation:!!location?.location},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-location-null',hypothesisId:'A'})}).catch(()=>{});
+    }
+  }, [driverLocation?.latitude, driverLocation?.longitude, location?.location]);
+  // #endregion
+
+  // Get route segments for directions - memoize to update when currentPointIndex or allPoints changes
+  // CRITICAL: This hook MUST be before conditional returns
+  const routeSegments = useMemo(() => {
+    console.log('[PARENT-DEBUG] routeSegments useMemo recalculating', {
+      allPointsCount: allPoints.length,
+      currentPointIndex,
+      tripId: trip?.id
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:781',message:'Recalculating route segments',data:{allPointsCount:allPoints.length,currentPointIndex,hasTrip:!!trip,tripId:trip?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'route-segments-recalc',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    if (allPoints.length < 2) return [];
+    
+    const segments = [];
+    for (let i = 0; i < allPoints.length - 1; i++) {
+      const start = allPoints[i];
+      const end = allPoints[i + 1];
+      
+      if (start.latitude && start.longitude && end.latitude && end.longitude) {
+        const isCompleted = i < currentPointIndex;
+        const isCurrent = i === currentPointIndex;
+        segments.push({
+          start: { latitude: start.latitude, longitude: start.longitude },
+          end: { latitude: end.latitude, longitude: end.longitude },
+          index: i,
+          isCompleted,
+          isCurrent,
+        });
+        console.log('[PARENT-DEBUG] Route segment created', {
+          index: i,
+          startName: start.name,
+          endName: end.name,
+          isCompleted,
+          isCurrent,
+          currentPointIndex
+        });
+        // #region agent log
+        if (i === 0 || isCurrent || isCompleted) {
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:795',message:'Route segment created',data:{index:i,startName:start.name,endName:end.name,isCompleted,isCurrent,currentPointIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'route-segment-create',hypothesisId:'C'})}).catch(()=>{});
+        }
+        // #endregion
+      }
+    }
+    console.log('[PARENT-DEBUG] routeSegments useMemo completed', {
+      segmentsCount: segments.length,
+      completedCount: segments.filter(s => s.isCompleted).length,
+      currentIndex: segments.findIndex(s => s.isCurrent)
+    });
+    return segments;
+  }, [allPoints, currentPointIndex, trip?.id]);
 
   const handleCallDriver = () => {
     if (trip?.assignedCaptain?.phone_number) {
@@ -714,15 +971,8 @@ export default function TrackTripScreen() {
     );
   }
 
-  const studentPoint = trip?.studentPoint || trip?.points?.[0];
-  const driverLocation = location?.location;
-  const allPoints = trip?.points || [];
-  const currentPointIndex = trip?.progress?.currentPointIndex ?? 0;
-  
-  // Find the index of the student's stop in the trip points
-  const studentPointIndex = studentPoint 
-    ? allPoints.findIndex((p: any) => p.id === studentPoint.id)
-    : -1;
+  // Additional values (non-hooks, safe to use after conditional returns)
+  // driverLocation is already defined above as a const
   
   // Determine target point based on whether student has been picked up
   let targetPoint = null;
@@ -746,30 +996,6 @@ export default function TrackTripScreen() {
   // Use calculated ETA from Google Maps Directions API if available, otherwise fall back to location.eta
   const displayETA = calculatedETA || location?.eta;
 
-  // Get route segments for directions
-  const getRouteSegments = () => {
-    if (allPoints.length < 2) return [];
-    
-    const segments = [];
-    for (let i = 0; i < allPoints.length - 1; i++) {
-      const start = allPoints[i];
-      const end = allPoints[i + 1];
-      
-      if (start.latitude && start.longitude && end.latitude && end.longitude) {
-        segments.push({
-          start: { latitude: start.latitude, longitude: start.longitude },
-          end: { latitude: end.latitude, longitude: end.longitude },
-          index: i,
-          isCompleted: i < currentPointIndex,
-          isCurrent: i === currentPointIndex,
-        });
-      }
-    }
-    return segments;
-  };
-
-  const routeSegments = getRouteSegments();
-
   return (
     <View style={styles.container}>
       {/* Map */}
@@ -786,7 +1012,7 @@ export default function TrackTripScreen() {
           {/* Google Maps Directions for Route Segments */}
           {!directionsError && routeSegments.map((segment, idx) => (
             <MapDirections
-              key={`route-${idx}`}
+              key={`route-${segment.index}-${segment.isCompleted ? 'completed' : segment.isCurrent ? 'current' : 'upcoming'}-${currentPointIndex}`}
               origin={segment.start}
               destination={segment.end}
               apikey={GOOGLE_MAPS_API_KEY}
@@ -821,22 +1047,30 @@ export default function TrackTripScreen() {
 
           {/* All Trip Points Markers */}
           {allPoints.map((point: any, index: number) => {
-            if (!point.latitude || !point.longitude) return null;
+            if (!point.latitude || !point.longitude || !point.id) return null;
             
-            const isStudentPoint = point.id === studentPoint?.id;
+            const isStudentPoint = point.id === studentPointId;
             const isStartPoint = index === 0;
             const isCompleted = index < currentPointIndex;
             const isCurrent = index === currentPointIndex;
             
+            // #region agent log
+            if (isCurrent || isCompleted || isStudentPoint) {
+              fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:854',message:'Rendering point marker',data:{pointId:point.id,pointName:point.name,index,isStudentPoint,isStartPoint,isCompleted,isCurrent,currentPointIndex,reachedAt:point.reachedAt,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'point-marker-render',hypothesisId:'D'})}).catch(()=>{});
+            }
+            // #endregion
+            
             return (
               <Marker
-                key={`point-${point.id || index}`}
+                key={`point-${point.id}`}
                 coordinate={{
                   latitude: point.latitude,
                   longitude: point.longitude,
                 }}
                 title={point.name}
                 description={isStudentPoint ? "Your pickup point" : `Stop ${index + 1}`}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
               >
                 <View
                   style={[
@@ -861,16 +1095,31 @@ export default function TrackTripScreen() {
 
           {/* Driver Location with Rotation */}
           {driverLocation && (
-            <Marker
-              coordinate={{
-                latitude: driverLocation.latitude,
-                longitude: driverLocation.longitude,
-              }}
-              title="Driver"
-              description={trip?.assignedCaptain?.name || "Driver"}
-              anchor={{ x: 0.5, y: 0.5 }}
-              flat={false}
-            >
+            <>
+              {/* #region agent log */}
+              {(() => {
+                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:876',message:'Rendering driver marker',data:{hasDriverLocation:!!driverLocation,lat:driverLocation.latitude,lng:driverLocation.longitude,renderCount:renderCountRef.current,hasRotationAnim:!!rotationAnim},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-marker-render',hypothesisId:'B'})}).catch(()=>{});
+                return null;
+              })()}
+              {/* #endregion */}
+              <Marker
+                key="driver-marker"
+                coordinate={(() => {
+                  // #region agent log
+                  const coord = {
+                    latitude: driverLocation.latitude,
+                    longitude: driverLocation.longitude,
+                  };
+                  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:881',message:'Creating driver marker coordinate object',data:{lat:coord.latitude,lng:coord.longitude,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-coord-create',hypothesisId:'C'})}).catch(()=>{});
+                  return coord;
+                  // #endregion
+                })()}
+                title="Driver"
+                description={trip?.assignedCaptain?.name || "Driver"}
+                anchor={{ x: 0.5, y: 0.5 }}
+                flat={false}
+                tracksViewChanges={false}
+              >
               <Animated.View
                 style={[
                   styles.driverMarker,
@@ -889,6 +1138,7 @@ export default function TrackTripScreen() {
                 <Ionicons name="car" size={20} color="#fff" />
               </Animated.View>
             </Marker>
+            </>
           )}
 
         </MapView>
@@ -951,12 +1201,21 @@ export default function TrackTripScreen() {
             <View style={styles.driverCard}>
               <View style={styles.driverHeader}>
                 <View style={styles.driverAvatar}>
-                  {trip.assignedCaptain.selfiePhoto ? (
-                    <Text style={styles.avatarText}>
-                      {trip.assignedCaptain.name.charAt(0)}
-                    </Text>
+                  {trip.assignedCaptain.selfiePhoto && !imageLoadError ? (
+                    <Image
+                      source={{ uri: trip.assignedCaptain.selfiePhoto }}
+                      style={styles.avatarImage}
+                      onError={() => setImageLoadError(true)}
+                      resizeMode="cover"
+                    />
                   ) : (
-                    <Ionicons name="person" size={24} color="#6366f1" />
+                    trip.assignedCaptain.selfiePhoto && imageLoadError ? (
+                      <Text style={styles.avatarText}>
+                        {trip.assignedCaptain.name.charAt(0)}
+                      </Text>
+                    ) : (
+                      <Ionicons name="person" size={24} color="#6366f1" />
+                    )
                   )}
                 </View>
                 <View style={styles.driverInfo}>
@@ -1109,6 +1368,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   avatarText: {
     fontSize: 20,

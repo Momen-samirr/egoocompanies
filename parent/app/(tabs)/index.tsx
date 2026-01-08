@@ -38,6 +38,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTrips, setActiveTrips] = useState<Map<string, any>>(new Map());
+  const [loadingTrips, setLoadingTrips] = useState(true);
   const checkTripsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isCheckingTripsRef = useRef(false);
   const studentsRef = useRef<Student[]>([]);
@@ -111,6 +112,7 @@ export default function HomeScreen() {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:75',message:'checkActiveTrips: Skipped - no students',data:{effectRunId},timestamp:Date.now(),sessionId:'debug-session',runId:'check-skipped-no-students',hypothesisId:'J'})}).catch(()=>{});
         // #endregion
+        setLoadingTrips(false);
         return;
       }
       
@@ -119,10 +121,12 @@ export default function HomeScreen() {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:93',message:'checkActiveTrips: Skipped - screen not focused',data:{effectRunId},timestamp:Date.now(),sessionId:'debug-session',runId:'check-skipped-not-focused',hypothesisId:'R'})}).catch(()=>{});
         // #endregion
+        setLoadingTrips(false);
         return;
       }
 
       isCheckingTripsRef.current = true;
+      setLoadingTrips(true);
       
       try {
         // #region agent log
@@ -170,6 +174,7 @@ export default function HomeScreen() {
         }
       } finally {
         isCheckingTripsRef.current = false;
+        setLoadingTrips(false);
       }
     };
 
@@ -201,6 +206,9 @@ export default function HomeScreen() {
           fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:157',message:'checkActiveTrips effect: Interval already exists - skipping setup',data:{effectRunId,existingIntervalId:checkTripsIntervalRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'interval-skip',hypothesisId:'S'})}).catch(()=>{});
           // #endregion
         }
+      } else if (students.length === 0) {
+        // No students, so no trips to check - set loading to false
+        setLoadingTrips(false);
       }
     } else {
       // #region agent log
@@ -275,15 +283,24 @@ export default function HomeScreen() {
       }
     >
       <View style={styles.header}>
-        <Text style={styles.title}>My Students</Text>
-        <Text style={styles.subtitle}>
-          Track your children's school transportation
-        </Text>
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconContainer}>
+            <Ionicons name="school" size={28} color="#6366f1" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.title}>My Students</Text>
+            <Text style={styles.subtitle}>
+              Track your children's school transportation
+            </Text>
+          </View>
+        </View>
       </View>
 
       {students.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="school-outline" size={64} color="#9ca3af" />
+          <View style={styles.emptyIconContainer}>
+            <Ionicons name="school-outline" size={72} color="#d1d5db" />
+          </View>
           <Text style={styles.emptyText}>No students linked</Text>
           <Text style={styles.emptySubtext}>
             Contact your school to link your account to students
@@ -297,11 +314,13 @@ export default function HomeScreen() {
               <View key={student.id} style={styles.studentCard}>
                 <View style={styles.studentHeader}>
                   <View style={styles.studentInfo}>
-                    <Ionicons
-                      name="person-circle-outline"
-                      size={40}
-                      color="#6366f1"
-                    />
+                    <View style={styles.studentAvatarContainer}>
+                      <Ionicons
+                        name="person"
+                        size={24}
+                        color="#6366f1"
+                      />
+                    </View>
                     <View style={styles.studentDetails}>
                       <Text style={styles.studentName}>
                         {student.firstName} {student.lastName}
@@ -324,26 +343,55 @@ export default function HomeScreen() {
                   )}
                 </View>
 
-                {activeTrip ? (
-                  <View style={styles.tripCard}>
+                {loadingTrips ? (
+                  <View style={styles.tripSkeletonCard}>
+                    <View style={styles.tripHeader}>
+                      <View style={[styles.skeletonLine, styles.skeletonIcon]} />
+                      <View style={[styles.skeletonLine, styles.skeletonStatusText]} />
+                    </View>
+                    <View style={[styles.skeletonLine, styles.skeletonTripName]} />
+                    <View style={[styles.skeletonLine, styles.skeletonButton]} />
+                  </View>
+                ) : activeTrip ? (
+                  <View style={[
+                    styles.tripCard,
+                    activeTrip.status === "ACTIVE" ? styles.tripCardActive : styles.tripCardScheduled
+                  ]}>
                     <View style={styles.tripHeader}>
                       <Ionicons 
                         name={activeTrip.status === "ACTIVE" ? "car" : "time-outline"} 
                         size={20} 
-                        color={activeTrip.status === "ACTIVE" ? "#10b981" : "#6366f1"} 
+                        color={activeTrip.status === "ACTIVE" ? "#10b981" : "#ca8a04"} 
                       />
                       <Text style={[
                         styles.tripStatus,
-                        activeTrip.status === "SCHEDULED" && styles.tripStatusScheduled
+                        activeTrip.status === "ACTIVE" ? styles.tripStatusActive : styles.tripStatusScheduled
                       ]}>
                         {activeTrip.status === "ACTIVE" ? "Active Trip" : "Scheduled Trip"}
                       </Text>
                     </View>
-                    <Text style={styles.tripName}>{activeTrip.name}</Text>
+                    <Text style={[
+                      styles.tripName,
+                      activeTrip.status === "ACTIVE" ? styles.tripNameActive : styles.tripNameScheduled
+                    ]}>
+                      {activeTrip.name}
+                    </Text>
                     {activeTrip.studentPoint && activeTrip.studentPoint.stopId === student.stop?.id && (
-                      <View style={styles.stopIncludedBadge}>
-                        <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-                        <Text style={styles.stopIncludedText}>Stop included</Text>
+                      <View style={[
+                        styles.stopIncludedBadge,
+                        activeTrip.status === "ACTIVE" ? styles.stopIncludedBadgeActive : styles.stopIncludedBadgeScheduled
+                      ]}>
+                        <Ionicons 
+                          name="checkmark-circle" 
+                          size={16} 
+                          color={activeTrip.status === "ACTIVE" ? "#10b981" : "#ca8a04"} 
+                        />
+                        <Text style={[
+                          styles.stopIncludedText,
+                          activeTrip.status === "ACTIVE" ? styles.stopIncludedTextActive : styles.stopIncludedTextScheduled
+                        ]}>
+                          Stop included
+                        </Text>
                       </View>
                     )}
                     <TouchableOpacity
@@ -381,161 +429,286 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   header: {
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 24,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#eef2ff",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#1f2937",
-    marginBottom: 5,
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 6,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: "400",
     color: "#6b7280",
+    lineHeight: 20,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
-    marginTop: 100,
+    marginTop: 120,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#f3f4f6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "600",
-    color: "#374151",
-    marginTop: 20,
+    color: "#111827",
+    marginTop: 8,
+    letterSpacing: -0.3,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: "400",
     color: "#6b7280",
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 12,
+    lineHeight: 22,
+    paddingHorizontal: 40,
   },
   studentsList: {
-    padding: 15,
+    padding: 16,
   },
   studentCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   studentHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 15,
+    marginBottom: 16,
   },
   studentInfo: {
     flexDirection: "row",
     flex: 1,
   },
+  studentAvatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#eef2ff",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#e0e7ff",
+  },
   studentDetails: {
-    marginLeft: 12,
+    marginLeft: 16,
     flex: 1,
   },
   studentName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 4,
+    color: "#111827",
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
   schoolName: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: "400",
     color: "#6b7280",
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 20,
   },
   stopName: {
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: "500",
     color: "#6366f1",
     marginTop: 4,
   },
   primaryBadge: {
     backgroundColor: "#dbeafe",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
   },
   primaryText: {
     fontSize: 12,
     fontWeight: "600",
     color: "#1e40af",
+    letterSpacing: 0.2,
   },
   tripCard: {
-    backgroundColor: "#f0fdf4",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     borderWidth: 1,
+  },
+  tripCardActive: {
+    backgroundColor: "#f0fdf4",
     borderColor: "#bbf7d0",
+  },
+  tripCardScheduled: {
+    backgroundColor: "#fefce8",
+    borderColor: "#fde047",
   },
   tripHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
   tripStatus: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
+    marginLeft: 8,
+    letterSpacing: -0.2,
+  },
+  tripStatusActive: {
     color: "#10b981",
-    marginLeft: 6,
   },
   tripStatusScheduled: {
-    color: "#6366f1",
+    color: "#ca8a04",
   },
   tripName: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: "400",
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  tripNameActive: {
     color: "#166534",
-    marginBottom: 10,
+  },
+  tripNameScheduled: {
+    color: "#854d0e",
   },
   stopIncludedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#d1fae5",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
     borderWidth: 1,
+  },
+  stopIncludedBadgeActive: {
+    backgroundColor: "#d1fae5",
     borderColor: "#10b981",
   },
+  stopIncludedBadgeScheduled: {
+    backgroundColor: "#fef9c3",
+    borderColor: "#eab308",
+  },
   stopIncludedText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
+    marginLeft: 8,
+    letterSpacing: 0.1,
+  },
+  stopIncludedTextActive: {
     color: "#065f46",
-    marginLeft: 6,
+  },
+  stopIncludedTextScheduled: {
+    color: "#854d0e",
   },
   trackButton: {
     backgroundColor: "#6366f1",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 10,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   trackButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
     marginRight: 8,
+    letterSpacing: 0.2,
   },
   noTripCard: {
     backgroundColor: "#f9fafb",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
   noTripText: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: "400",
     color: "#6b7280",
     textAlign: "center",
+    lineHeight: 20,
+  },
+  tripSkeletonCard: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  skeletonLine: {
+    backgroundColor: "#e5e7eb",
+    borderRadius: 6,
+  },
+  skeletonIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  skeletonStatusText: {
+    width: 100,
+    height: 16,
+    marginLeft: 8,
+  },
+  skeletonTripName: {
+    width: "70%",
+    height: 16,
+    marginBottom: 12,
+  },
+  skeletonButton: {
+    width: "100%",
+    height: 48,
+    borderRadius: 10,
   },
 });
 
