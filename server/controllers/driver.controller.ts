@@ -1703,7 +1703,11 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
 
         // Broadcast location update to parents via WebSocket server
         try {
-          const wsUrl = process.env.WEBSOCKET_URL || "http://localhost:8080";
+          // In production, use https://ws.egoobus.com, in development use localhost
+          const wsUrl = process.env.WEBSOCKET_URL || 
+            (process.env.NODE_ENV === "production" 
+              ? "https://ws.egoobus.com" 
+              : "http://localhost:8080");
           const locationSpeed = speed !== undefined ? speed : 0; // Use provided speed or default to 0
           
           // Calculate basic ETA to next checkpoint (simplified calculation)
@@ -1796,7 +1800,9 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
             driverId: captainId,
             hasLocation: !!broadcastPayload.location,
             location: broadcastPayload.location,
-            wsUrl
+            wsUrl,
+            isProduction: process.env.NODE_ENV === "production",
+            envWebSocketUrl: process.env.WEBSOCKET_URL || "not set"
           });
           
           await fetch(`${wsUrl}/api/trip-location-update`, {
@@ -1808,16 +1814,25 @@ export const updateCaptainLocation = async (req: any, res: Response) => {
           })
           .then(async (response) => {
             if (response.ok) {
-              console.log(`[DEBUG] Successfully broadcasted trip ${trip.id} location update to WebSocket server`);
+              console.log(`[DEBUG] ✅ Successfully broadcasted trip ${trip.id} location update to WebSocket server at ${wsUrl}`);
             } else {
               const errorText = await response.text();
-              console.warn(`[DEBUG] WebSocket server returned error for trip ${trip.id}:`, response.status, errorText);
+              console.error(`[DEBUG] ❌ WebSocket server returned error for trip ${trip.id}:`, {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorText,
+                wsUrl
+              });
             }
           })
           .catch((error) => {
-            console.warn(
-              `[DEBUG] WebSocket server not available for trip ${trip.id} location update:`,
-              error.message
+            console.error(
+              `[DEBUG] ❌ WebSocket server not available for trip ${trip.id} location update:`,
+              {
+                error: error.message,
+                wsUrl,
+                isProduction: process.env.NODE_ENV === "production"
+              }
             );
           });
         } catch (error: any) {

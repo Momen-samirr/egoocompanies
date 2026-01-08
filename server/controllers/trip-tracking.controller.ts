@@ -253,7 +253,11 @@ export const recordTripLocation = async (req: any, res: Response) => {
 
     // Broadcast location update via WebSocket server
     try {
-      const wsUrl = process.env.WEBSOCKET_URL || "http://localhost:8080";
+      // In production, use https://ws.egoobus.com, in development use localhost
+      const wsUrl = process.env.WEBSOCKET_URL || 
+        (process.env.NODE_ENV === "production" 
+          ? "https://ws.egoobus.com" 
+          : "http://localhost:8080");
       await fetch(`${wsUrl}/api/trip-location-update`, {
         method: "POST",
         headers: {
@@ -293,7 +297,11 @@ export const recordTripLocation = async (req: any, res: Response) => {
     // Broadcast alerts via WebSocket server
     for (const alert of alerts) {
       try {
-        const wsUrl = process.env.WEBSOCKET_URL || "http://localhost:8080";
+        // In production, use https://ws.egoobus.com, in development use localhost
+        const wsUrl = process.env.WEBSOCKET_URL || 
+          (process.env.NODE_ENV === "production" 
+            ? "https://ws.egoobus.com" 
+            : "http://localhost:8080");
         await fetch(`${wsUrl}/api/trip-alert`, {
           method: "POST",
           headers: {
