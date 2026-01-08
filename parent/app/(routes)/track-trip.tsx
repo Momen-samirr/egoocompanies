@@ -207,6 +207,34 @@ export default function TrackTripScreen() {
     enabled: !!tripId && !!studentId,
   });
 
+  // Log WebSocket connection status and location availability
+  useEffect(() => {
+    // #region agent log
+    const wsStatusData = {
+      connected,
+      wsError,
+      hasLocation: !!location,
+      hasLocationLocation: !!location?.location,
+      locationLat: location?.location?.latitude,
+      locationLng: location?.location?.longitude,
+      driverId: location?.driverId,
+      tripId: tripId as string,
+      studentId: studentId as string,
+      isProduction: process.env.EXPO_PUBLIC_API_URL?.includes('egoobus.com') || false,
+      apiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/https?:\/\//, '***://'),
+      websocketUrl: process.env.EXPO_PUBLIC_WEBSOCKET_URL?.replace(/wss?:\/\//, '***://'),
+    };
+    console.log('[track-trip] WebSocket status:', {
+      connected,
+      wsError,
+      hasLocation: !!location,
+      hasLocationLocation: !!location?.location,
+      isProduction: wsStatusData.isProduction
+    });
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:204',message:'WebSocket connection status check',data:wsStatusData,timestamp:Date.now(),sessionId:'debug-session',runId:'ws-status-check',hypothesisId:'J'})}).catch(()=>{});
+    // #endregion
+  }, [connected, wsError, location, tripId, studentId]);
+
   useEffect(() => {
     // #region agent log
     const effectId = Date.now();
@@ -1268,9 +1296,52 @@ export default function TrackTripScreen() {
             )}
             {!driverLocation && connected && (
               <View style={styles.infoMessage}>
+                {/* #region agent log */}
+                {(() => {
+                  const missingLocationData = {
+                    hasLocation: !!location,
+                    hasLocationLocation: !!location?.location,
+                    connected,
+                    wsError,
+                    tripId: tripId as string,
+                    studentId: studentId as string,
+                    isProduction: process.env.EXPO_PUBLIC_API_URL?.includes('egoobus.com') || false,
+                    apiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/https?:\/\//, '***://'),
+                    websocketUrl: process.env.EXPO_PUBLIC_WEBSOCKET_URL?.replace(/wss?:\/\//, '***://'),
+                  };
+                  console.warn('[track-trip] ⚠️ Driver location missing but WebSocket connected:', missingLocationData);
+                  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:1269',message:'Driver location missing - WebSocket connected but no location',data:missingLocationData,timestamp:Date.now(),sessionId:'debug-session',runId:'driver-location-missing',hypothesisId:'K'})}).catch(()=>{});
+                  return null;
+                })()}
+                {/* #endregion */}
                 <Ionicons name="information-circle" size={16} color="#6b7280" />
                 <Text style={styles.infoText}>
                   Waiting for driver location update...
+                </Text>
+              </View>
+            )}
+            {!driverLocation && !connected && (
+              <View style={styles.infoMessage}>
+                {/* #region agent log */}
+                {(() => {
+                  const notConnectedData = {
+                    connected,
+                    wsError,
+                    hasLocation: !!location,
+                    tripId: tripId as string,
+                    studentId: studentId as string,
+                    isProduction: process.env.EXPO_PUBLIC_API_URL?.includes('egoobus.com') || false,
+                    apiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/https?:\/\//, '***://'),
+                    websocketUrl: process.env.EXPO_PUBLIC_WEBSOCKET_URL?.replace(/wss?:\/\//, '***://'),
+                  };
+                  console.error('[track-trip] ❌ WebSocket not connected:', notConnectedData);
+                  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:1285',message:'WebSocket not connected',data:notConnectedData,timestamp:Date.now(),sessionId:'debug-session',runId:'ws-not-connected',hypothesisId:'L'})}).catch(()=>{});
+                  return null;
+                })()}
+                {/* #endregion */}
+                <Ionicons name="warning" size={16} color="#ef4444" />
+                <Text style={[styles.infoText, { color: '#ef4444' }]}>
+                  {wsError || 'Not connected to live tracking'}
                 </Text>
               </View>
             )}

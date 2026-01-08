@@ -14,14 +14,25 @@ const getWebSocketUrl = (): string => {
     const hasWss = url.match(/^wss:\/\//i);
     const hasWs = url.match(/^ws:\/\//i);
     
-    if (!hasWss && !hasWs) {
+    if (hasWss || hasWs) {
+      // URL already has scheme - preserve it
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:14',message:'WebSocket URL already has scheme - preserving',data:{originalUrl:process.env.EXPO_PUBLIC_WEBSOCKET_URL?.replace(/wss?:\/\//, '***://'),finalUrl:url.replace(/wss?:\/\//, '***://'),hasWss:!!hasWss,hasWs:!!hasWs},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-url-preserve',hypothesisId:'N'})}).catch(()=>{});
+      // #endregion
+    } else {
       // No scheme present - determine based on API URL
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || '';
       // If API URL uses https, use wss:// for WebSocket
       if (apiUrl.startsWith('https://')) {
         url = `wss://${url}`;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:22',message:'Added wss:// scheme based on https API URL',data:{originalUrl:process.env.EXPO_PUBLIC_WEBSOCKET_URL?.replace(/wss?:\/\//, '***://'),finalUrl:url.replace(/wss?:\/\//, '***://'),apiUrl:apiUrl.replace(/https?:\/\//, '***://')},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-url-add-wss',hypothesisId:'O'})}).catch(()=>{});
+        // #endregion
       } else {
         url = `ws://${url}`;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:27',message:'Added ws:// scheme based on http API URL',data:{originalUrl:process.env.EXPO_PUBLIC_WEBSOCKET_URL?.replace(/wss?:\/\//, '***://'),finalUrl:url.replace(/wss?:\/\//, '***://'),apiUrl:apiUrl.replace(/https?:\/\//, '***://')},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-url-add-ws',hypothesisId:'P'})}).catch(()=>{});
+        // #endregion
       }
     }
     
@@ -60,6 +71,22 @@ const getWebSocketUrl = (): string => {
 };
 
 const WEBSOCKET_URL = getWebSocketUrl();
+
+// Log environment configuration on module load (for debugging production issues)
+if (typeof window !== 'undefined' || typeof global !== 'undefined') {
+  const envCheck = {
+    hasExpoPublicWebSocketUrl: !!process.env.EXPO_PUBLIC_WEBSOCKET_URL,
+    hasExpoPublicApiUrl: !!process.env.EXPO_PUBLIC_API_URL,
+    expoPublicWebSocketUrl: process.env.EXPO_PUBLIC_WEBSOCKET_URL?.replace(/wss?:\/\//, '***://'),
+    expoPublicApiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/https?:\/\//, '***://'),
+    finalWebSocketUrl: WEBSOCKET_URL.replace(/wss?:\/\//, '***://'),
+    isProduction: process.env.EXPO_PUBLIC_API_URL?.includes('egoobus.com') || false,
+  };
+  console.log('[useTripTracking] Environment check:', envCheck);
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:46',message:'Environment variables check on module load',data:envCheck,timestamp:Date.now(),sessionId:'debug-session',runId:'env-check-module-load',hypothesisId:'M'})}).catch(()=>{});
+  // #endregion
+}
 
 interface TripLocationUpdate {
   type: "tripLocationUpdate";
@@ -191,9 +218,35 @@ export const useTripTracking = ({
               // Only accept updates that match our subscription
               if (updateTripId === subscribedTripId && updateStudentId === subscribedStudentId) {
                 // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:145',message:'Location update accepted',data:{tripId:updateTripId,studentId:updateStudentId,hasLocation:!!data.location,location:data.location,fullUpdate:JSON.stringify(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-location',hypothesisId:'C'})}).catch(()=>{});
+                const locationUpdateData = {
+                  tripId: updateTripId,
+                  studentId: updateStudentId,
+                  driverId: data.driverId,
+                  hasLocation: !!data.location,
+                  location: data.location,
+                  speed: data.speed,
+                  deviationStatus: data.deviationStatus,
+                  eta: data.eta,
+                  timestamp: data.timestamp,
+                  isProduction: process.env.EXPO_PUBLIC_API_URL?.includes('egoobus.com') || false,
+                  websocketUrl: WEBSOCKET_URL.replace(/wss?:\/\//, '***://'),
+                  apiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/https?:\/\//, '***://'),
+                };
+                console.log('[WebSocket] ✅ Location update accepted and setting state:', {
+                  hasLocation: !!data.location,
+                  location: data.location,
+                  driverId: data.driverId,
+                  isProduction: locationUpdateData.isProduction
+                });
+                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:168',message:'Location update accepted - setting state',data:locationUpdateData,timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-location-accepted',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
                 setLocation(data as TripLocationUpdate);
+                // #region agent log
+                // Log after state update attempt
+                setTimeout(() => {
+                  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:177',message:'Location state update attempted',data:{tripId:updateTripId,studentId:updateStudentId,hasLocation:!!data.location,location:data.location},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-location-state-set',hypothesisId:'C'})}).catch(()=>{});
+                }, 100);
+                // #endregion
               } else {
                 console.warn("[WebSocket] Location update ignored - tripId/studentId mismatch", {
                   updateTripId,
@@ -303,6 +356,33 @@ export const useTripTracking = ({
       );
     }
   };
+
+  // Log location state changes
+  useEffect(() => {
+    // #region agent log
+    const locationStateData = {
+      hasLocation: !!location,
+      hasLocationLocation: !!location?.location,
+      locationLat: location?.location?.latitude,
+      locationLng: location?.location?.longitude,
+      driverId: location?.driverId,
+      tripId: location?.tripId,
+      studentId: location?.studentId,
+      connected,
+      error,
+      isProduction: process.env.EXPO_PUBLIC_API_URL?.includes('egoobus.com') || false,
+      websocketUrl: WEBSOCKET_URL.replace(/wss?:\/\//, '***://'),
+    };
+    console.log('[useTripTracking] Location state:', {
+      hasLocation: !!location,
+      hasLocationLocation: !!location?.location,
+      connected,
+      error,
+      isProduction: locationStateData.isProduction
+    });
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:264',message:'Location state changed',data:locationStateData,timestamp:Date.now(),sessionId:'debug-session',runId:'location-state-change',hypothesisId:'I'})}).catch(()=>{});
+    // #endregion
+  }, [location, connected, error]);
 
   return {
     location,
