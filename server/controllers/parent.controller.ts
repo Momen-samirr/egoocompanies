@@ -52,21 +52,20 @@ export const registerParent = async (
       });
     }
 
-    // Check if parent already exists
+    // Check if parent already exists - check both phone and email
+    let existingByPhone = null;
+    let existingByEmail = null;
+    
     if (phoneNumber) {
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
       console.log(`[Parent Registration] Checking for existing parent with phone: ${normalizedPhone}`);
       
-      const existingByPhone = await prisma.parent.findUnique({
+      existingByPhone = await prisma.parent.findUnique({
         where: { phoneNumber: normalizedPhone },
       });
       
       if (existingByPhone) {
         console.log(`[Parent Registration] Phone number already exists: ${normalizedPhone}`);
-        return res.status(400).json({
-          success: false,
-          message: "This phone number is already registered. Please use a different phone number or try logging in.",
-        });
       }
     }
 
@@ -74,17 +73,31 @@ export const registerParent = async (
       const normalizedEmail = email.trim().toLowerCase();
       console.log(`[Parent Registration] Checking for existing parent with email: ${normalizedEmail}`);
       
-      const existingByEmail = await prisma.parent.findUnique({
+      existingByEmail = await prisma.parent.findUnique({
         where: { email: normalizedEmail },
       });
       
       if (existingByEmail) {
         console.log(`[Parent Registration] Email already exists: ${normalizedEmail}`);
-        return res.status(400).json({
-          success: false,
-          message: "This email is already registered. Please use a different email or try logging in.",
-        });
       }
+    }
+    
+    // Return appropriate error message based on which field(s) already exist
+    if (existingByPhone && existingByEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "This phone number and email are already registered. Please use different credentials or try logging in.",
+      });
+    } else if (existingByPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "This phone number is already registered. Please use a different phone number or try logging in.",
+      });
+    } else if (existingByEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "This email is already registered. Please use a different email or try logging in.",
+      });
     }
 
     // Hash password
