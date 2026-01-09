@@ -128,6 +128,7 @@ export const useTripTracking = ({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
+  const locationRef = useRef<TripLocationUpdate | null>(null); // Ref to track current location for comparison
 
   useEffect(() => {
     if (!enabled || !tripId || !studentId) {
@@ -218,6 +219,13 @@ export const useTripTracking = ({
               // Only accept updates that match our subscription
               if (updateTripId === subscribedTripId && updateStudentId === subscribedStudentId) {
                 // #region agent log
+                // Use ref to get current location value (not stale closure value)
+                const prevLocationState = locationRef.current;
+                const prevLocationCoords = prevLocationState?.location;
+                const newLocationCoords = data.location;
+                const coordsChanged = !prevLocationCoords || 
+                  Math.abs(prevLocationCoords.latitude - newLocationCoords.latitude) > 0.0001 ||
+                  Math.abs(prevLocationCoords.longitude - newLocationCoords.longitude) > 0.0001;
                 const locationUpdateData = {
                   tripId: updateTripId,
                   studentId: updateStudentId,
@@ -231,20 +239,50 @@ export const useTripTracking = ({
                   isProduction: process.env.EXPO_PUBLIC_API_URL?.includes('egoobus.com') || false,
                   websocketUrl: WEBSOCKET_URL.replace(/wss?:\/\//, '***://'),
                   apiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/https?:\/\//, '***://'),
+                  prevLocationLat: prevLocationCoords?.latitude,
+                  prevLocationLng: prevLocationCoords?.longitude,
+                  newLocationLat: newLocationCoords?.latitude,
+                  newLocationLng: newLocationCoords?.longitude,
+                  coordsChanged,
                 };
                 console.log('[WebSocket] ✅ Location update accepted and setting state:', {
                   hasLocation: !!data.location,
                   location: data.location,
                   driverId: data.driverId,
-                  isProduction: locationUpdateData.isProduction
+                  isProduction: locationUpdateData.isProduction,
+                  coordsChanged
                 });
-                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:168',message:'Location update accepted - setting state',data:locationUpdateData,timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-location-accepted',hypothesisId:'C'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:224',message:'Location update accepted - setting state',data:locationUpdateData,timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-location-accepted',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
-                setLocation(data as TripLocationUpdate);
+                
+                // Create a new object to ensure reference change triggers re-render
+                // Always create new object to ensure React detects the change
+                const newLocationUpdate: TripLocationUpdate = {
+                  type: data.type,
+                  tripId: data.tripId,
+                  studentId: data.studentId,
+                  driverId: data.driverId,
+                  location: {
+                    latitude: data.location.latitude,
+                    longitude: data.location.longitude,
+                    heading: data.location.heading,
+                  },
+                  speed: data.speed,
+                  deviationStatus: data.deviationStatus,
+                  eta: data.eta,
+                  timestamp: data.timestamp,
+                };
+                
+                // Use functional setState to ensure we're updating based on latest state
+                setLocation((prevLocation) => {
+                  // Even if coordinates haven't changed significantly, update to ensure re-render
+                  return newLocationUpdate;
+                });
+                
                 // #region agent log
                 // Log after state update attempt
                 setTimeout(() => {
-                  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:177',message:'Location state update attempted',data:{tripId:updateTripId,studentId:updateStudentId,hasLocation:!!data.location,location:data.location},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-location-state-set',hypothesisId:'C'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:258',message:'Location state update attempted',data:{tripId:updateTripId,studentId:updateStudentId,hasLocation:!!data.location,location:data.location,newLocationUpdate,coordsChanged},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-location-state-set',hypothesisId:'C'})}).catch(()=>{});
                 }, 100);
                 // #endregion
               } else {
@@ -357,6 +395,11 @@ export const useTripTracking = ({
     }
   };
 
+  // Update ref whenever location state changes (for use in closures)
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
+
   // Log location state changes
   useEffect(() => {
     // #region agent log
@@ -380,7 +423,7 @@ export const useTripTracking = ({
       error,
       isProduction: locationStateData.isProduction
     });
-    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:264',message:'Location state changed',data:locationStateData,timestamp:Date.now(),sessionId:'debug-session',runId:'location-state-change',hypothesisId:'I'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:272',message:'Location state changed',data:locationStateData,timestamp:Date.now(),sessionId:'debug-session',runId:'location-state-change',hypothesisId:'I'})}).catch(()=>{});
     // #endregion
   }, [location, connected, error]);
 

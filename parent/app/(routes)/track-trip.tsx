@@ -904,7 +904,53 @@ export default function TrackTripScreen() {
   // Track driverLocation changes and marker rendering
   // CRITICAL: These hooks MUST be before conditional returns
   const prevDriverLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const prevLocationRef = useRef<any>(null);
   const driverLocation = location?.location;
+  
+  // Memoize driver coordinate to ensure new reference when coordinates change
+  // This ensures React Native Maps detects the coordinate change
+  // CRITICAL: Always create a new coordinate object to ensure React Native Maps detects changes
+  const driverCoordinate = useMemo(() => {
+    if (!driverLocation || !driverLocation.latitude || !driverLocation.longitude) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:913',message:'Driver location is null or invalid',data:{hasDriverLocation:!!driverLocation,hasLat:!!driverLocation?.latitude,hasLng:!!driverLocation?.longitude,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-coord-null',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      return null;
+    }
+    
+    // Always create a new coordinate object to ensure reference changes
+    const coord = {
+      latitude: driverLocation.latitude,
+      longitude: driverLocation.longitude,
+    };
+    
+    const prev = prevDriverLocationRef.current;
+    const coordsChanged = !prev || 
+      Math.abs(prev.latitude - coord.latitude) > 0.0001 ||
+      Math.abs(prev.longitude - coord.longitude) > 0.0001;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:925',message:'Memoizing driver coordinate',data:{lat:coord.latitude,lng:coord.longitude,prevLat:prev?.latitude,prevLng:prev?.longitude,coordsChanged,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-coord-memo',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
+    prevDriverLocationRef.current = { latitude: coord.latitude, longitude: coord.longitude };
+    return coord;
+  }, [driverLocation?.latitude, driverLocation?.longitude, driverLocation]);
+  
+  // Track when location object itself changes (reference equality check)
+  useEffect(() => {
+    const locationChanged = prevLocationRef.current !== location;
+    const locationLocationChanged = prevLocationRef.current?.location !== location?.location;
+    const locationCoordsChanged = prevLocationRef.current?.location?.latitude !== location?.location?.latitude ||
+      prevLocationRef.current?.location?.longitude !== location?.location?.longitude;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:930',message:'Location object reference change check',data:{locationChanged,locationLocationChanged,locationCoordsChanged,hasLocation:!!location,hasLocationLocation:!!location?.location,prevLocationRef:!!prevLocationRef.current,prevLocationLocationRef:!!prevLocationRef.current?.location,newLat:location?.location?.latitude,newLng:location?.location?.longitude,prevLat:prevLocationRef.current?.location?.latitude,prevLng:prevLocationRef.current?.location?.longitude,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'location-ref-change',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    prevLocationRef.current = location;
+  }, [location]);
+  
   useEffect(() => {
     if (driverLocation) {
       const prev = prevDriverLocationRef.current;
@@ -912,10 +958,16 @@ export default function TrackTripScreen() {
         Math.abs(prev.latitude - driverLocation.latitude) > 0.0001 ||
         Math.abs(prev.longitude - driverLocation.longitude) > 0.0001;
       const refChanged = prev !== driverLocation;
-      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:707',message:'driverLocation changed',data:{hasDriverLocation:!!driverLocation,lat:driverLocation?.latitude,lng:driverLocation?.longitude,prevLat:prev?.latitude,prevLng:prev?.longitude,coordsChanged,refChanged,locationObjectRef:location?.location===driverLocation},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-location-change',hypothesisId:'A'})}).catch(()=>{});
-      prevDriverLocationRef.current = { latitude: driverLocation.latitude, longitude: driverLocation.longitude };
+      const latDiff = prev ? Math.abs(prev.latitude - driverLocation.latitude) : null;
+      const lngDiff = prev ? Math.abs(prev.longitude - driverLocation.longitude) : null;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:950',message:'driverLocation changed',data:{hasDriverLocation:!!driverLocation,lat:driverLocation?.latitude,lng:driverLocation?.longitude,prevLat:prev?.latitude,prevLng:prev?.longitude,coordsChanged,refChanged,latDiff,lngDiff,locationObjectRef:location?.location===driverLocation,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-location-change',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
     } else {
-      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:707',message:'driverLocation is null/undefined',data:{hasLocation:!!location,hasLocationLocation:!!location?.location},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-location-null',hypothesisId:'A'})}).catch(()=>{});
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:950',message:'driverLocation is null/undefined',data:{hasLocation:!!location,hasLocationLocation:!!location?.location,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-location-null',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
     }
   }, [driverLocation?.latitude, driverLocation?.longitude, location?.location]);
   // #endregion
@@ -1122,31 +1174,22 @@ export default function TrackTripScreen() {
           })}
 
           {/* Driver Location with Rotation */}
-          {driverLocation && (
+          {driverLocation && driverCoordinate && (
             <>
               {/* #region agent log */}
               {(() => {
-                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:876',message:'Rendering driver marker',data:{hasDriverLocation:!!driverLocation,lat:driverLocation.latitude,lng:driverLocation.longitude,renderCount:renderCountRef.current,hasRotationAnim:!!rotationAnim},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-marker-render',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:1180',message:'Rendering driver marker',data:{hasDriverLocation:!!driverLocation,hasDriverCoordinate:!!driverCoordinate,lat:driverCoordinate.latitude,lng:driverCoordinate.longitude,renderCount:renderCountRef.current,hasRotationAnim:!!rotationAnim},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-marker-render',hypothesisId:'B'})}).catch(()=>{});
                 return null;
               })()}
               {/* #endregion */}
               <Marker
                 key="driver-marker"
-                coordinate={(() => {
-                  // #region agent log
-                  const coord = {
-                    latitude: driverLocation.latitude,
-                    longitude: driverLocation.longitude,
-                  };
-                  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:881',message:'Creating driver marker coordinate object',data:{lat:coord.latitude,lng:coord.longitude,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-coord-create',hypothesisId:'C'})}).catch(()=>{});
-                  return coord;
-                  // #endregion
-                })()}
+                coordinate={driverCoordinate}
                 title="Driver"
                 description={trip?.assignedCaptain?.name || "Driver"}
                 anchor={{ x: 0.5, y: 0.5 }}
                 flat={false}
-                tracksViewChanges={false}
+                tracksViewChanges={true}
               >
               <Animated.View
                 style={[
