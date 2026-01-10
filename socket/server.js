@@ -515,18 +515,34 @@ const broadcastTripLocationUpdate = (tripId, locationData) => {
 // Broadcast trip location update to subscribed parents
 const broadcastTripLocationToParents = (tripId, locationData) => {
   let sentCount = 0;
+  let checkedSubscriptions = 0;
+  let matchingSubscriptions = 0;
+  let failedSends = 0;
+  const parentSubscriptionsCount = parentTripSubscriptions.size;
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_broadcast_to_parents_start`,timestamp:Date.now(),location:'socket/server.js:516',message:'WebSocket server starting broadcast to parents',data:{tripId,parentSubscriptionsCount,locationLat:locationData.location?.latitude,locationLng:locationData.location?.longitude},sessionId:'debug-session',runId:'ws-broadcast-to-parents-start',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
 
   // Extract studentStopETAs from locationData if available
   const studentStopETAs = locationData.studentStopETAs || null;
 
   parentTripSubscriptions.forEach((subscriptions, connectionId) => {
     const conn = connectionManager.getConnection(connectionId);
-    if (!conn || !conn.ws || conn.ws.readyState !== 1) return;
+    checkedSubscriptions += subscriptions.size;
+    
+    if (!conn || !conn.ws || conn.ws.readyState !== 1) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_broadcast_parent_invalid_conn`,timestamp:Date.now(),location:'socket/server.js:525',message:'Parent connection invalid or closed',data:{connectionId,hasConn:!!conn,hasWs:!!conn?.ws,readyState:conn?.ws?.readyState},sessionId:'debug-session',runId:'ws-broadcast-parent-invalid-conn',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      return;
+    }
 
     subscriptions.forEach((subStr) => {
       try {
         const sub = JSON.parse(subStr);
         if (sub.tripId === tripId) {
+          matchingSubscriptions++;
           // Find ETA for this student's stop
           let studentETA = null;
           if (studentStopETAs && Array.isArray(studentStopETAs)) {
@@ -561,15 +577,35 @@ const broadcastTripLocationToParents = (tripId, locationData) => {
           try {
             conn.ws.send(JSON.stringify(message));
             sentCount++;
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_broadcast_parent_sent`,timestamp:Date.now(),location:'socket/server.js:563',message:'Parent location update sent successfully',data:{connectionId,tripId,studentId:sub.studentId,parentId:sub.parentId},sessionId:'debug-session',runId:'ws-broadcast-parent-sent',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
           } catch (error) {
+            failedSends++;
             console.error("Error sending trip location to parent:", error);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_broadcast_parent_send_error`,timestamp:Date.now(),location:'socket/server.js:567',message:'Error sending trip location to parent',data:{connectionId,tripId,studentId:sub.studentId,error:error?.message},sessionId:'debug-session',runId:'ws-broadcast-parent-send-error',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
           }
         }
       } catch (error) {
         console.error("Error parsing parent subscription:", error);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_broadcast_parent_parse_error`,timestamp:Date.now(),location:'socket/server.js:571',message:'Error parsing parent subscription',data:{connectionId,subStr,error:error?.message},sessionId:'debug-session',runId:'ws-broadcast-parent-parse-error',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
       }
     });
   });
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_broadcast_to_parents_end`,timestamp:Date.now(),location:'socket/server.js:574',message:'WebSocket server completed broadcast to parents summary',data:{tripId,sentCount,checkedSubscriptions,matchingSubscriptions,failedSends,parentSubscriptionsCount},sessionId:'debug-session',runId:'ws-broadcast-to-parents-end',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
+
+  if (parentSubscriptionsCount === 0 || (checkedSubscriptions === 0 && matchingSubscriptions === 0)) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_no_parents_notified`,timestamp:Date.now(),location:'socket/server.js:578',message:'WebSocket server found no parents to notify',data:{tripId,checkedSubscriptions,matchingSubscriptions,parentSubscriptionsCount},sessionId:'debug-session',runId:'ws-no-parents-notified',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
+  }
 
   if (sentCount > 0) {
     console.log(
@@ -981,6 +1017,9 @@ wss.on("connection", (ws, req) => {
     if (parentId) {
       ws.parentId = parentId;
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_parent_connected`,timestamp:Date.now(),location:'socket/server.js:979',message:'Parent WebSocket connected',data:{parentId,connectionId,hasConnectionId:!!connectionId,isParent,readyState:ws.readyState},sessionId:'debug-session',runId:'ws-parent-connected',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
   } else {
     console.log("🔌 Client connected (driver or user)");
     // Try to get userId from query params
@@ -1239,15 +1278,24 @@ wss.on("connection", (ws, req) => {
       // Handle parent subscription to trips
       if (data.type === "subscribeToTrip" && data.role === "parent") {
         const { tripId, studentId, parentId } = data;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_parent_subscribe_received`,timestamp:Date.now(),location:'socket/server.js:1240',message:'Parent subscription message received',data:{tripId,studentId,parentId,hasConnectionId:!!connectionId,connectionId,isParent:ws.isParent,readyState:ws.readyState},sessionId:'debug-session',runId:'ws-parent-subscribe-received',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
         if (tripId && studentId && parentId && connectionId) {
           if (!parentTripSubscriptions.has(connectionId)) {
             parentTripSubscriptions.set(connectionId, new Set());
           }
           const subscription = { tripId, studentId, parentId };
           parentTripSubscriptions.get(connectionId).add(JSON.stringify(subscription));
+          const totalSubscriptions = parentTripSubscriptions.size;
+          const subscriptionsForConnection = parentTripSubscriptions.get(connectionId).size;
           console.log(
             `📡 [WebSocket] Parent ${parentId} subscribed to trip ${tripId} for student ${studentId}`
           );
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_parent_subscribe_success`,timestamp:Date.now(),location:'socket/server.js:1247',message:'Parent subscription successful',data:{tripId,studentId,parentId,connectionId,totalSubscriptions,subscriptionsForConnection},sessionId:'debug-session',runId:'ws-parent-subscribe-success',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           ws.send(
             JSON.stringify({
               type: "tripSubscriptionConfirmed",
@@ -1256,6 +1304,10 @@ wss.on("connection", (ws, req) => {
               message: "Subscribed to trip updates",
             })
           );
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_parent_subscribe_failed`,timestamp:Date.now(),location:'socket/server.js:1241',message:'Parent subscription failed - missing required fields',data:{tripId,studentId,parentId,hasConnectionId:!!connectionId,connectionId},sessionId:'debug-session',runId:'ws-parent-subscribe-failed',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
         }
       }
 
@@ -1781,6 +1833,13 @@ app.post("/api/trip-location-update", (req, res) => {
       }${studentStopETAs ? ` with ${studentStopETAs.length} student stop ETAs` : ""}`
     );
 
+    // #region agent log
+    const parentSubscriptionsCount = parentTripSubscriptions.size;
+    const totalConnections = wss.clients.size;
+    const parentConnections = Array.from(wss.clients).filter(ws => ws.isParent).length;
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_receive_post`,timestamp:Date.now(),location:'socket/server.js:1766',message:'WebSocket server received POST /api/trip-location-update',data:{tripId,driverId,hasLocation:!!location,location:{latitude:location?.latitude,longitude:location?.longitude,heading:location?.heading},speed,hasEta:!!eta,studentStopETAsCount:studentStopETAs?.length || 0,parentSubscriptionsCount,totalConnections,parentConnections},sessionId:'debug-session',runId:'ws-receive-post',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+
     const locationData = {
       driverId,
       location,
@@ -1796,6 +1855,10 @@ app.post("/api/trip-location-update", (req, res) => {
 
     // Broadcast to subscribed parents
     broadcastTripLocationToParents(tripId, locationData);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_broadcast_complete`,timestamp:Date.now(),location:'socket/server.js:1798',message:'WebSocket server completed broadcast to parents',data:{tripId,driverId,parentSubscriptionsCount},sessionId:'debug-session',runId:'ws-broadcast-complete',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     res.json({
       success: true,

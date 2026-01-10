@@ -1178,12 +1178,13 @@ export default function TrackTripScreen() {
             <>
               {/* #region agent log */}
               {(() => {
-                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:1180',message:'Rendering driver marker',data:{hasDriverLocation:!!driverLocation,hasDriverCoordinate:!!driverCoordinate,lat:driverCoordinate.latitude,lng:driverCoordinate.longitude,renderCount:renderCountRef.current,hasRotationAnim:!!rotationAnim},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-marker-render',hypothesisId:'B'})}).catch(()=>{});
+                const markerKey = `driver-marker-${driverCoordinate.latitude}-${driverCoordinate.longitude}`;
+                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:1180',message:'Rendering driver marker',data:{hasDriverLocation:!!driverLocation,hasDriverCoordinate:!!driverCoordinate,lat:driverCoordinate.latitude,lng:driverCoordinate.longitude,locationLat:location?.location?.latitude,locationLng:location?.location?.longitude,markerKey,renderCount:renderCountRef.current,hasRotationAnim:!!rotationAnim,coordinateMatches:driverCoordinate.latitude===location?.location?.latitude&&driverCoordinate.longitude===location?.location?.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-marker-render',hypothesisId:'D'})}).catch(()=>{});
                 return null;
               })()}
               {/* #endregion */}
               <Marker
-                key="driver-marker"
+                key={`driver-marker-${driverCoordinate.latitude}-${driverCoordinate.longitude}`}
                 coordinate={driverCoordinate}
                 title="Driver"
                 description={trip?.assignedCaptain?.name || "Driver"}
