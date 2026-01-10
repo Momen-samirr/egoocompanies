@@ -160,6 +160,8 @@ export default function TrackTripScreen() {
   const [calculatedETA, setCalculatedETA] = useState<{ minutes: number; distanceMeters: number } | null>(null);
   const [calculatingETA, setCalculatingETA] = useState(false);
   const [imageLoadError, setImageLoadError] = useState(false);
+  // CRITICAL: Enable tracksViewChanges when coordinates change to force marker update
+  const [tracksViewChanges, setTracksViewChanges] = useState(false);
   const mapRef = useRef<MapView>(null);
   const rotationAnim = useRef(new Animated.Value(0)).current;
   const previousHeading = useRef<number | null>(null);
@@ -925,9 +927,10 @@ export default function TrackTripScreen() {
     };
     
     const prev = prevDriverLocationRef.current;
+    // Reduced threshold from 0.0001 (11m) to 0.00001 (1.1m) to detect smaller movements
     const coordsChanged = !prev || 
-      Math.abs(prev.latitude - coord.latitude) > 0.0001 ||
-      Math.abs(prev.longitude - coord.longitude) > 0.0001;
+      Math.abs(prev.latitude - coord.latitude) > 0.00001 ||
+      Math.abs(prev.longitude - coord.longitude) > 0.00001;
     
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:925',message:'Memoizing driver coordinate',data:{lat:coord.latitude,lng:coord.longitude,prevLat:prev?.latitude,prevLng:prev?.longitude,coordsChanged,renderCount:renderCountRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-coord-memo',hypothesisId:'D'})}).catch(()=>{});
@@ -954,9 +957,10 @@ export default function TrackTripScreen() {
   useEffect(() => {
     if (driverLocation) {
       const prev = prevDriverLocationRef.current;
+      // Reduced threshold from 0.0001 (11m) to 0.00001 (1.1m) to detect smaller movements
       const coordsChanged = !prev || 
-        Math.abs(prev.latitude - driverLocation.latitude) > 0.0001 ||
-        Math.abs(prev.longitude - driverLocation.longitude) > 0.0001;
+        Math.abs(prev.latitude - driverLocation.latitude) > 0.00001 ||
+        Math.abs(prev.longitude - driverLocation.longitude) > 0.00001;
       const refChanged = prev !== driverLocation;
       const latDiff = prev ? Math.abs(prev.latitude - driverLocation.latitude) : null;
       const lngDiff = prev ? Math.abs(prev.longitude - driverLocation.longitude) : null;
@@ -971,6 +975,31 @@ export default function TrackTripScreen() {
     }
   }, [driverLocation?.latitude, driverLocation?.longitude, location?.location]);
   // #endregion
+
+  // CRITICAL: Enable tracksViewChanges when coordinates change to force marker update
+  // React Native Maps requires tracksViewChanges={true} for custom views (Animated.View) to update
+  // We enable it when coordinates change, then disable after marker has updated for performance
+  useEffect(() => {
+    if (driverCoordinate) {
+      // Enable tracksViewChanges to force marker update
+      setTracksViewChanges(true);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:975',message:'Enabling tracksViewChanges for marker update',data:{lat:driverCoordinate.latitude,lng:driverCoordinate.longitude,hasDriverCoordinate:!!driverCoordinate},timestamp:Date.now(),sessionId:'debug-session',runId:'tracks-view-changes-enabled',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      
+      // Disable tracksViewChanges after marker has updated (500ms should be enough)
+      // This improves performance while still allowing updates when coordinates change
+      const timeoutId = setTimeout(() => {
+        setTracksViewChanges(false);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:985',message:'Disabling tracksViewChanges for performance',data:{lat:driverCoordinate.latitude,lng:driverCoordinate.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'tracks-view-changes-disabled',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [driverCoordinate?.latitude, driverCoordinate?.longitude, driverCoordinate]);
 
   // Get route segments for directions - memoize to update when currentPointIndex or allPoints changes
   // CRITICAL: This hook MUST be before conditional returns
@@ -1178,19 +1207,18 @@ export default function TrackTripScreen() {
             <>
               {/* #region agent log */}
               {(() => {
-                const markerKey = `driver-marker-${driverCoordinate.latitude}-${driverCoordinate.longitude}`;
-                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:1180',message:'Rendering driver marker',data:{hasDriverLocation:!!driverLocation,hasDriverCoordinate:!!driverCoordinate,lat:driverCoordinate.latitude,lng:driverCoordinate.longitude,locationLat:location?.location?.latitude,locationLng:location?.location?.longitude,markerKey,renderCount:renderCountRef.current,hasRotationAnim:!!rotationAnim,coordinateMatches:driverCoordinate.latitude===location?.location?.latitude&&driverCoordinate.longitude===location?.location?.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-marker-render',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'track-trip.tsx:1180',message:'Rendering driver marker',data:{hasDriverLocation:!!driverLocation,hasDriverCoordinate:!!driverCoordinate,lat:driverCoordinate.latitude,lng:driverCoordinate.longitude,locationLat:location?.location?.latitude,locationLng:location?.location?.longitude,renderCount:renderCountRef.current,hasRotationAnim:!!rotationAnim,coordinateMatches:driverCoordinate.latitude===location?.location?.latitude&&driverCoordinate.longitude===location?.location?.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'driver-marker-render',hypothesisId:'D'})}).catch(()=>{});
                 return null;
               })()}
               {/* #endregion */}
               <Marker
-                key={`driver-marker-${driverCoordinate.latitude}-${driverCoordinate.longitude}`}
+                key="driver-marker"
                 coordinate={driverCoordinate}
                 title="Driver"
                 description={trip?.assignedCaptain?.name || "Driver"}
                 anchor={{ x: 0.5, y: 0.5 }}
                 flat={false}
-                tracksViewChanges={true}
+                tracksViewChanges={tracksViewChanges}
               >
               <Animated.View
                 style={[

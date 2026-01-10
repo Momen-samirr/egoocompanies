@@ -129,17 +129,61 @@ export const useTripTracking = ({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const locationRef = useRef<TripLocationUpdate | null>(null); // Ref to track current location for comparison
+  const isCleaningUpRef = useRef(false); // Flag to prevent reconnection during cleanup
+  const isConnectingRef = useRef(false); // Flag to prevent multiple simultaneous connection attempts
 
   useEffect(() => {
+    // #region agent log
+    console.log('[CRITICAL] useTripTracking useEffect RUNNING', { tripId, studentId, enabled, isCleaningUp: isCleaningUpRef.current, isConnecting: isConnectingRef.current });
+    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:135',message:'useTripTracking useEffect RUNNING',data:{tripId,studentId,enabled,hasExistingWs:!!wsRef.current,wsRefReadyState:wsRef.current?.readyState,isCleaningUp:isCleaningUpRef.current,isConnecting:isConnectingRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'useTripTracking-effect-run',hypothesisId:'J'})}).catch(()=>{});
+    // #endregion
+    
     if (!enabled || !tripId || !studentId) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:139',message:'useTripTracking useEffect - disabled or missing params',data:{enabled,tripId,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'useTripTracking-effect-skip',hypothesisId:'J'})}).catch(()=>{});
+      // #endregion
       return;
     }
 
     const connect = async () => {
+      // Prevent multiple simultaneous connection attempts
+      if (isConnectingRef.current) {
+        console.log('[WebSocket] Connection already in progress, skipping');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:138',message:'WebSocket connection already in progress - skipping',data:{isCleaningUp:isCleaningUpRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-connect-skip',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+
+      // Don't connect if cleanup is in progress
+      if (isCleaningUpRef.current) {
+        console.log('[WebSocket] Cleanup in progress, skipping connection');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:145',message:'WebSocket connection skipped - cleanup in progress',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-connect-skip-cleanup',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+
+      // Close existing connection if any
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        console.log('[WebSocket] Closing existing connection before creating new one');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:152',message:'Closing existing WebSocket connection',data:{readyState:wsRef.current.readyState},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-close-existing',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        try {
+          wsRef.current.close(1000, 'Creating new connection');
+        } catch (e) {
+          console.error('[WebSocket] Error closing existing connection:', e);
+        }
+      }
+
+      isConnectingRef.current = true;
+
       try {
         const parent = await getParentData();
         if (!parent) {
           setError("Parent data not found");
+          isConnectingRef.current = false;
           return;
         }
 
@@ -149,13 +193,21 @@ export const useTripTracking = ({
         
         // #region agent log
         console.log('[DEBUG] WebSocket connection attempt:', { wsUrl, baseUrl: WEBSOCKET_URL, parentId: parent.id });
-        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:61',message:'WebSocket connection attempt',data:{wsUrl,baseUrl:WEBSOCKET_URL,parentId:parent.id},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-connect',hypothesisId:'E'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:158',message:'WebSocket connection attempt',data:{wsUrl,baseUrl:WEBSOCKET_URL,parentId:parent.id,hasExistingWs:!!wsRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-connect',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         
         const ws = new WebSocket(wsUrl);
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:155',message:'WebSocket instance created - setting handlers',data:{wsUrl:wsUrl.replace(/wss?:\/\//, '***://'),readyState:ws.readyState,parentId:parent.id},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-create',hypothesisId:'H'})}).catch(()=>{});
+        // #endregion
+
         ws.onopen = () => {
           console.log("[WebSocket] Connected successfully to:", wsUrl.replace(/wss?:\/\//, '***://'));
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:177',message:'WebSocket onopen fired',data:{wsUrl:wsUrl.replace(/wss?:\/\//, '***://'),readyState:ws.readyState,parentId:parent.id,isCleaningUp:isCleaningUpRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-onopen',hypothesisId:'H'})}).catch(()=>{});
+          // #endregion
+          isConnectingRef.current = false; // Connection established
           setConnected(true);
           setError(null);
           reconnectAttempts.current = 0;
@@ -170,20 +222,42 @@ export const useTripTracking = ({
           };
           console.log("[WebSocket] Sending subscription:", subscriptionMessage);
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:129',message:'WebSocket connected and sending subscription',data:{wsUrl:wsUrl.replace(/wss?:\/\//, '***://'),subscriptionMessage,parentId:parent.id},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe',hypothesisId:'F'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:173',message:'WebSocket connected and sending subscription',data:{wsUrl:wsUrl.replace(/wss?:\/\//, '***://'),subscriptionMessage,parentId:parent.id,readyState:ws.readyState},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe',hypothesisId:'F'})}).catch(()=>{});
           // #endregion
           try {
             ws.send(JSON.stringify(subscriptionMessage));
             console.log("[WebSocket] Subscription message sent successfully");
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:177',message:'Subscription message sent via WebSocket',data:{readyState:ws.readyState,subscriptionMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe-sent',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
           } catch (sendError) {
             console.error("[WebSocket] Error sending subscription:", sendError);
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:142',message:'Error sending subscription',data:{error:sendError?.message,subscriptionMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe-error',hypothesisId:'G'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:179',message:'Error sending subscription',data:{error:sendError?.message,subscriptionMessage,readyState:ws.readyState},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscribe-error',hypothesisId:'G'})}).catch(()=>{});
             // #endregion
           }
         };
 
         ws.onmessage = (event) => {
+          // #region agent log
+          // CRITICAL: Log IMMEDIATELY when onmessage fires, before any parsing
+          const onmessageState = {
+            hasData: !!event.data,
+            dataType: typeof event.data,
+            dataLength: event.data?.length,
+            readyState: ws.readyState,
+            url: ws.url?.replace(/wss?:\/\//, '***://'),
+            protocol: ws.protocol,
+            extensions: ws.extensions,
+            bufferedAmount: ws.bufferedAmount,
+            isCleaningUp: isCleaningUpRef.current,
+            hasWsRef: wsRef.current === ws,
+            wsRefReadyState: wsRef.current?.readyState,
+            timestamp: new Date().toISOString()
+          };
+          console.log('[CRITICAL] WebSocket onmessage FIRED - raw event received', onmessageState);
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:241',message:'WebSocket onmessage handler FIRED',data:{...onmessageState,dataPreview:typeof event.data==='string'?event.data.substring(0,200):String(event.data).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-onmessage-fired',hypothesisId:'H'})}).catch(()=>{});
+          // #endregion
           try {
             const data = JSON.parse(event.data);
             
@@ -223,9 +297,10 @@ export const useTripTracking = ({
                 const prevLocationState = locationRef.current;
                 const prevLocationCoords = prevLocationState?.location;
                 const newLocationCoords = data.location;
+                // Reduced threshold from 0.0001 (11m) to 0.00001 (1.1m) to detect smaller movements
                 const coordsChanged = !prevLocationCoords || 
-                  Math.abs(prevLocationCoords.latitude - newLocationCoords.latitude) > 0.0001 ||
-                  Math.abs(prevLocationCoords.longitude - newLocationCoords.longitude) > 0.0001;
+                  Math.abs(prevLocationCoords.latitude - newLocationCoords.latitude) > 0.00001 ||
+                  Math.abs(prevLocationCoords.longitude - newLocationCoords.longitude) > 0.00001;
                 const locationUpdateData = {
                   tripId: updateTripId,
                   studentId: updateStudentId,
@@ -297,15 +372,23 @@ export const useTripTracking = ({
                 // #endregion
               }
             } else if (data.type === "tripSubscriptionConfirmed") {
-              console.log("[WebSocket] ✅ Subscription confirmed!", { 
+              const confirmationData = {
                 confirmedTripId: data.tripId, 
                 confirmedStudentId: data.studentId,
                 subscribedTripId: tripId,
                 subscribedStudentId: studentId,
-                matches: data.tripId === tripId && data.studentId === studentId
-              });
+                matches: data.tripId === tripId && data.studentId === studentId,
+                message: data.message,
+                hasLocation: !!location,
+                location: location,
+                connected,
+                readyState: ws.readyState,
+                url: ws.url?.replace(/wss?:\/\//, '***://'),
+                isCleaningUp: isCleaningUpRef.current
+              };
+              console.log("[WebSocket] ✅ Subscription confirmed!", confirmationData);
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:184',message:'Subscription confirmed',data:{confirmedTripId:data.tripId,confirmedStudentId:data.studentId,subscribedTripId:tripId,subscribedStudentId:studentId,matches:data.tripId===tripId&&data.studentId===studentId,message:data.message},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscription-confirmed',hypothesisId:'B'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:365',message:'Subscription confirmed',data:confirmationData,timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-subscription-confirmed',hypothesisId:'B'})}).catch(()=>{});
               // #endregion
             } else {
               // #region agent log
@@ -344,20 +427,35 @@ export const useTripTracking = ({
           console.log("[WebSocket] Disconnected", { 
             code: event.code, 
             reason: event.reason || 'No reason provided',
-            wasClean: event.wasClean 
+            wasClean: event.wasClean,
+            isCleaningUp: isCleaningUpRef.current
           });
           setConnected(false);
+          isConnectingRef.current = false; // Connection closed
 
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:219',message:'WebSocket disconnected',data:{code:event.code,reason:event.reason,wasClean:event.wasClean,reconnectAttempts:reconnectAttempts.current,wsUrl:wsUrl.replace(/wss?:\/\//, '***://')},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-disconnect',hypothesisId:'H'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:365',message:'WebSocket disconnected',data:{code:event.code,reason:event.reason,wasClean:event.wasClean,reconnectAttempts:reconnectAttempts.current,isCleaningUp:isCleaningUpRef.current,wsUrl:wsUrl.replace(/wss?:\/\//, '***://')},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-disconnect',hypothesisId:'H'})}).catch(()=>{});
           // #endregion
 
-          // Attempt to reconnect
+          // Don't reconnect if cleanup is in progress (intentional close)
+          if (isCleaningUpRef.current) {
+            console.log('[WebSocket] Cleanup in progress - not reconnecting');
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:368',message:'WebSocket disconnect during cleanup - reconnection prevented',data:{code:event.code,reason:event.reason},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-disconnect-cleanup',hypothesisId:'I'})}).catch(()=>{});
+            // #endregion
+            return;
+          }
+
+          // Attempt to reconnect only if not cleaning up
           if (reconnectAttempts.current < 5) {
             reconnectAttempts.current += 1;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
             console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/5)`);
-            reconnectTimeoutRef.current = setTimeout(connect, delay);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (!isCleaningUpRef.current) {
+                connect();
+              }
+            }, delay);
           } else {
             console.error("[WebSocket] Max reconnection attempts reached");
             setError("Failed to reconnect. Please refresh.");
@@ -365,8 +463,15 @@ export const useTripTracking = ({
         };
 
         wsRef.current = ws;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:407',message:'WebSocket ref set and handlers attached',data:{hasWsRef:!!wsRef.current,wsRefReadyState:wsRef.current?.readyState,wsReadyState:ws.readyState,parentId:parent.id},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-ref-set',hypothesisId:'H'})}).catch(()=>{});
+        // #endregion
       } catch (err) {
+        isConnectingRef.current = false; // Reset on error
         console.error("[WebSocket] Connection error:", err);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:410',message:'WebSocket connection error in connect function',data:{error:err?.message,errorStack:err?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-connect-error',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         setError("Failed to connect to WebSocket server");
       }
     };
@@ -374,12 +479,81 @@ export const useTripTracking = ({
     connect();
 
     return () => {
+      // #region agent log
+      console.log('[CRITICAL] useTripTracking cleanup function CALLED', { tripId, studentId, enabled, hasWsRef: !!wsRef.current });
+      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:456',message:'useTripTracking cleanup function CALLED',data:{tripId,studentId,enabled,hasWsRef:!!wsRef.current,wsRefReadyState:wsRef.current?.readyState,isCleaningUpBefore:isCleaningUpRef.current,isConnectingBefore:isConnectingRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'useTripTracking-cleanup-called',hypothesisId:'J'})}).catch(()=>{});
+      // #endregion
+      
+      // Set cleanup flag to prevent reconnection
+      isCleaningUpRef.current = true;
+      
+      // Clear any pending reconnection attempts
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:464',message:'Cleared reconnect timeout during cleanup',data:{tripId,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-cleanup-clear-timeout',hypothesisId:'J'})}).catch(()=>{});
+        // #endregion
       }
+      
+      // Unsubscribe before closing
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({
+            type: "unsubscribeFromTrip",
+            role: "parent",
+            tripId,
+          }));
+          console.log("[WebSocket] Unsubscribed from trip before closing");
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:473',message:'WebSocket unsubscribed before cleanup',data:{tripId,studentId,readyState:wsRef.current.readyState},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-unsubscribe-cleanup',hypothesisId:'I'})}).catch(()=>{});
+          // #endregion
+        } catch (e) {
+          console.error("[WebSocket] Error unsubscribing:", e);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:477',message:'Error unsubscribing during cleanup',data:{tripId,studentId,error:e?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-unsubscribe-error',hypothesisId:'J'})}).catch(()=>{});
+          // #endregion
+        }
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:480',message:'WebSocket not open during cleanup - skipping unsubscribe',data:{tripId,studentId,hasWsRef:!!wsRef.current,readyState:wsRef.current?.readyState},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-cleanup-skip-unsubscribe',hypothesisId:'J'})}).catch(()=>{});
+        // #endregion
+      }
+      
+      // Close the connection
       if (wsRef.current) {
-        wsRef.current.close();
+        try {
+          // Remove handlers to prevent reconnection triggers
+          wsRef.current.onclose = null;
+          wsRef.current.onerror = null;
+          wsRef.current.onmessage = null;
+          wsRef.current.onopen = null;
+          
+          wsRef.current.close(1000, 'Component unmounting');
+          console.log("[WebSocket] Connection closed during cleanup");
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:493',message:'WebSocket closed during cleanup',data:{tripId,studentId,readyState:wsRef.current?.readyState},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-cleanup-close',hypothesisId:'I'})}).catch(()=>{});
+          // #endregion
+        } catch (e) {
+          console.error("[WebSocket] Error closing connection:", e);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:498',message:'Error closing WebSocket during cleanup',data:{tripId,studentId,error:e?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-cleanup-close-error',hypothesisId:'J'})}).catch(()=>{});
+          // #endregion
+        }
+        wsRef.current = null;
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:504',message:'No WebSocket ref during cleanup',data:{tripId,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-cleanup-no-ref',hypothesisId:'J'})}).catch(()=>{});
+        // #endregion
       }
+      
+      // Reset cleanup flag after a delay (to allow close handlers to check it)
+      setTimeout(() => {
+        isCleaningUpRef.current = false;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTripTracking.ts:510',message:'Cleanup flag reset after delay',data:{tripId,studentId},timestamp:Date.now(),sessionId:'debug-session',runId:'websocket-cleanup-flag-reset',hypothesisId:'J'})}).catch(()=>{});
+        // #endregion
+      }, 1000);
     };
   }, [tripId, studentId, enabled]);
 
