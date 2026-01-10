@@ -9,16 +9,18 @@ const server = http.createServer(app);
 // create server
 server.listen(process.env.PORT, () => {
   console.log(`Server is connected with port ${process.env.PORT}`);
-  
+
   // Start trip activation background worker
   tripActivationWorker.start();
-  
+
   // Start trip overdue worker to mark failed trips
   tripOverdueWorker.start();
-  
+
   // Start WhatsApp report scheduler for batched notifications
   whatsappReportScheduler.start();
 });
+
+// m
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
