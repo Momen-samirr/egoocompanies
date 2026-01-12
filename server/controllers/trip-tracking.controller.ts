@@ -969,3 +969,96 @@ export const getRoadDistanceToNextCheckpoint = async (
     });
   }
 };
+
+/**
+ * Get current location for a trip (internal endpoint for WebSocket server)
+ * GET /internal/trips/:tripId/current-location
+ * Returns the most recent driver location for a trip in format matching TripLocationUpdate
+ */
+export const getTripCurrentLocationForSubscription = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { tripId } = req.params;
+
+    if (!tripId) {
+      return res.status(400).json({
+        success: false,
+        message: "tripId is required",
+      });
+    }
+
+    // Get trip with progress and assigned captain
+    const trip = await prisma.scheduledTrip.findUnique({
+      where: { id: tripId },
+      include: {
+        progress: true,
+        assignedCaptain: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    // Check if trip has progress with location data
+    if (!trip.progress || !trip.progress.lastLatitude || !trip.progress.lastLongitude) {
+      // No location data yet - return null
+      return res.json({
+        success: true,
+        location: null,
+      });
+    }
+
+    // Get the most recent location history for additional data (heading, speed, ETA, deviation)
+    const lastLocationHistory = await prisma.tripLocationHistory.findFirst({
+      where: { scheduledTripId: tripId },
+      orderBy: { timestamp: "desc" },
+    });
+
+    // Construct location data matching TripLocationUpdate structure
+    const locationData = {
+      driverId: trip.assignedCaptain?.id || null,
+      location: {
+        latitude: trip.progress.lastLatitude,
+        longitude: trip.progress.lastLongitude,
+        heading: lastLocationHistory?.heading || null,
+      },
+      speed: lastLocationHistory?.speed || 0,
+      deviationStatus: lastLocationHistory
+        ? {
+            isDeviated: lastLocationHistory.isRouteDeviation || false,
+            distance: lastLocationHistory.distanceFromRoute || 0,
+          }
+        : { isDeviated: false, distance: 0 },
+      eta: lastLocationHistory?.etaToNextCheckpoint
+        ? {
+            minutes: lastLocationHistory.etaToNextCheckpoint,
+            distanceMeters: lastLocationHistory.distanceFromNextCheckpoint || null,
+            method: lastLocationHistory.etaMethod || null,
+          }
+        : null,
+      timestamp: trip.progress.lastLocationUpdate?.toISOString() || new Date().toISOString(),
+    };
+
+    res.json({
+      success: true,
+      location: locationData,
+    });
+  } catch (error: any) {
+    console.error("Error fetching trip current location:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch trip current location",
+    });
+  }
+};

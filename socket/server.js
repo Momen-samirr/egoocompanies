@@ -425,6 +425,45 @@ const fetchCompanyDrivers = async (companyId) => {
   return [];
 };
 
+// Function to fetch current trip location from main API server
+const fetchTripCurrentLocation = async (tripId) => {
+  if (!tripId) {
+    return null;
+  }
+
+  try {
+    // Make HTTP request to get current trip location
+    // We'll use the server's API endpoint
+    const serverUrl = process.env.SERVER_URL || "http://localhost:8000";
+    const response = await fetch(
+      `${serverUrl}/internal/trips/${tripId}/current-location`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.location) {
+        return data.location;
+      }
+    } else {
+      console.error(
+        `❌ Error fetching trip current location for ${tripId}: ${response.status} ${response.statusText}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `❌ Error fetching trip current location for ${tripId}:`,
+      error.message
+    );
+  }
+
+  return null;
+};
+
 // Function to filter drivers by company
 const filterDriversByCompany = (driversObj, companyDriverIds) => {
   if (!companyDriverIds || companyDriverIds.length === 0) {
@@ -1335,6 +1374,50 @@ wss.on("connection", (ws, req) => {
               message: "Subscribed to trip updates",
             })
           );
+
+          // Immediately fetch and send current driver location if available
+          try {
+            const currentLocation = await fetchTripCurrentLocation(tripId);
+            if (currentLocation && currentLocation.location) {
+              // Construct immediate location update message matching broadcastTripLocationToParents format
+              const immediateUpdate = {
+                type: "tripLocationUpdate",
+                tripId: tripId,
+                studentId: studentId,
+                driverId: currentLocation.driverId,
+                location: currentLocation.location,
+                speed: currentLocation.speed || 0,
+                deviationStatus: currentLocation.deviationStatus || {
+                  isDeviated: false,
+                  distance: 0,
+                },
+                eta: currentLocation.eta || null,
+                timestamp: currentLocation.timestamp || new Date().toISOString(),
+              };
+
+              // Send immediate location update to this parent
+              if (ws.readyState === 1) {
+                ws.send(JSON.stringify(immediateUpdate));
+                console.log(
+                  `✅ [WebSocket] Sent immediate location update to parent ${parentId} for trip ${tripId}`
+                );
+              } else {
+                console.warn(
+                  `⚠️ [WebSocket] Cannot send immediate location - connection not ready (state: ${ws.readyState})`
+                );
+              }
+            } else {
+              console.log(
+                `ℹ️ [WebSocket] No current location available for trip ${tripId} yet`
+              );
+            }
+          } catch (error) {
+            console.error(
+              `❌ [WebSocket] Error fetching/sending immediate location for trip ${tripId}:`,
+              error.message
+            );
+            // Don't fail subscription if location fetch fails - parent will get next update
+          }
         } else {
           // #region agent log
           fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_ws_parent_subscribe_failed`,timestamp:Date.now(),location:'socket/server.js:1241',message:'Parent subscription failed - missing required fields',data:{tripId,studentId,parentId,hasConnectionId:!!connectionId,connectionId},sessionId:'debug-session',runId:'ws-parent-subscribe-failed',hypothesisId:'C'})}).catch(()=>{});

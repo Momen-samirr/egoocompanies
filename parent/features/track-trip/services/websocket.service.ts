@@ -84,6 +84,9 @@ export class WebSocketService {
   private parentId: string | null = null;
   private currentTripId: string | null = null;
   private currentStudentId: string | null = null;
+  
+  // Static cache for parent data to avoid AsyncStorage reads on every connection
+  private static parentDataCache: any | null = null;
 
   /**
    * Get current connection state
@@ -138,7 +141,15 @@ export class WebSocketService {
     this.connectionState = ConnectionState.CONNECTING;
 
     try {
-      const parent = await getParentData();
+      // Use cached parent data if available, otherwise fetch and cache
+      let parent = WebSocketService.parentDataCache;
+      if (!parent) {
+        parent = await getParentData();
+        if (parent && parent.id) {
+          WebSocketService.parentDataCache = parent;
+        }
+      }
+      
       if (!parent || !parent.id) {
         throw new Error("Parent data not found");
       }

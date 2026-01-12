@@ -6,6 +6,7 @@ import userRouter from "./routes/user.route";
 import driverRouter from "./routes/driver.route";
 import adminRouter from "./routes/admin.route";
 import parentRouter from "./routes/parent.route";
+import { getTripCurrentLocationForSubscription } from "./controllers/trip-tracking.controller";
 
 export const app = express();
 
@@ -60,6 +61,9 @@ app.use("/api/v1", userRouter);
 app.use("/api/v1/driver", driverRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/parent", parentRouter);
+
+// Internal routes (for WebSocket server, no authentication required)
+app.get("/internal/trips/:tripId/current-location", getTripCurrentLocationForSubscription);
 
 // testing api
 app.get("/test", (req: Request, res: Response, next: NextFunction) => {
