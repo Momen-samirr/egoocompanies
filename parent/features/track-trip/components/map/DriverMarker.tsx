@@ -72,7 +72,7 @@ export function DriverMarker({
       description={driverName}
       anchor={{ x: 0.5, y: 0.5 }}
       flat={false}
-      tracksViewChanges={true}
+      tracksViewChanges={false}
       zIndex={1000}
       onPress={onPress}
     >
@@ -92,7 +92,7 @@ export function DriverMarker({
         ]}
       >
         <Image
-          source={require("../../../assets/images/car.png")}
+          source={require("../../../../assets/images/car.png")}
           style={styles.carImage}
           resizeMode="contain"
         />
@@ -103,11 +103,11 @@ export function DriverMarker({
 
 const styles = StyleSheet.create({
   driverMarker: {
-    backgroundColor: "#6366f1",
+    backgroundColor: "transparent",
     borderRadius: 20,
     padding: 8,
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: "transparent",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -115,10 +115,10 @@ const styles = StyleSheet.create({
     elevation: 5,
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 1000,
   },
   carImage: {
-    width: 32,
-    height: 32,
+    width: 63,
+    height: 63,
   },
 });
-
