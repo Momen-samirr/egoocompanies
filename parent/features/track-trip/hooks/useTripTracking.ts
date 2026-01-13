@@ -84,12 +84,21 @@ export function useTripTracking({
         }
       },
       onMessage: (data: TripLocationUpdate) => {
+        console.log("[useTripTracking] Received location update in hook:", {
+          tripId: data.tripId,
+          studentId: data.studentId,
+          location: data.location,
+          timestamp: data.timestamp,
+        });
         // Verify tripId and studentId match before accepting update
         if (
           data.tripId === normalizedTripId &&
           data.studentId === normalizedStudentId
         ) {
+          console.log("[useTripTracking] Location update matches, updating state");
           setLocation(data);
+        } else {
+          console.warn("[useTripTracking] Location update ID mismatch, ignoring");
         }
       },
       onError: (err: Error) => {

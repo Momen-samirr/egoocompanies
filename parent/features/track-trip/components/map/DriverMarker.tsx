@@ -3,9 +3,8 @@
  */
 
 import React, { useEffect, useRef } from "react";
-import { StyleSheet, Animated } from "react-native";
+import { StyleSheet, Animated, Image } from "react-native";
 import { Marker } from "react-native-maps";
-import { Ionicons } from "@expo/vector-icons";
 import { Coordinate, DriverLocation } from "../../types";
 
 /**
@@ -92,7 +91,11 @@ export function DriverMarker({
           },
         ]}
       >
-        <Ionicons name="car" size={20} color="#fff" />
+        <Image
+          source={require("../../../assets/images/car.png")}
+          style={styles.carImage}
+          resizeMode="contain"
+        />
       </Animated.View>
     </Marker>
   );
@@ -110,6 +113,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  carImage: {
+    width: 32,
+    height: 32,
   },
 });
 

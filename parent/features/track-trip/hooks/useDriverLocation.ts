@@ -53,12 +53,18 @@ export function useDriverLocation({
         location.heading !== undefined);
 
     if (coordsChanged) {
+      console.log("[useDriverLocation] Coordinates changed, updating driver location:", {
+        prev: prev ? { lat: prev.latitude, lng: prev.longitude, heading: prev.heading } : null,
+        current: { lat: location.latitude, lng: location.longitude, heading: location.heading },
+      });
       setDriverLocation(location);
       prevLocationRef.current = location;
 
       if (onLocationChange) {
         onLocationChange(location);
       }
+    } else {
+      console.log("[useDriverLocation] Coordinates unchanged, skipping update");
     }
   }, [
     location?.latitude,

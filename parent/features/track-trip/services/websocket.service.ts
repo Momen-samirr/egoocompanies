@@ -185,11 +185,19 @@ export class WebSocketService {
 
           if (data.type === "tripLocationUpdate") {
             const update = data as TripLocationUpdate;
+            console.log("[WebSocket Service] Received location update:", {
+              tripId: update.tripId,
+              studentId: update.studentId,
+              location: update.location,
+              timestamp: update.timestamp,
+              hasEta: !!update.eta,
+            });
             // Verify tripId and studentId match before accepting update
             if (
               update.tripId === this.currentTripId &&
               update.studentId === this.currentStudentId
             ) {
+              console.log("[WebSocket Service] Location update matches subscription, calling onMessage callback");
               if (this.callbacks.onMessage) {
                 this.callbacks.onMessage(update);
               }
