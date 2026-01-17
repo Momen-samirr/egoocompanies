@@ -2,7 +2,7 @@
  * Driver marker component with rotation animation
  */
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { StyleSheet, Animated, Image } from "react-native";
 import { Marker } from "react-native-maps";
 import { Coordinate, DriverLocation } from "../../types";
@@ -30,6 +30,12 @@ export function DriverMarker({
 }: DriverMarkerProps) {
   const rotationAnim = useRef(new Animated.Value(heading || 0)).current;
   const previousHeading = useRef<number | null>(null);
+
+  // Ensure coordinate is always a new object reference to trigger Marker updates
+  // React Native Maps Marker updates when coordinate prop reference changes
+  const markerCoordinate = React.useMemo(() => {
+    return { ...coordinate };
+  }, [coordinate.latitude, coordinate.longitude]);
 
   useEffect(() => {
     if (heading !== undefined) {
@@ -67,7 +73,7 @@ export function DriverMarker({
   return (
     <Marker
       key={`driver-marker-${updateKey || 0}`}
-      coordinate={coordinate}
+      coordinate={markerCoordinate}
       title="Driver"
       description={driverName}
       anchor={{ x: 0.5, y: 0.5 }}

@@ -84,7 +84,7 @@ export class WebSocketService {
   private parentId: string | null = null;
   private currentTripId: string | null = null;
   private currentStudentId: string | null = null;
-  
+
   // Static cache for parent data to avoid AsyncStorage reads on every connection
   private static parentDataCache: any | null = null;
 
@@ -123,7 +123,9 @@ export class WebSocketService {
     }
 
     if (this.isCleaningUp) {
-      console.log("[WebSocket Service] Cleanup in progress, skipping connection");
+      console.log(
+        "[WebSocket Service] Cleanup in progress, skipping connection"
+      );
       return;
     }
 
@@ -133,7 +135,10 @@ export class WebSocketService {
       try {
         this.ws.close(1000, "Creating new connection");
       } catch (e) {
-        console.error("[WebSocket Service] Error closing existing connection:", e);
+        console.error(
+          "[WebSocket Service] Error closing existing connection:",
+          e
+        );
       }
     }
 
@@ -149,7 +154,7 @@ export class WebSocketService {
           WebSocketService.parentDataCache = parent;
         }
       }
-      
+
       if (!parent || !parent.id) {
         throw new Error("Parent data not found");
       }
@@ -159,7 +164,10 @@ export class WebSocketService {
       const baseUrl = getWebSocketUrl().replace(/\/+$/, "");
       const wsUrl = `${baseUrl}?role=parent&parentId=${parent.id}`;
 
-      console.log("[WebSocket Service] Connecting to:", wsUrl.replace(/wss?:\/\//, "***://"));
+      console.log(
+        "[WebSocket Service] Connecting to:",
+        wsUrl.replace(/wss?:\/\//, "***://")
+      );
 
       const ws = new WebSocket(wsUrl);
 
@@ -197,7 +205,9 @@ export class WebSocketService {
               update.tripId === this.currentTripId &&
               update.studentId === this.currentStudentId
             ) {
-              console.log("[WebSocket Service] Location update matches subscription, calling onMessage callback");
+              console.log(
+                "[WebSocket Service] Location update matches subscription, calling onMessage callback"
+              );
               if (this.callbacks.onMessage) {
                 this.callbacks.onMessage(update);
               }
@@ -214,7 +224,10 @@ export class WebSocketService {
             }
           } else if (data.type === "tripSubscriptionConfirmed") {
             const confirmation = data as TripSubscriptionConfirmed;
-            console.log("[WebSocket Service] Subscription confirmed:", confirmation);
+            console.log(
+              "[WebSocket Service] Subscription confirmed:",
+              confirmation
+            );
             if (this.callbacks.onSubscriptionConfirmed) {
               this.callbacks.onSubscriptionConfirmed(confirmation);
             }
@@ -365,7 +378,11 @@ export class WebSocketService {
     }
 
     // Unsubscribe before closing
-    if (this.ws && this.ws.readyState === WebSocket.OPEN && this.currentTripId) {
+    if (
+      this.ws &&
+      this.ws.readyState === WebSocket.OPEN &&
+      this.currentTripId
+    ) {
       try {
         this.ws.send(
           JSON.stringify({
@@ -408,4 +425,3 @@ export class WebSocketService {
     }, 1000);
   }
 }
-

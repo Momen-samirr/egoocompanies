@@ -29,9 +29,10 @@ export const ETA_MIN_DISTANCE_CHANGE = 50; // 50 meters
 
 /**
  * Coordinate change threshold for marker updates (degrees)
- * 0.00001 degrees ≈ 1.1 meters
+ * 0.000001 degrees ≈ 0.11 meters (very sensitive for real-time tracking)
+ * Lower threshold ensures all real movements are detected
  */
-export const COORDINATE_CHANGE_THRESHOLD = 0.00001;
+export const COORDINATE_CHANGE_THRESHOLD = 0.000001;
 
 /**
  * Map region padding percentage

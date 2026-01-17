@@ -38,6 +38,7 @@ export function useDriverLocation({
   const prevLocationRef = useRef<DriverLocation | null>(null);
 
   // Update location state when prop changes
+  // For real-time tracking, we accept all updates (threshold check is very sensitive)
   useEffect(() => {
     if (!location) {
       setDriverLocation(null);
@@ -46,6 +47,8 @@ export function useDriverLocation({
     }
 
     const prev = prevLocationRef.current;
+    // Always update if no previous location, or if coordinates/heading changed
+    // Use very sensitive threshold to catch all real movements
     const coordsChanged =
       !prev ||
       hasCoordinateChanged(prev, location, COORDINATE_CHANGE_THRESHOLD) ||
@@ -56,9 +59,11 @@ export function useDriverLocation({
       console.log("[useDriverLocation] Coordinates changed, updating driver location:", {
         prev: prev ? { lat: prev.latitude, lng: prev.longitude, heading: prev.heading } : null,
         current: { lat: location.latitude, lng: location.longitude, heading: location.heading },
+        threshold: COORDINATE_CHANGE_THRESHOLD,
       });
-      setDriverLocation(location);
-      prevLocationRef.current = location;
+      // Always create a new object reference to ensure React detects the change
+      setDriverLocation({ ...location });
+      prevLocationRef.current = { ...location };
 
       if (onLocationChange) {
         onLocationChange(location);

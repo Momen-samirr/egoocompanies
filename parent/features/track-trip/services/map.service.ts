@@ -60,8 +60,7 @@ export function calculateMapRegion(
   driverLocation?: Coordinate | null
 ): Region | null {
   const allPoints: Coordinate[] = [...points];
-  
-  // Add driver location if available
+
   if (driverLocation) {
     allPoints.push(driverLocation);
   }
@@ -78,7 +77,6 @@ export function calculateMapRegion(
   const latDelta = boundingBox.maxLat - boundingBox.minLat;
   const lngDelta = boundingBox.maxLng - boundingBox.minLng;
 
-  // Add padding
   const padding = MAP_REGION_PADDING;
   const latPadding = latDelta * padding;
   const lngPadding = lngDelta * padding;
@@ -92,4 +90,3 @@ export function calculateMapRegion(
 
   return region;
 }
-
