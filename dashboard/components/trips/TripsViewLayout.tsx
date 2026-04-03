@@ -37,7 +37,7 @@ export default function TripsViewLayout({
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">{title}</h1>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">{title}</h1>
         <div className="flex items-center gap-3">
           {actions}
           {showCreateButton && (
@@ -49,7 +49,7 @@ export default function TripsViewLayout({
                 <Plus className="h-4 w-4 mr-2" />
                 Create School Trip
               </Button>
-              <Button onClick={() => router.push("/dashboard/trips/create")}>
+              <Button className="primary-gradient text-white" onClick={() => router.push("/dashboard/trips/create")}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Trip
               </Button>
@@ -58,7 +58,7 @@ export default function TripsViewLayout({
         </div>
       </div>
 
-      <Card>
+      <Card className="border border-slate-100">
         <CardContent className="p-6">
           <div className="space-y-6">
             {/* Search */}

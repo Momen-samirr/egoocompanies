@@ -1,16 +1,20 @@
 import { useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
   ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import api from "@/lib/api";
 import { storeParentToken, storeParentData } from "@/lib/auth";
+import { Ionicons } from "@expo/vector-icons";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthBrandHeader from "@/components/auth/AuthBrandHeader";
+import AuthCard from "@/components/auth/AuthCard";
+import AuthInput from "@/components/auth/AuthInput";
 
 export default function VerifyScreen() {
   const router = useRouter();
@@ -48,79 +52,84 @@ export default function VerifyScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Verify Account</Text>
-      <Text style={styles.subtitle}>
-        Enter the verification code sent to{" "}
-        {params.phoneNumber || params.email}
-      </Text>
+    <AuthShell>
+      <AuthBrandHeader />
+      <AuthCard>
+        <View style={styles.headerWrap}>
+          <Text style={styles.title}>Verify Account</Text>
+          <Text style={styles.subtitle}>
+            Enter the verification code sent to {params.phoneNumber || params.email}
+          </Text>
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Verification Code"
-        value={verificationCode}
-        onChangeText={setVerificationCode}
-        keyboardType="number-pad"
-        maxLength={6}
-      />
+        <AuthInput
+          style={styles.input}
+          placeholder="Verification Code"
+          value={verificationCode}
+          onChangeText={setVerificationCode}
+          keyboardType="number-pad"
+          maxLength={6}
+        />
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleVerify}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Verify</Text>
-        )}
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleVerify}
+          disabled={loading}
+          activeOpacity={0.9}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>Verify</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </>
+          )}
+        </TouchableOpacity>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    justifyContent: "center",
-    backgroundColor: "#fff",
+  headerWrap: {
+    marginBottom: 12,
   },
   title: {
     fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 10,
-    textAlign: "center",
-    color: "#1f2937",
+    fontWeight: "800",
+    marginBottom: 6,
+    color: "#191C1D",
   },
   subtitle: {
     fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-    marginBottom: 30,
+    color: "#60636E",
+    lineHeight: 20,
+    marginBottom: 16,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 15,
-    fontSize: 16,
-    backgroundColor: "#fff",
     textAlign: "center",
     letterSpacing: 8,
+    fontSize: 20,
+    fontWeight: "700",
   },
   button: {
-    backgroundColor: "#6366f1",
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: "#494BD6",
+    height: 56,
+    borderRadius: 24,
     alignItems: "center",
-    marginTop: 10,
+    justifyContent: "center",
+    marginTop: 6,
+    flexDirection: "row",
+    gap: 8,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
 });
 

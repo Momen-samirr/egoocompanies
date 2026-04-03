@@ -6,10 +6,13 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import DocumentUploadCard from "@/components/settings/document-upload-card";
+import { useI18nActions } from "@/contexts/I18nActionsContext";
 import {
   uploadDocument,
   getDriverDocuments,
@@ -19,6 +22,9 @@ import * as ImagePicker from "expo-image-picker";
 import { Toast } from "react-native-toast-notifications";
 
 const SettingsScreen: React.FC = () => {
+  const { t } = useTranslation("settings");
+  const { applyLanguage } = useI18nActions();
+  const [langBusy, setLangBusy] = useState(false);
   const [documents, setDocuments] = useState({
     selfie: {
       url: undefined as string | undefined,
@@ -102,7 +108,7 @@ const SettingsScreen: React.FC = () => {
       });
     } catch (error: any) {
       console.error("Error loading documents:", error);
-      Toast.show(error.message || "Failed to load documents", {
+      Toast.show(error.message || t("loadFailed"), {
         type: "danger",
         placement: "bottom",
       });
@@ -118,10 +124,7 @@ const SettingsScreen: React.FC = () => {
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (cameraStatus !== "granted" || libraryStatus !== "granted") {
-      Alert.alert(
-        "Permissions Required",
-        "Please grant camera and photo library permissions to upload documents."
-      );
+      Alert.alert(t("permissionsTitle"), t("permissionsBody"));
       return false;
     }
     return true;
@@ -157,7 +160,7 @@ const SettingsScreen: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Image picker error:", error);
-      Toast.show("Failed to pick image", {
+      Toast.show(t("pickImageFailed"), {
         type: "danger",
         placement: "bottom",
       });
@@ -174,7 +177,7 @@ const SettingsScreen: React.FC = () => {
       const result = await uploadDocument(documentType, imageUri);
 
       if (result.success) {
-        Toast.show("Document uploaded successfully!", {
+        Toast.show(t("uploadSuccess"), {
           type: "success",
           placement: "bottom",
         });
@@ -183,7 +186,7 @@ const SettingsScreen: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Upload error:", error);
-      Toast.show(error.message || "Failed to upload document", {
+      Toast.show(error.message || t("uploadFailed"), {
         type: "danger",
         placement: "bottom",
       });
@@ -196,7 +199,7 @@ const SettingsScreen: React.FC = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={color.buttonBg} />
-        <Text style={styles.loadingText}>Loading documents...</Text>
+        <Text style={styles.loadingText}>{t("loadingDocuments")}</Text>
       </View>
     );
   }
@@ -204,25 +207,57 @@ const SettingsScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Required Documents</Text>
-        <Text style={styles.headerSubtitle}>
-          Please upload all required documents to complete your profile
-          verification
-        </Text>
+        <Text style={styles.headerTitle}>{t("requiredDocuments")}</Text>
+        <Text style={styles.headerSubtitle}>{t("documentsSubtitle")}</Text>
+      </View>
+
+      <View style={styles.languageSection}>
+        <Text style={styles.languageTitle}>{t("language")}</Text>
+        <Text style={styles.languageHint}>{t("languageSubtitle")}</Text>
+        <View style={styles.languageRow}>
+          <TouchableOpacity
+            style={styles.languageChip}
+            disabled={langBusy}
+            onPress={async () => {
+              if (langBusy) return;
+              setLangBusy(true);
+              try {
+                await applyLanguage("en");
+              } finally {
+                setLangBusy(false);
+              }
+            }}
+          >
+            <Text style={styles.languageChipText}>{t("languageEnglish")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.languageChip}
+            disabled={langBusy}
+            onPress={async () => {
+              if (langBusy) return;
+              setLangBusy(true);
+              try {
+                await applyLanguage("ar");
+              } finally {
+                setLangBusy(false);
+              }
+            }}
+          >
+            <Text style={styles.languageChipText}>{t("languageArabic")}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {documents.verified && (
         <View style={styles.verifiedBanner}>
-          <Text style={styles.verifiedText}>
-            ✓ Your documents have been verified
-          </Text>
+          <Text style={styles.verifiedText}>{t("documentsVerified")}</Text>
         </View>
       )}
 
       <View style={styles.cardsContainer}>
         <DocumentUploadCard
-          title="Selfie Photo"
-          description="Take a clear selfie photo for identity verification"
+          title={t("selfieTitle")}
+          description={t("selfieDesc")}
           documentType="selfie"
           imageUrl={documents.selfie.url}
           isUploaded={documents.selfie.uploaded}
@@ -234,8 +269,8 @@ const SettingsScreen: React.FC = () => {
         />
 
         <DocumentUploadCard
-          title="Driver's License - Front Side"
-          description="Upload a clear photo of the front side of your driver's license"
+          title={t("licenseFrontTitle")}
+          description={t("licenseFrontDesc")}
           documentType="license_front"
           imageUrl={documents.licenseFront.url}
           isUploaded={documents.licenseFront.uploaded}
@@ -249,8 +284,8 @@ const SettingsScreen: React.FC = () => {
         />
 
         <DocumentUploadCard
-          title="Driver's License - Back Side"
-          description="Upload a clear photo of the back side of your driver's license"
+          title={t("licenseBackTitle")}
+          description={t("licenseBackDesc")}
           documentType="license_back"
           imageUrl={documents.licenseBack.url}
           isUploaded={documents.licenseBack.uploaded}
@@ -264,8 +299,8 @@ const SettingsScreen: React.FC = () => {
         />
 
         <DocumentUploadCard
-          title="Criminal Record (Fish & Tashbih)"
-          description="Upload your criminal record document (Fish & Tashbih)"
+          title={t("criminalTitle")}
+          description={t("criminalDesc")}
           documentType="criminal_record"
           imageUrl={documents.criminalRecord.url}
           isUploaded={documents.criminalRecord.uploaded}
@@ -279,8 +314,8 @@ const SettingsScreen: React.FC = () => {
         />
 
         <DocumentUploadCard
-          title="Drug Test Document"
-          description="Upload or capture a photo of your drug test analysis document"
+          title={t("drugTestTitle")}
+          description={t("drugTestDesc")}
           documentType="drug_test"
           imageUrl={documents.drugTest.url}
           isUploaded={documents.drugTest.uploaded}
@@ -328,14 +363,52 @@ const styles = StyleSheet.create({
     color: color.text.secondary,
     lineHeight: 20,
   },
+  languageSection: {
+    marginHorizontal: windowWidth(20),
+    marginTop: windowHeight(16),
+    padding: windowWidth(16),
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+  },
+  languageTitle: {
+    fontSize: fontSizes.FONT16,
+    fontWeight: "700",
+    color: color.text.primary,
+    marginBottom: windowHeight(4),
+  },
+  languageHint: {
+    fontSize: fontSizes.FONT12,
+    color: color.text.secondary,
+    marginBottom: windowHeight(12),
+  },
+  languageRow: {
+    flexDirection: "row",
+    gap: windowWidth(12),
+  },
+  languageChip: {
+    flex: 1,
+    paddingVertical: windowHeight(12),
+    borderRadius: 12,
+    backgroundColor: color.background.secondary,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  languageChipText: {
+    fontSize: fontSizes.FONT14,
+    fontWeight: "600",
+    color: color.text.primary,
+  },
   verifiedBanner: {
     backgroundColor: color.semantic.successLight,
     marginHorizontal: windowWidth(20),
     marginTop: windowHeight(20),
     padding: windowWidth(16),
     borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: color.semantic.success,
+    borderStartWidth: 4,
+    borderStartColor: color.semantic.success,
   },
   verifiedText: {
     fontSize: fontSizes.FONT14,

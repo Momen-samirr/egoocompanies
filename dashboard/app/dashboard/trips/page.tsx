@@ -141,10 +141,10 @@ export default function ScheduledTripsOverviewPage() {
     forceClosedLoading;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-end">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-gray-900">Scheduled Trips</h1>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Trips Hub</h1>
           {selectedCompany && (
             <Badge variant="secondary" className="text-sm">
               {selectedCompany.name}
@@ -165,6 +165,7 @@ export default function ScheduledTripsOverviewPage() {
             Create School Trip
           </Button>
           <Button
+            className="primary-gradient text-white"
             onClick={() => router.push("/dashboard/trips/create")}
             icon={PlusIcon}
           >
@@ -222,8 +223,8 @@ export default function ScheduledTripsOverviewPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-slate-100">
+                <thead className="bg-slate-50/70">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Trip Name
@@ -242,9 +243,9 @@ export default function ScheduledTripsOverviewPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-slate-100">
                   {recentTrips.map((trip) => (
-                    <tr key={trip.id} className="hover:bg-gray-50">
+                    <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
                           {trip.name}
@@ -292,7 +293,7 @@ export default function ScheduledTripsOverviewPage() {
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link href="/dashboard/trips/all">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-2 border-indigo-200 bg-indigo-50/50">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border border-indigo-100 bg-indigo-50/50">
             <CardContent>
               <div className="flex items-center justify-between">
                 <div>
@@ -309,7 +310,7 @@ export default function ScheduledTripsOverviewPage() {
           </Card>
         </Link>
         <Link href="/dashboard/trips/upcoming">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border border-slate-100">
             <CardContent>
               <div className="flex items-center justify-between">
                 <div>
@@ -326,7 +327,7 @@ export default function ScheduledTripsOverviewPage() {
           </Card>
         </Link>
         <Link href="/dashboard/trips/active">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border border-slate-100">
             <CardContent>
               <div className="flex items-center justify-between">
                 <div>
@@ -343,7 +344,7 @@ export default function ScheduledTripsOverviewPage() {
           </Card>
         </Link>
         <Link href="/dashboard/trips/completed">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border border-slate-100">
             <CardContent>
               <div className="flex items-center justify-between">
                 <div>

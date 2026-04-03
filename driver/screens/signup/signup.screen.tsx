@@ -1,26 +1,37 @@
-import { View, Text, ScrollView, Keyboard } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Keyboard,
+  ActivityIndicator,
+} from "react-native";
 import React, { useState, useCallback } from "react";
-import { windowHeight, windowWidth } from "@/themes/app.constant";
-import ProgressBar from "@/components/common/progress.bar";
-import styles from "./styles";
-import { useTheme } from "@react-navigation/native";
-import TitleView from "@/components/signup/title.view";
-import Input from "@/components/common/input";
-import SelectInput from "@/components/common/select-input";
-import { countryNameItems } from "@/configs/country-name-list";
-import Button from "@/components/common/button";
+import { useTranslation } from "react-i18next";
 import color from "@/themes/app.colors";
 import { router } from "expo-router";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthBrandHeader from "@/components/auth/AuthBrandHeader";
+import AuthCard from "@/components/auth/AuthCard";
+import { Ionicons } from "@expo/vector-icons";
+import fonts from "@/themes/app.fonts";
+import { Toast } from "react-native-toast-notifications";
+import { sendSignupOtpRequest } from "@/lib/auth/sendSignupOtp";
+import {
+  SIGNUP_COUNTRY_NAME,
+  buildEgyptSignupPhoneE164,
+} from "@/lib/auth/egyptSignup";
 
 export default function SignupScreen() {
-  const { colors } = useTheme();
+  const { t } = useTranslation("auth");
   const [emailFormatWarning, setEmailFormatWarning] = useState("");
   const [showWarning, setShowWarning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     phoneNumber: "",
     email: "",
-    country: "880", // Store the value (country code), not the label
   });
 
   const handleChange = (key: string, value: string) => {
@@ -29,197 +40,276 @@ export default function SignupScreen() {
       [key]: value,
     }));
 
-    // Validate email format when email changes
     if (key === "email") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (value.trim() !== "" && !emailRegex.test(value)) {
-        setEmailFormatWarning("Please enter a valid email address!");
+        setEmailFormatWarning(t("validEmail"));
       } else {
         setEmailFormatWarning("");
       }
     }
   };
 
-  const gotoDocument = useCallback(() => {
-    // Dismiss keyboard
+  const gotoPhoneVerification = useCallback(async () => {
     Keyboard.dismiss();
 
-    console.log("🔵 Next button pressed!");
-    console.log("🔵 Form data:", formData);
-
-    // Validate all required fields
     const isNameEmpty = formData.name.trim() === "";
-    const isCountryEmpty = !formData.country || formData.country.trim() === "";
     const isPhoneNumberEmpty = formData.phoneNumber.trim() === "";
     const isEmailEmpty = formData.email.trim() === "";
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const isEmailInvalid = !isEmailEmpty && !emailRegex.test(formData.email);
 
-    console.log("🔵 Validation check:", {
-      isNameEmpty,
-      isCountryEmpty,
-      isPhoneNumberEmpty,
-      isEmailEmpty,
-      isEmailInvalid,
-    });
-
-    // Check if any validation fails
     if (
       isNameEmpty ||
-      isCountryEmpty ||
       isPhoneNumberEmpty ||
       isEmailEmpty ||
       isEmailInvalid
     ) {
-      console.log("🔴 Validation failed - showing warnings");
       setShowWarning(true);
-      // Update email format warning if email is invalid
       if (isEmailInvalid) {
-        setEmailFormatWarning("Please enter a valid email address!");
+        setEmailFormatWarning(t("validEmail"));
       } else {
         setEmailFormatWarning("");
       }
       return;
     }
 
-    console.log("✅ All validations passed - proceeding to next screen");
-
-    // All validations passed, proceed to next screen
     setShowWarning(false);
     setEmailFormatWarning("");
 
-    const phoneNumberData = countryNameItems.find(
-      (i: any) => i.value === formData.country
-    );
-
-    // Remove ALL + signs from value to avoid double plus (++)
-    const cleanCountryCode = (phoneNumberData?.value || formData.country || "")
-      .toString()
-      .replace(/\+/g, "")
-      .trim();
-    console.log("Signup - Original country:", formData.country);
-    console.log("Signup - PhoneNumberData value:", phoneNumberData?.value);
-    console.log("Signup - Cleaned countryCode:", cleanCountryCode);
-    const phone_number = `+${cleanCountryCode}${formData.phoneNumber}`;
-    console.log("Signup - Final phone_number:", phone_number);
+    const phone_number = buildEgyptSignupPhoneE164(formData.phoneNumber);
+    const nationalDigits = phone_number.replace(/^\+20/, "");
+    if (nationalDigits.length < 9) {
+      setShowWarning(true);
+      Toast.show(t("enterPhoneField"), {
+        placement: "bottom",
+        type: "danger",
+        duration: 3000,
+      });
+      return;
+    }
 
     const driverData = {
       name: formData.name,
-      country: phoneNumberData?.label || formData.country, // Use the label for display
-      phone_number: phone_number,
+      country: SIGNUP_COUNTRY_NAME,
+      phone_number,
       email: formData.email,
     };
 
-    console.log(
-      "Signup - Navigating to document-verification with data:",
-      driverData
-    );
-
+    setSubmitting(true);
     try {
+      await sendSignupOtpRequest(phone_number);
       router.push({
-        pathname: "/(routes)/document-verification",
-        params: driverData as any,
+        pathname: "/(routes)/verification-phone-number",
+        params: driverData as Record<string, string>,
       });
-      console.log("✅ Navigation initiated successfully");
-    } catch (error) {
-      console.error("❌ Navigation error:", error);
+    } catch (error: unknown) {
+      let errorMessage = t("networkErrorShort");
+      const err = error as {
+        code?: string;
+        message?: string;
+        response?: { data?: { message?: string; error?: string }; status?: number };
+        request?: unknown;
+      };
+      if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        errorMessage = t("timeoutError");
+      } else if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+        errorMessage = t("networkError");
+      } else if (err.response) {
+        errorMessage =
+          err.response.data?.message ||
+          err.response.data?.error ||
+          t("serverError", { status: err.response.status ?? 0 });
+      } else if (err.request) {
+        errorMessage = t("noResponseError");
+      }
+      Toast.show(errorMessage, {
+        placement: "bottom",
+        type: "danger",
+        duration: 4000,
+      });
+    } finally {
+      setSubmitting(false);
     }
-  }, [formData]);
+  }, [formData, t]);
 
   return (
-    <ScrollView>
-      <View>
-        {/* logo */}
-        <Text
-          style={{
-            fontFamily: "TT-Octosquares-Medium",
-            fontSize: windowHeight(22),
-            paddingTop: windowHeight(50),
-            textAlign: "center",
-          }}
-        >
-          Egoo
-        </Text>
-        <View style={{ padding: windowWidth(20) }}>
-          <ProgressBar fill={1} />
-          <View
-            style={[styles.subView, { backgroundColor: colors.background }]}
-          >
-            <View style={styles.space}>
-              <TitleView
-                title={"Create your account"}
-                subTitle={"Explore your life by joining Egoo"}
-              />
-              <Input
-                title="Name"
-                placeholder="Enter your name"
-                value={formData.name}
-                onChangeText={(text) => handleChange("name", text)}
-                showWarning={showWarning && formData.name === ""}
-                warning={"Please enter your name!"}
-              />
-              <SelectInput
-                title="Country"
-                placeholder="Select your country"
-                value={formData.country}
-                onValueChange={(text) => {
-                  // Clean the country code: remove ALL + signs and ensure we have the numeric value
-                  const cleanCode = (text || "")
-                    .toString()
-                    .replace(/\+/g, "")
-                    .trim();
-                  console.log(
-                    "Signup - Received:",
-                    text,
-                    "Cleaned:",
-                    cleanCode
-                  );
-                  handleChange("country", cleanCode);
-                }}
-                showWarning={showWarning && !formData.country}
-                items={countryNameItems}
-              />
-              <Input
-                title="Phone Number"
-                placeholder="Enter your phone number"
-                keyboardType="phone-pad"
-                value={formData.phoneNumber}
-                onChangeText={(text) => handleChange("phoneNumber", text)}
-                showWarning={showWarning && formData.phoneNumber === ""}
-                warning={"Please enter your phone number!"}
-              />
-              <Input
-                title={"Email Address"}
-                placeholder={"Enter your email address"}
-                keyboardType="email-address"
-                value={formData.email}
-                onChangeText={(text) => handleChange("email", text)}
-                showWarning={
-                  showWarning &&
-                  (formData.email === "" || emailFormatWarning !== "")
-                }
-                warning={
-                  formData.email === ""
-                    ? "Please enter your email!"
-                    : "Please enter a valid email!"
-                }
-                emailFormatWarning={emailFormatWarning}
-              />
-            </View>
-            <View style={styles.margin}>
-              <Button
-                onPress={gotoDocument}
-                height={windowHeight(30)}
-                title={"Next"}
-                backgroundColor={color.buttonBg}
-                textColor={color.whiteColor}
-              />
-            </View>
-          </View>
+    <AuthShell>
+      <AuthBrandHeader />
+      <AuthCard>
+        <View style={localStyles.headerWrap}>
+          <Text style={localStyles.title}>{t("createAccount")}</Text>
+          <Text style={localStyles.subtitle}>{t("joinSubtitle")}</Text>
         </View>
-      </View>
-    </ScrollView>
+
+        <Text style={localStyles.label}>{t("name")}</Text>
+        <TextInput
+          style={localStyles.input}
+          placeholder={t("namePlaceholder")}
+          placeholderTextColor="#9A9CA8"
+          value={formData.name}
+          onChangeText={(text) => handleChange("name", text)}
+        />
+        {showWarning && formData.name === "" && (
+          <Text style={localStyles.warning}>{t("enterName")}</Text>
+        )}
+
+        <Text style={localStyles.label}>{t("country")}</Text>
+        <View style={localStyles.countryFixed} accessibilityRole="text">
+          <Text style={localStyles.countryFixedText}>{t("egypt")}</Text>
+        </View>
+
+        <Text style={localStyles.label}>{t("phoneNumber")}</Text>
+        <View style={localStyles.phoneRow}>
+          <View style={localStyles.dialPrefix}>
+            <Text style={localStyles.dialPrefixText}>+20</Text>
+          </View>
+          <TextInput
+            style={localStyles.phoneInput}
+            placeholder={t("signupPhoneNationalHint")}
+            placeholderTextColor="#9A9CA8"
+            keyboardType="phone-pad"
+            value={formData.phoneNumber}
+            onChangeText={(text) => handleChange("phoneNumber", text)}
+            accessibilityLabel={t("phoneNumber")}
+          />
+        </View>
+        {showWarning && formData.phoneNumber.trim() === "" && (
+          <Text style={localStyles.warning}>{t("enterPhoneField")}</Text>
+        )}
+
+        <Text style={localStyles.label}>{t("emailAddressLabel")}</Text>
+        <TextInput
+          style={localStyles.input}
+          placeholder={t("placeholderEmailAddress")}
+          placeholderTextColor="#9A9CA8"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={formData.email}
+          onChangeText={(text) => handleChange("email", text)}
+        />
+        {showWarning && (formData.email === "" || emailFormatWarning !== "") && (
+          <Text style={localStyles.warning}>
+            {formData.email === "" ? t("enterEmailExclamation") : t("emailInvalidShort")}
+          </Text>
+        )}
+
+        <TouchableOpacity
+          style={[localStyles.button, submitting && localStyles.buttonDisabled]}
+          onPress={gotoPhoneVerification}
+          activeOpacity={0.9}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Text style={localStyles.buttonText}>{t("next")}</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </>
+          )}
+        </TouchableOpacity>
+      </AuthCard>
+    </AuthShell>
   );
 }
+
+const localStyles = StyleSheet.create({
+  headerWrap: { marginBottom: 14 },
+  title: {
+    fontFamily: fonts.bold,
+    color: "#191C1D",
+    fontSize: 32,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontFamily: fonts.regular,
+    color: "#60636E",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: "#636670",
+    marginBottom: 8,
+    marginLeft: 2,
+    marginTop: 8,
+  },
+  input: {
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#EFF1F5",
+    paddingHorizontal: 14,
+    color: "#1D1E26",
+    fontSize: 15,
+    fontFamily: fonts.medium,
+  },
+  countryFixed: {
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#EFF1F5",
+    paddingHorizontal: 14,
+    justifyContent: "center",
+  },
+  countryFixedText: {
+    color: "#1D1E26",
+    fontSize: 15,
+    fontFamily: fonts.medium,
+  },
+  phoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dialPrefix: {
+    height: 52,
+    minWidth: 56,
+    borderRadius: 14,
+    backgroundColor: "#EFF1F5",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  dialPrefixText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: "#1D1E26",
+  },
+  phoneInput: {
+    flex: 1,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#EFF1F5",
+    paddingHorizontal: 14,
+    color: "#1D1E26",
+    fontSize: 15,
+    fontFamily: fonts.medium,
+  },
+  warning: {
+    color: "#BA1A1A",
+    marginTop: 6,
+    fontSize: 12,
+  },
+  button: {
+    marginTop: 18,
+    height: 56,
+    borderRadius: 24,
+    backgroundColor: color.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    fontFamily: fonts.bold,
+    color: "#fff",
+    fontSize: 18,
+  },
+});

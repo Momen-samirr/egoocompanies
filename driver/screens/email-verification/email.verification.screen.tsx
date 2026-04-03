@@ -1,24 +1,34 @@
-import { View, Text, TouchableOpacity } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { router, useLocalSearchParams } from "expo-router";
-import AuthContainer from "@/utils/container/auth-container";
-import { windowHeight } from "@/themes/app.constant";
-import SignInText from "@/components/login/signin.text";
-import { commonStyles } from "@/styles/common.style";
-import { external } from "@/styles/external.style";
-import Button from "@/components/common/button";
-import { style } from "../verifications/style";
 import color from "@/themes/app.colors";
 import { Toast } from "react-native-toast-notifications";
-import OTPTextInput from "react-native-otp-textinput";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getServerUri } from "@/configs/constants";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthBrandHeader from "@/components/auth/AuthBrandHeader";
+import AuthCard from "@/components/auth/AuthCard";
+import { Ionicons } from "@expo/vector-icons";
+import fonts from "@/themes/app.fonts";
 
 export default function EmailVerificationScreen() {
+  const { t } = useTranslation("auth");
   const [otp, setOtp] = useState("");
   const [loader, setLoader] = useState(false);
   const driver = useLocalSearchParams() as any;
+
+  const toSerializableParams = () => {
+    const serialized: Record<string, string> = {};
+    Object.entries(driver || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      serialized[key] = Array.isArray(value)
+        ? String(value[0] || "")
+        : String(value);
+    });
+    return serialized;
+  };
 
   const handleSubmit = async () => {
     setLoader(true);
@@ -31,7 +41,10 @@ export default function EmailVerificationScreen() {
       .then(async (res: any) => {
         setLoader(false);
         await AsyncStorage.setItem("accessToken", res.data.accessToken);
-        router.push("/(tabs)/home");
+        router.push({
+          pathname: "/(routes)/driver-upload-selfie",
+          params: toSerializableParams(),
+        });
       })
       .catch((error) => {
         setLoader(false);
@@ -43,48 +56,111 @@ export default function EmailVerificationScreen() {
   };
 
   return (
-    <AuthContainer
-      topSpace={windowHeight(240)}
-      imageShow={true}
-      container={
-        <View>
-          <SignInText
-            title={"Email Verification"}
-            subtitle={"Check your email address for the otp!"}
-          />
-          <OTPTextInput
-            handleTextChange={(code) => setOtp(code)}
-            inputCount={4}
-            textInputStyle={style.otpTextInput}
-            tintColor={color.subtitle}
-            autoFocus={false}
-          />
-          <View style={[external.mt_30]}>
-            <Button
-              title="Verify"
-              height={windowHeight(30)}
-              onPress={() => handleSubmit()}
-              disabled={loader}
-            />
-          </View>
-          <View style={[external.mb_15]}>
-            <View
-              style={[
-                external.pt_10,
-                external.Pb_10,
-                { flexDirection: "row", gap: 5, justifyContent: "center" },
-              ]}
-            >
-              <Text style={[commonStyles.regularText]}>Not Received yet?</Text>
-              <TouchableOpacity>
-                <Text style={[style.signUpText, { color: "#000" }]}>
-                  Resend it
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+    <AuthShell>
+      <AuthBrandHeader />
+      <AuthCard>
+        <View style={styles.headerWrap}>
+          <Text style={styles.title}>{t("emailVerificationTitle")}</Text>
+          <Text style={styles.subtitle}>{t("emailOtpSubtitle")}</Text>
         </View>
-      }
-    />
+
+        <TextInput
+          style={styles.otpInput}
+          value={otp}
+          onChangeText={setOtp}
+          keyboardType="number-pad"
+          maxLength={4}
+          placeholder={t("otpPlaceholder")}
+          placeholderTextColor="#A0A2AD"
+          textAlign="center"
+        />
+
+        <TouchableOpacity
+          style={[styles.verifyButton, loader && styles.verifyButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={loader}
+          activeOpacity={0.9}
+        >
+          {loader ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.verifyText}>{t("verifyEmailButton")}</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.resendWrap}>
+          <Text style={styles.resendHint}>{t("emailResendHint")}</Text>
+          <TouchableOpacity>
+            <Text style={styles.resendLink}>{t("emailResendLink")}</Text>
+          </TouchableOpacity>
+        </View>
+      </AuthCard>
+    </AuthShell>
   );
 }
+
+const styles = StyleSheet.create({
+  headerWrap: {
+    marginBottom: 18,
+  },
+  title: {
+    fontSize: 32,
+    fontFamily: fonts.bold,
+    color: "#191C1D",
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#60636E",
+    fontFamily: fonts.regular,
+    lineHeight: 20,
+  },
+  otpInput: {
+    height: 62,
+    borderRadius: 16,
+    backgroundColor: "#EFF1F5",
+    color: "#1D1E26",
+    fontSize: 26,
+    letterSpacing: 12,
+    fontFamily: fonts.bold,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  verifyButton: {
+    height: 56,
+    borderRadius: 24,
+    backgroundColor: color.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  verifyButtonDisabled: {
+    opacity: 0.7,
+  },
+  verifyText: {
+    color: "#fff",
+    fontSize: 18,
+    fontFamily: fonts.bold,
+  },
+  resendWrap: {
+    marginTop: 18,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  resendHint: {
+    color: "#636670",
+    fontSize: 13,
+    fontFamily: fonts.regular,
+  },
+  resendLink: {
+    color: color.primary,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+});

@@ -18,8 +18,8 @@ import {
   ClipboardCheck,
   Film,
   School,
-  Route,
   GraduationCap,
+  ShieldAlert,
 } from "lucide-react";
 import { logout, isCompanyUser } from "@/lib/auth";
 import {
@@ -51,18 +51,25 @@ interface NavItem {
 
 const navigationGroups: NavGroup[] = [
   {
-    title: "Core",
+    title: "Dashboard",
     items: [
       { name: "Dashboard", href: "/dashboard", icon: Home },
-      { name: "Live Map", href: "/dashboard/map", icon: MapPin },
     ],
   },
   {
-    title: "Management",
+    title: "Operations",
     items: [
-      { name: "Users", href: "/dashboard/users", icon: Users },
-      { name: "Drivers", href: "/dashboard/drivers", icon: Truck },
-      { name: "Rides", href: "/dashboard/rides", icon: Map },
+      { name: "Live Map", href: "/dashboard/map", icon: MapPin },
+      {
+        name: "Notifications",
+        href: "/dashboard/notifications",
+        icon: Bell,
+      },
+    ],
+  },
+  {
+    title: "Trips Hub",
+    items: [
       { name: "Scheduled Trips", href: "/dashboard/trips", icon: Calendar },
       {
         name: "Trip Replay",
@@ -74,16 +81,14 @@ const navigationGroups: NavGroup[] = [
         href: "/dashboard/trips/operations",
         icon: ClipboardCheck,
       },
-      {
-        name: "Notifications",
-        href: "/dashboard/notifications",
-        icon: Bell,
-      },
     ],
   },
   {
-    title: "Companies",
+    title: "Management",
     items: [
+      { name: "Drivers", href: "/dashboard/drivers", icon: Truck },
+      { name: "Users", href: "/dashboard/users", icon: Users },
+      { name: "Rides", href: "/dashboard/rides", icon: Map },
       {
         name: "Companies",
         href: "/dashboard/companies",
@@ -92,17 +97,22 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    title: "School Transportation",
+    title: "School Transport",
     items: [
+      {
+        name: "School Hub",
+        href: "/dashboard/school-transport",
+        icon: School,
+      },
       {
         name: "Schools",
         href: "/dashboard/schools",
-        icon: School,
+        icon: Building2,
       },
       {
         name: "Routes & Stops",
         href: "/dashboard/routes",
-        icon: Route,
+        icon: School,
       },
       {
         name: "Students",
@@ -117,9 +127,18 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    title: "Analytics",
+    title: "Finance & Analytics",
     items: [
-      { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+      {
+        name: "Analytics",
+        href: "/dashboard/analytics",
+        icon: BarChart3,
+      },
+      {
+        name: "Trip Exceptions",
+        href: "/dashboard/trips/emergency",
+        icon: ShieldAlert,
+      },
     ],
   },
 ];
@@ -162,17 +181,17 @@ export default function AppSidebar() {
       : navigationGroups;
 
   return (
-    <Sidebar>
-      <SidebarHeader className="flex items-center gap-3 px-4 py-4 border-b border-sidebar-border">
-        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-primary shadow-lg">
+    <Sidebar className="bg-slate-50 border-r-0">
+      <SidebarHeader className="flex items-center gap-3 px-5 py-5">
+        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-linear-to-br from-primary to-indigo-400 shadow-lg">
           <LayoutGrid className="h-6 w-6 text-primary-foreground" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-sidebar-foreground">
-            {mounted && isCompany ? "Company" : "Mo2 Admin"}
+          <h1 className="text-lg font-bold text-slate-900">
+            {mounted && isCompany ? "Company Console" : "Kinetic Precision"}
           </h1>
-          <p className="text-xs text-sidebar-foreground/70">
-            {mounted && isCompany ? "Live Map" : "Dashboard"}
+          <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">
+            {mounted && isCompany ? "Live Map Access" : "Logistics Control"}
           </p>
         </div>
       </SidebarHeader>
@@ -218,9 +237,16 @@ export default function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <Button
+          variant="default"
+          className="w-full mb-3 justify-center bg-linear-to-br from-primary to-indigo-400 text-white hover:opacity-90"
+        >
+          <LayoutGrid className="h-4 w-4 mr-2" />
+          New Dispatch
+        </Button>
+        <Button
           onClick={logout}
           variant="ghost"
-          className="w-full justify-start text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive"
+          className="w-full justify-start text-slate-700 hover:bg-destructive/10 hover:text-destructive"
         >
           <LogOut className="mr-2 h-5 w-5" />
           <span>Logout</span>

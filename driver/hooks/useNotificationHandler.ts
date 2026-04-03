@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import { Toast } from "react-native-toast-notifications";
 import { logger } from "@/lib/logger";
@@ -60,6 +61,8 @@ interface UseNotificationHandlerReturn {
 export function useNotificationHandler(
   options: UseNotificationHandlerOptions = {}
 ): UseNotificationHandlerReturn {
+  const { t } = useTranslation("notifications");
+  const { t: tc } = useTranslation("common");
   const { onRideRequest, onTripActivation } = options;
   const processedNotificationIds = useRef<Set<string>>(new Set());
   const isProcessingNotification = useRef<boolean>(false);
@@ -146,7 +149,7 @@ export function useNotificationHandler(
         if (orderData && orderData.type === "tripActivation") {
           logger.info("Trip activation notification received", orderData);
           Toast.show(
-            `Trip "${orderData.tripName}" is now available to start!`,
+            t("tripNowAvailable", { tripName: orderData.tripName }),
             {
               type: "success",
               duration: 5000,
@@ -170,7 +173,7 @@ export function useNotificationHandler(
         // Validate required fields for ride request
         if (!orderData) {
           logger.error("No orderData found in notification");
-          Toast.show("Invalid notification format", {
+          Toast.show(t("invalidFormat"), {
             type: "danger",
           });
           return;
@@ -187,7 +190,7 @@ export function useNotificationHandler(
             hasUser: !!orderData.user,
           });
           Toast.show(
-            "Invalid ride request data - missing location or user info",
+            t("invalidRideData"),
             {
               type: "danger",
             }
@@ -223,12 +226,12 @@ export function useNotificationHandler(
           pickupLocationName:
             orderData.currentLocationName ||
             orderData.currentLocation?.name ||
-            "Pickup Location",
+            tc("pickupLocation"),
           destinationLocationName:
             orderData.destinationLocation ||
             orderData.destinationLocationName ||
             orderData.marker?.name ||
-            "Destination",
+            tc("destination"),
           distance: orderData.distance || "0",
           estimatedFare,
           estimatedDistance: distance,
@@ -252,7 +255,7 @@ export function useNotificationHandler(
           onRideRequest(rideRequestData);
         } else {
           // Default: show toast and log
-          Toast.show("New ride request received!", {
+          Toast.show(t("newRidePlain"), {
             type: "success",
             duration: 3000,
           });
@@ -262,7 +265,7 @@ export function useNotificationHandler(
         logger.error("Error processing notification data", error, {
           notificationData,
         });
-        Toast.show(`Error processing ride request: ${error.message}`, {
+        Toast.show(t("errorProcessingRide", { message: error.message }), {
           type: "danger",
           duration: 5000,
         });
@@ -271,7 +274,7 @@ export function useNotificationHandler(
         isProcessingNotification.current = false;
       }
     },
-    [onRideRequest, onTripActivation]
+    [onRideRequest, onTripActivation, t, tc]
   );
 
   return {

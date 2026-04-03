@@ -5,7 +5,7 @@ import { RouteStep } from "@/services/navigationService";
 import { fontSizes } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
-import { spacing, shadows } from "@/styles/design-system";
+import { kinetic, spacing } from "@/styles/design-system";
 
 interface TurnByTurnCardProps {
   step: RouteStep | null;
@@ -91,11 +91,17 @@ export default function TurnByTurnCard({
   const distanceText = formatDistance(distanceToTurn);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card }, shadows.lg]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: "rgba(255,255,255,0.92)" },
+        kinetic.shadows.ambient,
+      ]}
+    >
       <View style={styles.content}>
         {/* Turn Icon */}
-        <View style={[styles.iconContainer, { backgroundColor: color.primary + "20" }]}>
-          <Text style={styles.icon}>{turnIcon}</Text>
+        <View style={[styles.iconContainer, { backgroundColor: "#E1E0FF" }]}>
+          <Text style={[styles.icon, { color: kinetic.colors.primary }]}>{turnIcon}</Text>
         </View>
 
         {/* Instruction Text */}
@@ -115,12 +121,14 @@ export default function TurnByTurnCard({
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: spacing.xl,
+    top: spacing.xxl + 12,
     left: spacing.md,
     right: spacing.md,
-    borderRadius: 16,
+    borderRadius: 24,
     padding: spacing.md,
     zIndex: 1000,
+    borderWidth: 1,
+    borderColor: "rgba(199,196,215,0.35)",
   },
   content: {
     flexDirection: "row",
@@ -129,7 +137,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     marginRight: spacing.md,

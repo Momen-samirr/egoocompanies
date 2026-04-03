@@ -8,7 +8,7 @@ import {
 import React, { useEffect, useRef } from "react";
 import { useTheme } from "@react-navigation/native";
 import { formatDateDisplay, isSameDay, isToday } from "@/utils/weekGenerator";
-import { spacing, shadows } from "@/styles/design-system";
+import { spacing } from "@/styles/design-system";
 import { fontSizes } from "@/themes/app.constant";
 import fonts from "@/themes/app.fonts";
 import color from "@/themes/app.colors";
@@ -57,7 +57,6 @@ export default function DateSelector({
         styles.container,
         {
           backgroundColor: colors.card,
-          borderBottomColor: colors.border,
         },
       ]}
     >
@@ -82,14 +81,12 @@ export default function DateSelector({
                   backgroundColor: isSelected
                     ? color.primary
                     : colors.background,
-                  borderColor: isSelected
-                    ? color.primary
-                    : isTodayDate
-                    ? color.primary
-                    : colors.border,
-                  borderWidth: isSelected ? 2 : isTodayDate ? 1 : 1,
+                  shadowColor: isSelected ? "#4648d4" : "transparent",
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: isSelected ? 0.2 : 0,
+                  shadowRadius: 20,
+                  elevation: isSelected ? 5 : 0,
                 },
-                isSelected && shadows.sm,
               ]}
               activeOpacity={0.7}
             >
@@ -132,17 +129,15 @@ export default function DateSelector({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    ...shadows.sm,
   },
   scrollContent: {
     paddingHorizontal: spacing.md,
     gap: spacing.sm,
   },
   dateButton: {
-    width: 60,
-    height: 70,
-    borderRadius: 12,
+    width: 58,
+    height: 80,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing.sm,
@@ -154,6 +149,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     marginBottom: spacing.xs / 2,
     textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   dayNumber: {
     fontSize: fontSizes.FONT18,

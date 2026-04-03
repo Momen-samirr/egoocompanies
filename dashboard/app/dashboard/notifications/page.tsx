@@ -67,10 +67,10 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Notifications</h1>
+          <h1 className="text-3xl font-black tracking-tight text-gray-900">Notification Center</h1>
           <p className="text-sm text-gray-600 mt-1">
             Manage and review driver document upload notifications
           </p>
@@ -93,7 +93,7 @@ export default function NotificationsPage() {
         onClear={handleClearFilters}
       />
 
-      <Card>
+      <Card className="border border-slate-100 rounded-xl">
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -153,7 +153,7 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-slate-100">
                 {notifications.map((notification) => (
                   <NotificationItem
                     key={notification.id}

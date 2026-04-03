@@ -68,7 +68,7 @@ export default function Header({ children }: HeaderProps) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-10 border-b bg-card shadow-sm">
+    <header className="sticky top-0 z-10 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl shadow-sm">
       <div className="flex h-16 items-center gap-4 px-4 lg:px-6">
         <div className="flex items-center gap-4 flex-1">
           <SidebarTrigger />
@@ -77,8 +77,8 @@ export default function Header({ children }: HeaderProps) {
             {breadcrumbs.length > 0 ? (
               <Breadcrumbs items={breadcrumbs} />
             ) : (
-              <h1 className="text-xl lg:text-2xl font-semibold text-foreground">
-                Dashboard Overview
+              <h1 className="text-xl lg:text-2xl font-black tracking-tight text-slate-900">
+                Kinetic Admin
               </h1>
             )}
           </div>
@@ -86,13 +86,24 @@ export default function Header({ children }: HeaderProps) {
         <div className="flex items-center gap-3 lg:gap-4">
           <CompanySelector />
         </div>
-        <div className="flex items-center gap-2 lg:gap-4">
+        <div className="hidden lg:flex items-center gap-6 mr-4">
+          <button className="text-sm font-semibold text-primary border-b-2 border-primary h-16">
+            Fleet
+          </button>
+          <button className="text-sm font-medium text-slate-500 hover:text-primary">
+            Routes
+          </button>
+          <button className="text-sm font-medium text-slate-500 hover:text-primary">
+            Schedules
+          </button>
+        </div>
+        <div className="flex items-center gap-2 lg:gap-3">
           <div className="relative hidden md:block">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search..."
-              className="w-48 lg:w-64 pl-10"
+              placeholder="Search routes, drivers, or fleet..."
+              className="w-48 lg:w-72 pl-10 bg-slate-100 border-none"
             />
           </div>
           <ThemeToggle />

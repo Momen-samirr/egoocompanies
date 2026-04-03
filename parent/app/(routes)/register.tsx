@@ -1,15 +1,19 @@
 import { useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
   ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useRouter } from "expo-router";
 import api from "@/lib/api";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthBrandHeader from "@/components/auth/AuthBrandHeader";
+import AuthCard from "@/components/auth/AuthCard";
+import AuthInput from "@/components/auth/AuthInput";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -103,127 +107,122 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Parent Registration</Text>
+    <AuthShell>
+      <AuthBrandHeader />
+      <AuthCard>
+        <View style={styles.headerWrap}>
+          <Text style={styles.title}>Create Parent Account</Text>
+          <Text style={styles.subtitle}>Register to manage and track your student rides</Text>
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="First Name *"
-        value={formData.firstName}
-        onChangeText={(text) =>
-          setFormData({ ...formData, firstName: text })
-        }
-      />
+        <AuthInput
+          placeholder="First Name *"
+          value={formData.firstName}
+          onChangeText={(text) => setFormData({ ...formData, firstName: text })}
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Last Name *"
-        value={formData.lastName}
-        onChangeText={(text) =>
-          setFormData({ ...formData, lastName: text })
-        }
-      />
+        <AuthInput
+          placeholder="Last Name *"
+          value={formData.lastName}
+          onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Phone Number"
-        value={formData.phoneNumber}
-        onChangeText={(text) =>
-          setFormData({ ...formData, phoneNumber: text })
-        }
-        keyboardType="phone-pad"
-      />
+        <AuthInput
+          placeholder="Phone Number"
+          value={formData.phoneNumber}
+          onChangeText={(text) => setFormData({ ...formData, phoneNumber: text })}
+          keyboardType="phone-pad"
+        />
 
-      <Text style={styles.orText}>OR</Text>
+        <Text style={styles.orText}>OR</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={formData.email}
-        onChangeText={(text) => setFormData({ ...formData, email: text })}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
+        <AuthInput
+          placeholder="Email"
+          value={formData.email}
+          onChangeText={(text) => setFormData({ ...formData, email: text })}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password (min 6 characters) *"
-        value={formData.password}
-        onChangeText={(text) => setFormData({ ...formData, password: text })}
-        secureTextEntry
-        autoCapitalize="none"
-      />
+        <AuthInput
+          placeholder="Password (min 6 characters) *"
+          value={formData.password}
+          onChangeText={(text) => setFormData({ ...formData, password: text })}
+          secureTextEntry
+          autoCapitalize="none"
+        />
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleRegister}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Register</Text>
-        )}
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleRegister}
+          disabled={loading}
+          activeOpacity={0.9}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>Register</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </>
+          )}
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        onPress={() => router.back()}
-        style={styles.linkButton}
-      >
-        <Text style={styles.linkText}>Already have an account? Login</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={() => router.back()} style={styles.linkButton}>
+          <Text style={styles.linkText}>Already have an account? Login</Text>
+        </TouchableOpacity>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    justifyContent: "center",
-    backgroundColor: "#fff",
+  headerWrap: {
+    marginBottom: 14,
   },
   title: {
     fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 30,
-    textAlign: "center",
-    color: "#1f2937",
+    fontWeight: "800",
+    marginBottom: 6,
+    color: "#191C1D",
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 15,
-    fontSize: 16,
-    backgroundColor: "#fff",
+  subtitle: {
+    fontSize: 14,
+    color: "#60636E",
+    lineHeight: 20,
   },
   orText: {
     textAlign: "center",
-    color: "#6b7280",
-    marginVertical: 10,
+    color: "#8D90A0",
+    marginVertical: 8,
     fontWeight: "600",
   },
   button: {
-    backgroundColor: "#6366f1",
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: "#494BD6",
+    height: 56,
+    borderRadius: 24,
     alignItems: "center",
-    marginTop: 10,
+    justifyContent: "center",
+    marginTop: 8,
+    flexDirection: "row",
+    gap: 8,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   linkButton: {
     marginTop: 20,
     alignItems: "center",
   },
   linkText: {
-    color: "#6366f1",
-    fontSize: 14,
+    color: "#494BD6",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });
 

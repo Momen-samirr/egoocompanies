@@ -223,7 +223,7 @@ function TripDetailsPageContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -235,7 +235,7 @@ function TripDetailsPageContent() {
             Back
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{trip.name}</h1>
+            <h1 className="text-3xl font-black tracking-tight text-gray-900">{trip.name}</h1>
             <p className="text-gray-500 mt-1">
               Created by {trip.createdBy.name} on{" "}
               {new Date(trip.tripDate).toLocaleDateString()}
@@ -260,7 +260,7 @@ function TripDetailsPageContent() {
                 onClick={() => setShowForceCloseModal(true)}
                 disabled={forceClosing}
               >
-                Force Closed
+                Force Close
               </Button>
             </>
           )}
@@ -294,13 +294,13 @@ function TripDetailsPageContent() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-slate-200">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab("overview")}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === "overview"
-                ? "border-indigo-500 text-indigo-600"
+                ? "border-indigo-500 text-indigo-600 font-semibold"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >

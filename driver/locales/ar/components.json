@@ -1,0 +1,23 @@
+{
+  "emptyTitle": "لا يوجد شيء هنا بعد",
+  "emptySubtitle": "اسحب للتحديث أو عد لاحقاً.",
+  "retry": "إعادة المحاولة",
+  "errorTitle": "حدث خطأ ما",
+  "loading": "جاري التحميل...",
+  "kineticNext": "التالي",
+  "kineticSkip": "تخطي",
+  "docUploaded": "تم الرفع",
+  "docApprovedBadge": "✓ موافق عليه",
+  "docRejectedBadge": "✗ مرفوض",
+  "docPendingReview": "قيد المراجعة",
+  "docRejectionReason": "سبب الرفض:",
+  "docUploading": "جاري الرفع...",
+  "docNoUpload": "لم يُرفع مستند",
+  "docPendingWait": "⏳ هذا المستند قيد المراجعة. يرجى انتظار موافقة المسؤول.",
+  "docReupload": "🔄 إعادة الرفع",
+  "docUpdate": "🔄 تحديث",
+  "docTakePhoto": "📷 التقاط صورة",
+  "docUploadGallery": "🖼️ رفع من المعرض",
+  "docApprovedLine": "✓ تمت الموافقة على هذا المستند",
+  "docApprovedHint": "يمكنك تحديثه عند الحاجة"
+}

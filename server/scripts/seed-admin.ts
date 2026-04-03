@@ -3,16 +3,29 @@ import prisma from "../utils/prisma";
 import bcrypt from "bcryptjs";
 
 async function main() {
-  const hashedPassword = await bcrypt.hash("admin123", 10);
+  const email = process.env.ADMIN_EMAIL || "admin@ridewave.com";
+  const password = process.env.ADMIN_PASSWORD || "admin123";
+  const name = process.env.ADMIN_NAME || "Admin User";
+  const role = (process.env.ADMIN_ROLE as
+    | "SUPER_ADMIN"
+    | "ADMIN"
+    | "SUPPORT"
+    | "COMPANY") || "SUPER_ADMIN";
+
+  const hashedPassword = await bcrypt.hash(password, 10);
   
   const admin = await prisma.admin.upsert({
-    where: { email: "admin@ridewave.com" },
-    update: {},
-    create: {
-      email: "admin@ridewave.com",
+    where: { email },
+    update: {
       password: hashedPassword,
-      name: "Admin User",
-      role: "SUPER_ADMIN",
+      name,
+      role,
+    },
+    create: {
+      email,
+      password: hashedPassword,
+      name,
+      role,
     },
   });
 
@@ -23,8 +36,8 @@ async function main() {
     role: admin.role,
   });
   console.log("\nDefault credentials:");
-  console.log("Email: admin@ridewave.com");
-  console.log("Password: admin123");
+  console.log(`Email: ${email}`);
+  console.log(`Password: ${password}`);
 }
 
 main()

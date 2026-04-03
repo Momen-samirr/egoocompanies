@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { spacing } from "@/styles/design-system";
 import { fontSizes } from "@/themes/app.constant";
@@ -11,6 +12,7 @@ import color from "@/themes/app.colors";
  * Shows a banner when the device is offline
  */
 export default function OfflineIndicator() {
+  const { t } = useTranslation("home");
   const { isOnline } = useNetworkStatus();
   const [hasChecked, setHasChecked] = React.useState(false);
 
@@ -35,7 +37,7 @@ export default function OfflineIndicator() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>No Internet Connection</Text>
+      <Text style={styles.text}>{t("noInternet")}</Text>
     </View>
   );
 }

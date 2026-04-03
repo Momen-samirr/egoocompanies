@@ -1,0 +1,23 @@
+{
+  "emptyTitle": "Nothing here yet",
+  "emptySubtitle": "Pull to refresh or check back later.",
+  "retry": "Retry",
+  "errorTitle": "Something went wrong",
+  "loading": "Loading...",
+  "kineticNext": "Next",
+  "kineticSkip": "Skip",
+  "docUploaded": "Uploaded",
+  "docApprovedBadge": "✓ Approved",
+  "docRejectedBadge": "✗ Rejected",
+  "docPendingReview": "Pending Review",
+  "docRejectionReason": "Rejection Reason:",
+  "docUploading": "Uploading...",
+  "docNoUpload": "No document uploaded",
+  "docPendingWait": "⏳ This document is pending review. Please wait for admin approval.",
+  "docReupload": "🔄 Re-upload",
+  "docUpdate": "🔄 Update",
+  "docTakePhoto": "📷 Take Photo",
+  "docUploadGallery": "🖼️ Upload from Gallery",
+  "docApprovedLine": "✓ This document has been approved",
+  "docApprovedHint": "You can update it if needed"
+}

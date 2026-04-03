@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
-import Button from "@/components/common/button";
 
 export type DocumentType =
   | "selfie"
@@ -44,24 +44,26 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   onTakePhoto,
   onUploadFromGallery,
 }) => {
+  const { t } = useTranslation("components");
+
   const getStatusBadge = () => {
     if (!status && !isUploaded) return null;
 
     let badgeStyle = styles.statusBadge;
-    let badgeText = "Uploaded";
+    let badgeText = t("docUploaded");
     let textColor = "#fff";
 
     if (status === "approved") {
       badgeStyle = [styles.statusBadge, styles.approvedBadge];
-      badgeText = "✓ Approved";
+      badgeText = t("docApprovedBadge");
       textColor = "#fff";
     } else if (status === "rejected") {
       badgeStyle = [styles.statusBadge, styles.rejectedBadge];
-      badgeText = "✗ Rejected";
+      badgeText = t("docRejectedBadge");
       textColor = "#fff";
     } else if (status === "pending" || (isUploaded && !status)) {
       badgeStyle = [styles.statusBadge, styles.pendingBadge];
-      badgeText = "Pending Review";
+      badgeText = t("docPendingReview");
       textColor = "#fff";
     }
 
@@ -92,7 +94,7 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       <Text style={styles.description}>{description}</Text>
       {status === "rejected" && rejectionReason && (
         <View style={styles.rejectionContainer}>
-          <Text style={styles.rejectionLabel}>Rejection Reason:</Text>
+          <Text style={styles.rejectionLabel}>{t("docRejectionReason")}</Text>
           <Text style={styles.rejectionReason}>{rejectionReason}</Text>
         </View>
       )}
@@ -103,7 +105,7 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
           {isUploading && (
             <View style={styles.uploadingOverlay}>
               <ActivityIndicator size="large" color={color.buttonBg} />
-              <Text style={styles.uploadingText}>Uploading...</Text>
+              <Text style={styles.uploadingText}>{t("docUploading")}</Text>
             </View>
           )}
         </View>
@@ -112,17 +114,14 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
           <View style={styles.placeholderIcon}>
             <Text style={styles.placeholderText}>📄</Text>
           </View>
-          <Text style={styles.placeholderLabel}>No document uploaded</Text>
+          <Text style={styles.placeholderLabel}>{t("docNoUpload")}</Text>
         </View>
       )}
 
       <View style={styles.buttonContainer}>
         {isPending ? (
           <View style={styles.pendingMessage}>
-            <Text style={styles.pendingText}>
-              ⏳ This document is pending review. Please wait for admin
-              approval.
-            </Text>
+            <Text style={styles.pendingText}>{t("docPendingWait")}</Text>
           </View>
         ) : showUploadButtons ? (
           <>
@@ -137,10 +136,10 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
             >
               <Text style={[styles.actionButtonText, { color: "#fff" }]}>
                 {status === "rejected"
-                  ? "🔄 Re-upload"
+                  ? t("docReupload")
                   : status === "approved"
-                  ? "🔄 Update"
-                  : "📷 Take Photo"}
+                  ? t("docUpdate")
+                  : t("docTakePhoto")}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -153,18 +152,14 @@ const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
               disabled={isUploading || isPending}
             >
               <Text style={[styles.actionButtonText, { color: "#000" }]}>
-                🖼️ Upload from Gallery
+                {t("docUploadGallery")}
               </Text>
             </TouchableOpacity>
           </>
         ) : showApprovedMessage ? (
           <View style={styles.approvedMessage}>
-            <Text style={styles.approvedText}>
-              ✓ This document has been approved
-            </Text>
-            <Text style={styles.approvedSubtext}>
-              You can update it if needed
-            </Text>
+            <Text style={styles.approvedText}>{t("docApprovedLine")}</Text>
+            <Text style={styles.approvedSubtext}>{t("docApprovedHint")}</Text>
           </View>
         ) : null}
       </View>
@@ -218,8 +213,8 @@ const styles = StyleSheet.create({
     padding: windowWidth(12),
     borderRadius: 8,
     marginBottom: windowHeight(12),
-    borderLeftWidth: 3,
-    borderLeftColor: "#EF4444",
+    borderStartWidth: 3,
+    borderStartColor: "#EF4444",
   },
   rejectionLabel: {
     fontSize: fontSizes.FONT12,

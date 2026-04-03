@@ -1,18 +1,17 @@
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Modal,
 } from "react-native";
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
-import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
+import { windowHeight, fontSizes } from "@/themes/app.constant";
 import { Toast } from "react-native-toast-notifications";
 import { useGetDriverData } from "@/hooks/useGetDriverData";
 import { getServerUri } from "@/configs/constants";
@@ -21,14 +20,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import color from "@/themes/app.colors";
 import { calculateDistance } from "@/utils/haversine";
-import CheckpointCard from "@/components/trip/CheckpointCard";
-import ETADisplay from "@/components/common/ETADisplay";
 import EmergencyEndSlider from "@/components/trip/EmergencyEndSlider";
 import EmployeeBottomSheet from "@/components/trip/EmployeeBottomSheet";
 import { spacing, shadows } from "@/styles/design-system";
 import fonts from "@/themes/app.fonts";
 import NavigationArrow from "@/components/navigation/NavigationArrow";
-import NavigationScreen from "@/components/navigation/NavigationScreen";
 import {
   calculateBearing,
   calculateHeadingFromMovement,
@@ -39,9 +35,14 @@ import { animateCameraToDriver } from "@/utils/mapCamera";
 import { useNavigation } from "@/hooks/useNavigation";
 import TurnByTurnCard from "@/components/navigation/TurnByTurnCard";
 import { decodePolyline } from "@/services/navigationService";
-import Constants from "expo-constants";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import { useThrottledCoordinates } from "@/hooks/useThrottledCoordinates";
+import DraggableBottomSheet from "@/components/common/DraggableBottomSheet";
+import {
+  getRoadRouteMetrics,
+  resolveClosestUpcomingStop,
+} from "@/services/routeMetricsService";
+import { useTripActivation } from "@/contexts/TripActivationContext";
 
 interface ScheduledTrip {
   id: string;
@@ -74,8 +75,11 @@ interface ScheduledTrip {
 
 export default function TripNavigationScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation("trips");
+  const { t: tc } = useTranslation("common");
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { driver } = useGetDriverData();
+  const { markTripActive, clearActiveTrip } = useTripActivation();
   const [trip, setTrip] = useState<ScheduledTrip | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentLocation, setCurrentLocation] =
@@ -87,6 +91,7 @@ export default function TripNavigationScreen() {
   const [etaToCheckpoint, setEtaToCheckpoint] = useState<number | undefined>(
     undefined
   );
+  const [nextStopIndex, setNextStopIndex] = useState<number | null>(null);
   const [canUseEmergency, setCanUseEmergency] = useState(true);
   const [emergencyDisabledMessage, setEmergencyDisabledMessage] =
     useState<string>("");
@@ -100,14 +105,16 @@ export default function TripNavigationScreen() {
   const [bearingToCheckpoint, setBearingToCheckpoint] = useState<number | null>(
     null
   );
-  const [isNavigationMode, setIsNavigationMode] = useState(false);
-  const [isFullScreenNavigation, setIsFullScreenNavigation] = useState(false);
+  const [isNavigationMode] = useState(true);
   const previousLocation = useRef<{
     latitude: number;
     longitude: number;
   } | null>(null);
   const hasShownProximityNotification = useRef<number | null>(null);
   const mapInitializedRef = useRef(false);
+  const roadMetricsRequestIdRef = useRef(0);
+  const lastRoadMetricsAtRef = useRef(0);
+  const lastRoadMetricsOriginRef = useRef<Coordinate | null>(null);
 
   // Navigation hook state
   const [navigationOrigin, setNavigationOrigin] = useState<Coordinate | null>(
@@ -120,6 +127,10 @@ export default function TripNavigationScreen() {
   const hasManuallyStartedNavigation = useRef(false);
   const navigationStartRequested = useRef(false);
 
+  const onNavigationArrival = useCallback(() => {
+    Toast.show(t("arrivedCheckpoint"), { type: "success" });
+  }, [t]);
+
   // Initialize navigation hook
   const {
     state: navigationState,
@@ -131,9 +142,7 @@ export default function TripNavigationScreen() {
     destination: navigationDestination,
     mode: "destination",
     enabled: false, // Don't auto-start, we'll control it manually
-    onArrival: () => {
-      Toast.show("Arrived at checkpoint!", { type: "success" });
-    },
+    onArrival: onNavigationArrival,
     onDeviation: () => {
       console.log("⚠️ Route deviation detected, recalculating...");
     },
@@ -161,7 +170,8 @@ export default function TripNavigationScreen() {
     }
 
     const currentPointIndex = trip.progress?.currentPointIndex || 0;
-    const currentPoint = trip.points[currentPointIndex];
+    const effectiveIndex = nextStopIndex ?? currentPointIndex;
+    const currentPoint = trip.points[effectiveIndex];
 
     if (!currentPoint || currentPoint.reachedAt) {
       return null;
@@ -208,7 +218,7 @@ export default function TripNavigationScreen() {
         }}
       />
     );
-  }, [throttledOrigin, trip]);
+  }, [throttledOrigin, trip, nextStopIndex, isNavigationMode, currentLocation]);
 
   // Manually control navigation start/stop based on isNavigationMode
   useEffect(() => {
@@ -246,7 +256,7 @@ export default function TripNavigationScreen() {
   useEffect(() => {
     if (tripId) {
       // Store active trip ID for location tracking
-      AsyncStorage.setItem("activeTripId", tripId).catch((error) => {
+      markTripActive(tripId).catch((error) => {
         console.error("Error storing active trip ID:", error);
       });
 
@@ -255,11 +265,16 @@ export default function TripNavigationScreen() {
       checkEmergencyUsageStatus();
     }
 
-    // Cleanup on unmount
+  }, [tripId, markTripActive]);
+
+  useEffect(() => {
+    if (!tripId) return;
+    const refreshInterval = setInterval(() => {
+      fetchTrip();
+    }, 20000);
+
     return () => {
-      AsyncStorage.removeItem("activeTripId").catch((error) => {
-        console.error("Error removing active trip ID:", error);
-      });
+      clearInterval(refreshInterval);
     };
   }, [tripId]);
 
@@ -271,11 +286,11 @@ export default function TripNavigationScreen() {
         trip.status === "CANCELLED" ||
         trip.status === "FORCE_CLOSED")
     ) {
-      AsyncStorage.removeItem("activeTripId").catch((error) => {
+      clearActiveTrip().catch((error) => {
         console.error("Error removing active trip ID:", error);
       });
     }
-  }, [trip?.status]);
+  }, [trip?.status, clearActiveTrip]);
 
   // Update navigation origin when current location changes
   useEffect(() => {
@@ -288,27 +303,22 @@ export default function TripNavigationScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLocation?.coords.latitude, currentLocation?.coords.longitude]);
 
-  // Update navigation destination when current checkpoint changes
+  // Update navigation destination when next stop changes
   useEffect(() => {
-    if (trip) {
-      const currentPointIndex = trip.progress?.currentPointIndex || 0;
-      const currentPoint = trip.points[currentPointIndex];
+    if (!trip) return;
+    const progressIndex = trip.progress?.currentPointIndex || 0;
+    const effectiveIndex = nextStopIndex ?? progressIndex;
+    const nextPoint = trip.points[effectiveIndex];
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:275',message:'Checkpoint changed',data:{currentPointIndex,hasCurrentPoint:!!currentPoint,currentPointName:currentPoint?.name,isReached:!!currentPoint?.reachedAt,pointLat:currentPoint?.latitude,pointLng:currentPoint?.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-
-      if (currentPoint && !currentPoint.reachedAt) {
-        setNavigationDestination({
-          latitude: currentPoint.latitude,
-          longitude: currentPoint.longitude,
-        });
-      } else {
-        setNavigationDestination(null);
-      }
+    if (nextPoint && !nextPoint.reachedAt) {
+      setNavigationDestination({
+        latitude: nextPoint.latitude,
+        longitude: nextPoint.longitude,
+      });
+    } else {
+      setNavigationDestination(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPointIndex]);
+  }, [trip, nextStopIndex]);
 
   // Ensure map region is updated when both trip and location are available
   useEffect(() => {
@@ -367,16 +377,16 @@ export default function TripNavigationScreen() {
     }
   };
 
-  const fetchTrip = async () => {
+  const fetchTrip = useCallback(async () => {
     try {
       const accessToken = await AsyncStorage.getItem("accessToken");
       if (!accessToken) {
-        Toast.show("Please login first", { type: "danger" });
+        Toast.show(t("loginFirst"), { type: "danger" });
         return;
       }
 
       const response = await axios.get(
-        `${getServerUri()}/driver/scheduled-trips?status=ACTIVE`,
+        `${getServerUri()}/driver/scheduled-trips`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -386,15 +396,15 @@ export default function TripNavigationScreen() {
 
       if (response.data.success) {
         const activeTrip = response.data.trips.find(
-          (t: ScheduledTrip) => t.id === tripId
+          (tripItem: ScheduledTrip) => tripItem.id === tripId
         );
         if (activeTrip) {
           // Check if trip has been force closed
           if (activeTrip.status === "FORCE_CLOSED") {
             // Clear active trip ID
-            await AsyncStorage.removeItem("activeTripId");
+            await clearActiveTrip();
 
-            Toast.show("This trip has been force closed by admin", {
+            Toast.show(t("forceClosed"), {
               type: "danger",
               duration: 5000,
             });
@@ -410,26 +420,27 @@ export default function TripNavigationScreen() {
           if (hasShownProximityNotification.current !== newCurrentPointIndex) {
             hasShownProximityNotification.current = null;
           }
+          setNextStopIndex(newCurrentPointIndex);
           setTrip(activeTrip);
         } else {
-          Toast.show("Trip not found or not active", { type: "danger" });
+          Toast.show(t("tripNotActive"), { type: "danger" });
           router.back();
         }
       }
     } catch (error: any) {
       console.error("Error fetching trip:", error);
-      Toast.show(error.response?.data?.message || "Failed to fetch trip", {
+      Toast.show(error.response?.data?.message || t("fetchTripFailed"), {
         type: "danger",
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [tripId, t, clearActiveTrip]);
 
   const startLocationTracking = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      Toast.show("Location permission is required", { type: "danger" });
+      Toast.show(t("locationRequired"), { type: "danger" });
       return;
     }
 
@@ -498,7 +509,10 @@ export default function TripNavigationScreen() {
             ) {
               hasShownProximityNotification.current = currentPointIndex;
               Toast.show(
-                `You've reached ${currentPoint.name}! Please press "Reached".`,
+                t("proximityPressReached", {
+                  name: currentPoint.name,
+                  action: t("reachedLabel"),
+                }),
                 {
                   type: "success",
                   duration: 5000,
@@ -537,69 +551,92 @@ export default function TripNavigationScreen() {
     );
   };
 
-  const updateDistanceAndETA = (location: Location.LocationObject) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:525',message:'updateDistanceAndETA called',data:{hasTrip:!!trip,hasLocation:!!location,locationLat:location?.coords?.latitude,locationLng:location?.coords?.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
+  const updateDistanceAndETA = async (location: Location.LocationObject) => {
     if (!trip || !location) return;
 
-    const currentPointIndex = trip.progress?.currentPointIndex || 0;
-    const currentPoint = trip.points[currentPointIndex];
+    const driverCoordinate: Coordinate = {
+      latitude: Number(location.coords.latitude),
+      longitude: Number(location.coords.longitude),
+    };
+    const progressIndex = trip.progress?.currentPointIndex || 0;
+    const nextStop = resolveClosestUpcomingStop(
+      trip.points,
+      driverCoordinate,
+      progressIndex
+    );
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:532',message:'Checkpoint info',data:{currentPointIndex,hasCurrentPoint:!!currentPoint,currentPointName:currentPoint?.name,currentPointLat:currentPoint?.latitude,currentPointLng:currentPoint?.longitude,isReached:!!currentPoint?.reachedAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-
-    if (!currentPoint || currentPoint.reachedAt) {
-      // No active checkpoint, clear distance/ETA
+    if (!nextStop) {
       setDistanceToCheckpoint(undefined);
       setEtaToCheckpoint(undefined);
       return;
     }
 
-    // Use navigation state if available, otherwise calculate manually
-    if (
-      isNavigationMode &&
-      navigationState.isActive &&
-      navigationState.distanceToDestination !== undefined &&
-      navigationState.distanceToDestination > 0
-    ) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:545',message:'Using navigation state distance/ETA',data:{isNavigationMode,isActive:navigationState.isActive,hasDistance:!!navigationState.distanceToDestination,distance:navigationState.distanceToDestination,eta:navigationState.etaToDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-      setDistanceToCheckpoint(navigationState.distanceToDestination);
-      setEtaToCheckpoint(navigationState.etaToDestination);
-    } else {
-      // Always calculate from driver's current location to next checkpoint
-      const distance = calculateDistance(
-        location.coords.latitude,
-        location.coords.longitude,
-        currentPoint.latitude,
-        currentPoint.longitude
+    setNextStopIndex(nextStop.stopIndex);
+
+    const destinationCoordinate: Coordinate = {
+      latitude: Number(nextStop.stop.latitude),
+      longitude: Number(nextStop.stop.longitude),
+    };
+
+    const calculatedBearing = calculateBearing(
+      driverCoordinate as NavCoordinate,
+      destinationCoordinate as NavCoordinate
+    );
+    setBearingToCheckpoint(calculatedBearing);
+
+    const now = Date.now();
+    const movedMeters = lastRoadMetricsOriginRef.current
+      ? calculateDistance(
+          lastRoadMetricsOriginRef.current.latitude,
+          lastRoadMetricsOriginRef.current.longitude,
+          driverCoordinate.latitude,
+          driverCoordinate.longitude
+        )
+      : Number.POSITIVE_INFINITY;
+
+    const shouldRefreshRoadMetrics =
+      !lastRoadMetricsOriginRef.current ||
+      movedMeters >= 35 ||
+      now - lastRoadMetricsAtRef.current >= 12000;
+
+    if (!shouldRefreshRoadMetrics && distanceToCheckpoint !== undefined) {
+      return;
+    }
+
+    const requestId = ++roadMetricsRequestIdRef.current;
+    const metrics = await getRoadRouteMetrics(driverCoordinate, destinationCoordinate);
+
+    if (requestId !== roadMetricsRequestIdRef.current) {
+      return;
+    }
+
+    setDistanceToCheckpoint(metrics.distanceKm);
+    setEtaToCheckpoint(metrics.durationMin);
+    lastRoadMetricsAtRef.current = now;
+    lastRoadMetricsOriginRef.current = driverCoordinate;
+
+    console.log("📍 Next stop metrics", {
+      stopName: nextStop.stop.name,
+      stopIndex: nextStop.stopIndex,
+      coordsUsed: {
+        driver: driverCoordinate,
+        stop: destinationCoordinate,
+      },
+      straightLineKm: Number(nextStop.straightLineDistanceKm.toFixed(3)),
+      apiDistanceKm: Number(metrics.distanceKm.toFixed(3)),
+      apiDurationMin: Number(metrics.durationMin.toFixed(2)),
+      source: metrics.source,
+    });
+
+    if (metrics.source === "fallback") {
+      console.warn(
+        "⚠️ Using fallback ETA metrics (road route unavailable).",
+        {
+          stop: nextStop.stop.name,
+          driver: driverCoordinate,
+          destination: destinationCoordinate,
+        }
       );
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:552',message:'Manual distance calculation',data:{driverLat:location.coords.latitude,driverLng:location.coords.longitude,checkpointLat:currentPoint.latitude,checkpointLng:currentPoint.longitude,distanceMeters:distance,distanceKm:distance/1000,estimatedSpeed:30,etaMinutes:(distance/1000/30)*60},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-
-      // Validate distance is reasonable (not suspiciously small)
-      // If distance is less than 10 meters, it's likely a calculation error
-      if (distance < 10) {
-        console.warn(`⚠️ Suspiciously small distance calculated: ${distance}m. Driver: (${location.coords.latitude}, ${location.coords.longitude}), Checkpoint: (${currentPoint.latitude}, ${currentPoint.longitude})`);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/15d349b5-0eed-440d-a9fa-cb46d2b9ba51',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'trip-navigation.screen.tsx:565',message:'Suspiciously small distance detected',data:{distanceMeters:distance,driverLat:location.coords.latitude,driverLng:location.coords.longitude,checkpointLat:currentPoint.latitude,checkpointLng:currentPoint.longitude},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        // Don't update with suspicious values - keep previous values or set to undefined
-        return;
-      }
-
-      // Always update with calculated values (this ensures we use current location, not stale throttled origin)
-      setDistanceToCheckpoint(distance / 1000); // Convert to km
-
-      // Estimate ETA (assuming average speed of 30 km/h in city)
-      const estimatedSpeed = 30; // km/h
-      const etaMinutes = (distance / 1000 / estimatedSpeed) * 60;
-      setEtaToCheckpoint(etaMinutes);
     }
   };
 
@@ -615,9 +652,10 @@ export default function TripNavigationScreen() {
       return;
     }
 
-    const currentPoint =
-      tripDataToUse.points[tripDataToUse.progress?.currentPointIndex || 0];
-    if (!currentPoint) return;
+    const progressIndex = tripDataToUse.progress?.currentPointIndex || 0;
+    const effectiveIndex = nextStopIndex ?? progressIndex;
+    const currentPoint = tripDataToUse.points[effectiveIndex];
+    if (!currentPoint || currentPoint.reachedAt) return;
 
     const latDelta =
       Math.abs(currentPoint.latitude - currentLocation.coords.latitude) * 2.5;
@@ -639,8 +677,9 @@ export default function TripNavigationScreen() {
   const updateMapRegionWithNavigation = (location: Location.LocationObject) => {
     if (!trip || !mapRef.current) return;
 
-    const currentPointIndex = trip.progress?.currentPointIndex || 0;
-    const currentPoint = trip.points[currentPointIndex];
+    const progressIndex = trip.progress?.currentPointIndex || 0;
+    const effectiveIndex = nextStopIndex ?? progressIndex;
+    const currentPoint = trip.points[effectiveIndex];
     if (!currentPoint || currentPoint.reachedAt) return;
 
     const driverLocation: Coordinate = {
@@ -662,26 +701,6 @@ export default function TripNavigationScreen() {
     );
   };
 
-  const startFullScreenNavigation = () => {
-    if (!currentLocation || !trip) {
-      Toast.show("Location data not available", { type: "warning" });
-      return;
-    }
-
-    const currentPointIndex = trip.progress?.currentPointIndex || 0;
-    const currentPoint = trip.points[currentPointIndex];
-    if (!currentPoint || currentPoint.reachedAt) {
-      Toast.show("No active checkpoint to navigate to", { type: "warning" });
-      return;
-    }
-
-    setIsFullScreenNavigation(true);
-  };
-
-  const stopFullScreenNavigation = () => {
-    setIsFullScreenNavigation(false);
-  };
-
   useEffect(() => {
     return () => {
       if (locationWatchSubscription.current) {
@@ -700,16 +719,19 @@ export default function TripNavigationScreen() {
       return;
     }
 
-    Alert.alert("Reach Checkpoint", `Have you reached "${checkpoint.name}"?`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(
+      t("reachCheckpointTitle"),
+      t("reachCheckpointMessage", { name: checkpoint.name }),
+      [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Yes, I'm here",
+        text: t("yesImHere"),
         onPress: async () => {
           try {
             setUpdatingProgress(true);
             const accessToken = await AsyncStorage.getItem("accessToken");
             if (!accessToken) {
-              Toast.show("Please login first", { type: "danger" });
+              Toast.show(t("loginFirst"), { type: "danger" });
               return;
             }
 
@@ -735,15 +757,25 @@ export default function TripNavigationScreen() {
                 let timingMessage = "";
 
                 if (timing.status === "on-time") {
-                  timingMessage = "You arrived on time";
+                  timingMessage = t("timingOnTime");
                 } else if (timing.status === "early") {
-                  timingMessage = `You arrived ${timing.minutes} minute${
-                    timing.minutes !== 1 ? "s" : ""
-                  } early`;
+                  const unit =
+                    timing.minutes === 1
+                      ? t("minuteSingular")
+                      : t("minutePlural");
+                  timingMessage = t("timingEarly", {
+                    minutes: timing.minutes,
+                    unit,
+                  });
                 } else if (timing.status === "late") {
-                  timingMessage = `You arrived ${timing.minutes} minute${
-                    timing.minutes !== 1 ? "s" : ""
-                  } late`;
+                  const unit =
+                    timing.minutes === 1
+                      ? t("minuteSingular")
+                      : t("minutePlural");
+                  timingMessage = t("timingLate", {
+                    minutes: timing.minutes,
+                    unit,
+                  });
                 }
 
                 if (timingMessage) {
@@ -756,15 +788,15 @@ export default function TripNavigationScreen() {
                 // Default success message
                 Toast.show(
                   checkpoint.isFinalPoint
-                    ? "Trip completed successfully!"
-                    : "Checkpoint reached!",
+                    ? t("tripCompletedSuccessfully")
+                    : t("checkpointReachedToast"),
                   { type: "success" }
                 );
               }
 
               if (checkpoint.isFinalPoint) {
                 // Trip completed, clear active trip ID
-                await AsyncStorage.removeItem("activeTripId");
+                await clearActiveTrip();
                 // Trip completed, go back to scheduled trips
                 setTimeout(() => {
                   router.push("/(tabs)/home");
@@ -783,7 +815,7 @@ export default function TripNavigationScreen() {
           } catch (error: any) {
             console.error("Error updating progress:", error);
             Toast.show(
-              error.response?.data?.message || "Failed to update progress",
+              error.response?.data?.message || t("updateProgressFailed"),
               { type: "danger" }
             );
           } finally {
@@ -791,7 +823,8 @@ export default function TripNavigationScreen() {
           }
         },
       },
-    ]);
+    ]
+    );
   };
 
   const handleEmergencyTerminate = async () => {
@@ -802,7 +835,7 @@ export default function TripNavigationScreen() {
     try {
       const accessToken = await AsyncStorage.getItem("accessToken");
       if (!accessToken) {
-        Toast.show("Please login first", { type: "danger" });
+        Toast.show(t("loginFirst"), { type: "danger" });
         return;
       }
 
@@ -820,16 +853,14 @@ export default function TripNavigationScreen() {
 
       if (response.data.success) {
         // Clear active trip ID
-        await AsyncStorage.removeItem("activeTripId");
+        await clearActiveTrip();
 
-        Toast.show("Trip emergency terminated successfully", {
+        Toast.show(t("emergencySuccess"), {
           type: "success",
         });
         // Update local state
         setCanUseEmergency(false);
-        setEmergencyDisabledMessage(
-          "You have already used the emergency end option today."
-        );
+        setEmergencyDisabledMessage(t("emergencyUsedToday"));
         // Navigate back to home
         setTimeout(() => {
           router.push("/(tabs)/home");
@@ -838,7 +869,7 @@ export default function TripNavigationScreen() {
     } catch (error: any) {
       console.error("Error emergency terminating trip:", error);
       Toast.show(
-        error.response?.data?.message || "Failed to emergency terminate trip",
+        error.response?.data?.message || t("failedEmergencyTerminate"),
         { type: "danger" }
       );
       throw error; // Re-throw to let the slider handle the error state
@@ -850,7 +881,7 @@ export default function TripNavigationScreen() {
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color={color.primary} />
         <Text style={{ marginTop: 10, color: colors.text }}>
-          Loading trip...
+          {t("loadingTrip")}
         </Text>
       </View>
     );
@@ -859,13 +890,15 @@ export default function TripNavigationScreen() {
   if (!trip) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ color: colors.text }}>Trip not found</Text>
+        <Text style={{ color: colors.text }}>{t("tripNotFound")}</Text>
       </View>
     );
   }
 
   const currentPointIndex = trip.progress?.currentPointIndex || 0;
   const currentPoint = trip.points[currentPointIndex];
+  const effectiveNextStopIndex = nextStopIndex ?? currentPointIndex;
+  const nextStopPoint = trip.points[effectiveNextStopIndex] || currentPoint;
   const isCompleted = trip.status === "COMPLETED";
 
   // Calculate if driver is within 500m of the current checkpoint
@@ -889,29 +922,13 @@ export default function TripNavigationScreen() {
     return distance <= 500; // 500 meters
   };
 
-  // Get origin and destination for full-screen navigation
-  const getNavigationOrigin = (): Coordinate | null => {
-    if (!currentLocation) return null;
-    return {
-      latitude: currentLocation.coords.latitude,
-      longitude: currentLocation.coords.longitude,
-    };
-  };
-
-  const getNavigationDestination = (): Coordinate | null => {
-    if (!trip || !currentPoint || currentPoint.reachedAt) return null;
-    return {
-      latitude: currentPoint.latitude,
-      longitude: currentPoint.longitude,
-    };
-  };
-
   // Calculate safe initial region coordinates
   const getInitialRegion = () => {
     // Use current point if available
     if (trip && trip.points && trip.points.length > 0) {
-      const currentPointIndex = trip.progress?.currentPointIndex || 0;
-      const currentPoint = trip.points[currentPointIndex];
+      const progressIndex = trip.progress?.currentPointIndex || 0;
+      const effectiveIndex = nextStopIndex ?? progressIndex;
+      const currentPoint = trip.points[effectiveIndex] || trip.points[progressIndex];
       if (currentPoint) {
         return {
           latitude: currentPoint.latitude,
@@ -941,32 +958,28 @@ export default function TripNavigationScreen() {
     };
   };
 
+  const formatClockTime = (rawTime?: string | null): string => {
+    if (!rawTime) return "--:--";
+    const parsed = new Date(rawTime);
+    if (Number.isNaN(parsed.getTime())) return "--:--";
+    return parsed.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const tripShortId = `#${trip.id.slice(0, 6).toUpperCase()}`;
+  const remainingStops = trip.points.filter((point) => !point.reachedAt).length;
+  const currentCheckpointEmployees = currentPoint?.employees?.length || 0;
+  const nextStopDistanceLabel =
+    distanceToCheckpoint && distanceToCheckpoint > 0
+      ? t("kmAway", { distance: distanceToCheckpoint.toFixed(1) })
+      : t("distanceUnavailableNav");
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Full-Screen Navigation Modal */}
-      {isFullScreenNavigation &&
-        getNavigationOrigin() &&
-        getNavigationDestination() && (
-          <Modal
-            visible={isFullScreenNavigation}
-            animationType="slide"
-            presentationStyle="fullScreen"
-          >
-            <NavigationScreen
-              origin={getNavigationOrigin()!}
-              destination={getNavigationDestination()!}
-              mode="destination"
-              onClose={stopFullScreenNavigation}
-              onArrival={() => {
-                Toast.show("Arrived at checkpoint!", { type: "success" });
-                setIsFullScreenNavigation(false);
-              }}
-            />
-          </Modal>
-        )}
-
-      {/* Map View */}
-      <View style={{ height: windowHeight(400), position: "relative" }}>
+      <View style={{ flex: 1 }}>
         <MapView
           ref={mapRef}
           style={{ flex: 1 }}
@@ -978,9 +991,6 @@ export default function TripNavigationScreen() {
           scrollEnabled={!(isNavigationMode && navigationState.isActive)}
           zoomEnabled={!(isNavigationMode && navigationState.isActive)}
         >
-          {/* Current Location - Using showsUserLocation instead */}
-
-          {/* Checkpoints */}
           {trip.points.map((point, index) => {
             const isReached = point.reachedAt !== null;
             const isCurrent = index === currentPointIndex && !isReached;
@@ -995,25 +1005,21 @@ export default function TripNavigationScreen() {
                 }}
                 title={point.name}
                 description={
-                  isReached ? "Reached" : isCurrent ? "Current" : "Upcoming"
+                  isReached
+                    ? t("reachedLabel")
+                    : isCurrent
+                      ? t("currentLabel")
+                      : t("upcomingLabel")
                 }
                 pinColor={
-                  isReached
-                    ? "green"
-                    : isCurrent
-                    ? "red"
-                    : isPast
-                    ? "gray"
-                    : "orange"
+                  isReached ? "#10b981" : isCurrent ? color.primary : isPast ? "#9ca3af" : "#f59e0b"
                 }
               />
             );
           })}
 
-          {/* Route to current checkpoint */}
-          {currentLocation && currentPoint && !currentPoint.reachedAt && (
+          {currentLocation && nextStopPoint && !nextStopPoint.reachedAt && (
             <>
-              {/* Use navigation hook route if available, otherwise fallback to MapViewDirections */}
               {isNavigationMode &&
               navigationState.isActive &&
               navigationState.route ? (
@@ -1022,7 +1028,7 @@ export default function TripNavigationScreen() {
                     navigationState.route.overview_polyline.points
                   )}
                   strokeColor={color.primary}
-                  strokeWidth={5}
+                  strokeWidth={6}
                   lineCap="round"
                   lineJoin="round"
                 />
@@ -1033,7 +1039,144 @@ export default function TripNavigationScreen() {
           )}
         </MapView>
 
-        {/* Turn-by-Turn Instructions Overlay */}
+        <View
+          style={{
+            position: "absolute",
+            top: windowHeight(52),
+            start: spacing.lg,
+            end: spacing.lg,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: "rgba(255,255,255,0.94)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: color.primary, fontSize: 18 }}>☰</Text>
+            </View>
+            <Text style={{ color: color.primary, fontFamily: fonts.bold, fontSize: fontSizes.FONT30 }}>
+              {tc("transportHub")}
+            </Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+            <TouchableOpacity
+              onPress={() =>
+                !isCompleted &&
+                trip.status === "ACTIVE" &&
+                Alert.alert(
+                  t("emergencyEndConfirmTitle"),
+                  t("emergencyEndConfirmMessage"),
+                  [
+                    { text: t("cancel"), style: "cancel" },
+                    {
+                      text: t("confirmEmergencyEnd"),
+                      style: "destructive",
+                      onPress: () => {
+                        handleEmergencyTerminate();
+                      },
+                    },
+                  ]
+                )
+              }
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: "#FFE8E8",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: "#C81E1E", fontSize: 20 }}>✱</Text>
+            </TouchableOpacity>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: "rgba(255,255,255,0.94)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: colors.text, fontFamily: fonts.bold }}>
+                {driver?.name?.[0] || "D"}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View
+          style={{
+            position: "absolute",
+            top: windowHeight(132),
+            start: spacing.lg,
+            end: spacing.lg,
+            backgroundColor: "rgba(255,255,255,0.97)",
+            borderRadius: 28,
+            padding: spacing.lg,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            ...shadows.md,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            <View
+              style={{
+                width: 68,
+                height: 68,
+                borderRadius: 24,
+                backgroundColor: color.primary,
+                alignItems: "center",
+                justifyContent: "center",
+                marginEnd: spacing.md,
+              }}
+            >
+              <Text style={{ color: color.whiteColor, fontFamily: fonts.bold, fontSize: 28 }}>
+                {etaToCheckpoint ? Math.max(1, Math.round(etaToCheckpoint)) : "--"}
+              </Text>
+              <Text style={{ color: color.whiteColor, fontFamily: fonts.medium, fontSize: fontSizes.FONT11 }}>
+                {t("minUpper")}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: color.text.secondary, fontFamily: fonts.bold, fontSize: fontSizes.FONT12, letterSpacing: 1.4 }}>
+                {t("nextStopUpper")}
+              </Text>
+              <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: fontSizes.FONT34 }} numberOfLines={1}>
+                    {nextStopPoint?.name || t("waitingForStop")}
+              </Text>
+              <Text style={{ color: color.text.secondary, fontFamily: fonts.medium, fontSize: fontSizes.FONT18 }}>
+                {nextStopDistanceLabel}
+              </Text>
+            </View>
+          </View>
+          <View
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: "#ECECFF",
+              alignItems: "center",
+              justifyContent: "center",
+              marginStart: spacing.sm,
+            }}
+          >
+            <Text style={{ color: color.primary, fontSize: 20 }}>↱</Text>
+          </View>
+        </View>
+
         {isNavigationMode &&
           navigationState.isActive &&
           navigationState.nextTurn && (
@@ -1044,471 +1187,258 @@ export default function TripNavigationScreen() {
             />
           )}
 
-        {/* Navigation Arrow */}
-        {isNavigationMode && navigationState.isActive
-          ? navigationState.bearingToDestination !== null && (
-              <NavigationArrow
-                bearingToDestination={navigationState.bearingToDestination}
-                driverHeading={navigationState.driverHeading || driverHeading}
-                size={70}
-                color={color.status.active}
-                visible={true}
-              />
-            )
-          : bearingToCheckpoint !== null &&
-            currentLocation &&
-            currentPoint &&
-            !currentPoint.reachedAt && (
-              <NavigationArrow
-                bearingToDestination={bearingToCheckpoint}
-                driverHeading={driverHeading}
-                size={70}
-                color={color.status.active}
-                visible={true}
-              />
-            )}
-
-        {/* ETA and Distance Overlay - Bottom of Map */}
         {isNavigationMode &&
           navigationState.isActive &&
-          currentPoint &&
-          !currentPoint.reachedAt && (
-            <View
-              style={{
-                position: "absolute",
-                bottom: spacing.xl + 50, // Above the control buttons
-                left: spacing.md,
-                right: spacing.md,
-                backgroundColor: colors.card,
-                borderRadius: 16,
-                padding: spacing.md,
-                ...shadows.lg,
-                zIndex: 999,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: fontSizes.FONT12,
-                  fontFamily: fonts.medium,
-                  color: color.text.secondary,
-                  marginBottom: spacing.xs,
-                }}
-              >
-                To {currentPoint.name}
-              </Text>
-              <ETADisplay
-                distance={navigationState.distanceToDestination}
-                duration={navigationState.etaToDestination}
-                size="md"
-              />
-            </View>
+          navigationState.bearingToDestination !== null && (
+            <NavigationArrow
+              bearingToDestination={navigationState.bearingToDestination}
+              driverHeading={navigationState.driverHeading || driverHeading}
+              size={70}
+              color={color.status.active}
+              visible={true}
+            />
           )}
 
-        {/* Loading Overlay for Route Calculation */}
-        {isNavigationMode && navigationState.isLoading && (
-          <View
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0, 0, 0, 0.3)",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 2000,
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: colors.card,
-                borderRadius: 12,
-                padding: spacing.lg,
-                alignItems: "center",
-              }}
-            >
-              <ActivityIndicator size="large" color={color.primary} />
-              <Text
-                style={{
-                  marginTop: spacing.md,
-                  fontSize: fontSizes.FONT14,
-                  fontFamily: fonts.medium,
-                  color: colors.text,
-                }}
-              >
-                Calculating route...
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Error Message */}
-        {isNavigationMode && navigationState.error && (
-          <View
-            style={{
-              position: "absolute",
-              top: spacing.xl + 60,
-              left: spacing.md,
-              right: spacing.md,
-              backgroundColor: color.semantic.errorLight,
-              padding: spacing.md,
-              borderRadius: 8,
-              zIndex: 2000,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: fontSizes.FONT14,
-                fontFamily: fonts.medium,
-                color: color.semantic.error,
-                textAlign: "center",
-              }}
-            >
-              {navigationState.error}
-            </Text>
-          </View>
-        )}
-
-        {/* Map Control Buttons */}
-        <View
+        <TouchableOpacity
           style={{
             position: "absolute",
-            bottom: spacing.md,
-            right: spacing.md,
-            gap: spacing.sm,
+            bottom: windowHeight(360),
+            end: spacing.md,
+            backgroundColor: "#fff",
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            justifyContent: "center",
+            alignItems: "center",
+            ...shadows.md,
+          }}
+          onPress={() => {
+            if (
+              navigationState.isActive &&
+              navigationState.currentLocation &&
+              navigationDestination
+            ) {
+              animateCameraToDriver(
+                mapRef.current!,
+                navigationState.currentLocation,
+                navigationDestination,
+                navigationState.driverHeading || driverHeading,
+                true
+              );
+            } else if (currentLocation && trip) {
+              updateMapRegionWithNavigation(currentLocation);
+            } else {
+              updateMapRegion();
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontSize: 20 }}>📍</Text>
+        </TouchableOpacity>
+
+        <DraggableBottomSheet
+          collapsedHeight={windowHeight(220)}
+          expandedHeight={windowHeight(740)}
+          initialState="collapsed"
+          sheetStyle={{
+            backgroundColor: "rgba(255,255,255,0.96)",
+            ...shadows.md,
+          }}
+          contentContainerStyle={{
+            paddingHorizontal: spacing.lg,
+            paddingBottom: spacing.xl,
           }}
         >
-          {/* Center on me button */}
-          {currentLocation && (
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#fff",
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                justifyContent: "center",
-                alignItems: "center",
-                ...shadows.md,
-              }}
-              onPress={() => {
-                if (
-                  isNavigationMode &&
-                  navigationState.isActive &&
-                  navigationState.currentLocation &&
-                  navigationDestination
-                ) {
-                  animateCameraToDriver(
-                    mapRef.current!,
-                    navigationState.currentLocation,
-                    navigationDestination,
-                    navigationState.driverHeading || driverHeading,
-                    true
-                  );
-                } else if (isNavigationMode && currentLocation && trip) {
-                  updateMapRegionWithNavigation(currentLocation);
-                } else {
-                  updateMapRegion();
-                }
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={{ fontSize: 20 }}>📍</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      {/* Trip Info and Checkpoints */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: spacing.lg }}
-      >
-        {/* Trip Header with Progress */}
-        <View style={{ marginBottom: spacing.lg }}>
-          <Text
-            style={{
-              fontSize: fontSizes.FONT24,
-              fontWeight: "bold",
-              color: colors.text,
-              marginBottom: spacing.xs,
-            }}
-          >
-            {trip.name}
-          </Text>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: spacing.sm,
-              marginBottom: spacing.xs,
-            }}
-          >
-            {trip.company?.name && (
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderColor: color.primary,
-                  paddingHorizontal: spacing.sm,
-                  paddingVertical: spacing.xs / 2,
-                  borderRadius: 999,
-                }}
-              >
-                <Text
-                  style={{
-                    color: color.primary,
-                    fontSize: fontSizes.FONT12,
-                    fontFamily: fonts.medium,
-                  }}
-                >
-                  {trip.company.name}
+            <View style={{ marginBottom: spacing.md }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: fontSizes.FONT36 }}>
+                  {t("routeProgress")}
                 </Text>
-              </View>
-            )}
-          </View>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Text
-              style={{
-                color: colors.text,
-                fontSize: fontSizes.FONT14,
-                fontFamily: fonts.regular,
-              }}
-            >
-              Progress: {currentPointIndex + 1} of {trip.points.length}{" "}
-              checkpoints
-            </Text>
-            {/* Progress Bar */}
-            <View
-              style={{
-                flex: 1,
-                height: 6,
-                backgroundColor: colors.border,
-                borderRadius: 3,
-                marginLeft: spacing.md,
-              }}
-            >
-              <View
-                style={{
-                  width: `${
-                    ((currentPointIndex + 1) / trip.points.length) * 100
-                  }%`,
-                  height: "100%",
-                  backgroundColor: color.status.completed,
-                  borderRadius: 3,
-                }}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Current Checkpoint ETA */}
-        {currentPoint && !currentPoint.reachedAt && (
-          <View
-            style={{
-              backgroundColor: colors.card,
-              borderRadius: 12,
-              padding: spacing.lg,
-              marginBottom: spacing.lg,
-              borderWidth: 1,
-              borderColor: color.status.active,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: fontSizes.FONT14,
-                fontFamily: fonts.medium,
-                color: color.text.secondary,
-                marginBottom: spacing.sm,
-              }}
-            >
-              Next Checkpoint
-            </Text>
-            <Text
-              style={{
-                fontSize: fontSizes.FONT18,
-                fontFamily: fonts.bold,
-                color: colors.text,
-                marginBottom: spacing.md,
-              }}
-            >
-              {currentPoint.name}
-            </Text>
-
-            {/* Employees at Current Checkpoint - Trigger Button */}
-            {currentPoint.employees && currentPoint.employees.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  console.log(
-                    "Opening employee sheet for:",
-                    currentPoint.name,
-                    "Employees:",
-                    currentPoint.employees
-                  );
-                  setIsEmployeeSheetVisible(true);
-                }}
-                activeOpacity={0.7}
-                style={{
-                  backgroundColor: `${color.primary}10`,
-                  borderRadius: 8,
-                  padding: spacing.md,
-                  marginBottom: spacing.md,
-                  borderWidth: 1,
-                  borderColor: `${color.primary}30`,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      fontSize: fontSizes.FONT13,
-                      fontFamily: fonts.bold,
-                      color: color.primary,
-                      marginBottom: spacing.xs / 2,
-                    }}
-                  >
-                    👥 Employees to Pick Up
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: fontSizes.FONT12,
-                      fontFamily: fonts.regular,
-                      color: color.text.secondary,
-                    }}
-                  >
-                    {currentPoint.employees.length} employee
-                    {currentPoint.employees.length !== 1 ? "s" : ""} • Tap to
-                    view
-                  </Text>
-                </View>
                 <View
                   style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    backgroundColor: color.primary,
-                    justifyContent: "center",
+                    flexDirection: "row",
                     alignItems: "center",
-                    marginLeft: spacing.md,
+                    backgroundColor: "#EEF0FF",
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.xs,
+                    borderRadius: 999,
                   }}
                 >
-                  <Text
-                    style={{
-                      fontSize: fontSizes.FONT14,
-                      fontFamily: fonts.bold,
-                      color: color.whiteColor,
-                    }}
-                  >
-                    {currentPoint.employees.length}
+                  <Text style={{ color: color.primary, fontSize: 14, marginRight: 4 }}>●</Text>
+                  <Text style={{ color: color.primary, fontFamily: fonts.bold, fontSize: fontSizes.FONT13 }}>
+                    {t("liveBadge")}
                   </Text>
                 </View>
-              </TouchableOpacity>
-            )}
+              </View>
+              <Text style={{ marginTop: spacing.xs, color: color.text.secondary, fontFamily: fonts.medium, fontSize: fontSizes.FONT20 }}>
+                {t("stopsRemaining", {
+                  count: remainingStops,
+                  id: tripShortId,
+                })}
+              </Text>
+            </View>
 
-            <ETADisplay
-              distance={distanceToCheckpoint}
-              duration={etaToCheckpoint}
-              size="md"
-            />
-          </View>
-        )}
+            {trip.points.map((point, index) => {
+              const isReached = !!point.reachedAt;
+              const isCurrent = index === currentPointIndex && !isReached;
+              const hasNext = index < trip.points.length - 1;
+              return (
+                <View key={point.id} style={{ marginBottom: spacing.md }}>
+                  <View style={{ flexDirection: "row" }}>
+                    <View style={{ width: 28, alignItems: "center" }}>
+                      <View
+                        style={{
+                          width: isCurrent ? 24 : 18,
+                          height: isCurrent ? 24 : 18,
+                          borderRadius: 999,
+                          backgroundColor: isReached
+                            ? "#10b981"
+                            : isCurrent
+                            ? color.primary
+                            : "#E5E7EB",
+                          borderWidth: isCurrent ? 5 : 2,
+                          borderColor: isCurrent ? "#DDE0FF" : "#D1D5DB",
+                          marginTop: 6,
+                        }}
+                      />
+                      {hasNext && (
+                        <View
+                          style={{
+                            width: 2,
+                            flex: 1,
+                            marginTop: 4,
+                            backgroundColor: "#E5E7EB",
+                            minHeight: 44,
+                          }}
+                        />
+                      )}
+                    </View>
 
-        {/* Checkpoints List */}
-        <View style={{ marginBottom: spacing.lg }}>
-          <Text
-            style={{
-              fontSize: fontSizes.FONT18,
-              fontWeight: "600",
-              color: colors.text,
-              marginBottom: spacing.md,
-              fontFamily: fonts.bold,
-            }}
-          >
-            All Checkpoints
-          </Text>
-          {trip.points.map((point, index) => {
-            const isReached = point.reachedAt !== null;
-            const isCurrent = index === currentPointIndex && !isReached;
-            const isPast = index < currentPointIndex;
+                    {isCurrent ? (
+                      <View
+                        style={{
+                          flex: 1,
+                          backgroundColor: color.whiteColor,
+                          borderRadius: 24,
+                          padding: spacing.lg,
+                          borderWidth: 1,
+                          borderColor: "#E6E9F0",
+                          ...shadows.sm,
+                        }}
+                      >
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <View style={{ flex: 1, paddingRight: spacing.md }}>
+                            <Text style={{ color: color.primary, fontFamily: fonts.bold, fontSize: fontSizes.FONT30 }}>
+                              {point.name}
+                            </Text>
+                            <Text style={{ color: colors.text, fontFamily: fonts.regular, fontSize: fontSizes.FONT30, marginTop: 2 }}>
+                              {t("expectedArrival", {
+                                time: formatClockTime(point.expectedTime),
+                              })}
+                            </Text>
+                          </View>
+                          <View
+                            style={{
+                              backgroundColor: "#ECECFF",
+                              borderRadius: 12,
+                              paddingHorizontal: spacing.sm,
+                              paddingVertical: spacing.xs,
+                            }}
+                          >
+                            <Text style={{ color: color.primary, fontFamily: fonts.bold, fontSize: fontSizes.FONT12 }}>
+                              {t("inProgressBadge")}
+                            </Text>
+                          </View>
+                        </View>
 
-            return (
-              <CheckpointCard
-                key={point.id}
-                checkpoint={point}
-                isCurrent={isCurrent}
-                isReached={isReached}
-                isPast={isPast}
-                distance={isCurrent ? distanceToCheckpoint : undefined}
-                duration={isCurrent ? etaToCheckpoint : undefined}
-                onReachPress={() => handleReachCheckpoint(index)}
-                disabled={updatingProgress || !isWithinRange(index)}
-                showReachButton={isCurrent && !isCompleted}
+                        <View style={{ flexDirection: "row", gap: spacing.md, marginTop: spacing.md }}>
+                          <TouchableOpacity
+                            onPress={() => setIsEmployeeSheetVisible(true)}
+                            style={{
+                              flex: 1,
+                              backgroundColor: "#F4F5F7",
+                              borderRadius: 14,
+                              paddingVertical: spacing.sm,
+                              paddingHorizontal: spacing.md,
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={{ color: colors.text, fontFamily: fonts.medium, fontSize: fontSizes.FONT14 }}>
+                              👤{" "}
+                              {t("studentsOnBoard", {
+                                count: currentCheckpointEmployees,
+                              })}
+                            </Text>
+                          </TouchableOpacity>
+                          <View
+                            style={{
+                              flex: 1,
+                              backgroundColor: "#F4F5F7",
+                              borderRadius: 14,
+                              paddingVertical: spacing.sm,
+                              paddingHorizontal: spacing.md,
+                            }}
+                          >
+                            <Text style={{ color: colors.text, fontFamily: fonts.medium, fontSize: fontSizes.FONT14 }}>
+                              📞 {trip.company?.name || t("schoolCoordFallback")}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <TouchableOpacity
+                          onPress={() => handleReachCheckpoint(index)}
+                          disabled={updatingProgress || !isWithinRange(index)}
+                          style={{
+                            marginTop: spacing.md,
+                            borderRadius: 14,
+                            backgroundColor:
+                              updatingProgress || !isWithinRange(index)
+                                ? "#D1D5DB"
+                                : color.primary,
+                            paddingVertical: spacing.sm,
+                            alignItems: "center",
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={{ color: color.whiteColor, fontFamily: fonts.bold, fontSize: fontSizes.FONT14 }}>
+                            {updatingProgress ? t("updating") : t("markAsReached")}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={{ flex: 1, paddingHorizontal: spacing.sm, paddingTop: spacing.xs }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                          <Text
+                            style={{
+                              color: colors.text,
+                              fontFamily: fonts.bold,
+                              fontSize: fontSizes.FONT34,
+                              textDecorationLine: isReached ? "line-through" : "none",
+                              opacity: isReached ? 0.5 : 1,
+                            }}
+                          >
+                            {point.name}
+                          </Text>
+                          <Text style={{ color: colors.text, fontFamily: fonts.medium, fontSize: fontSizes.FONT22, opacity: isReached ? 0.5 : 1 }}>
+                            {formatClockTime(point.expectedTime)}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+
+            {!isCompleted && trip.status === "ACTIVE" && (
+              <EmergencyEndSlider
+                onConfirm={handleEmergencyTerminate}
+                disabled={!canUseEmergency}
+                disabledMessage={emergencyDisabledMessage}
               />
-            );
-          })}
-        </View>
-
-        {isCompleted && (
-          <View
-            style={{
-              backgroundColor: "#10b98120",
-              padding: 16,
-              borderRadius: 8,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ color: "#10b981", fontSize: 16, fontWeight: "600" }}>
-              ✓ Trip Completed!
-            </Text>
-          </View>
-        )}
-
-        {trip.status === "FORCE_CLOSED" && (
-          <View
-            style={{
-              backgroundColor: "#fce7f3", // rose-100
-              padding: 16,
-              borderRadius: 8,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#e11d48",
-              marginBottom: 16,
-            }}
-          >
-            <Text
-              style={{
-                color: "#e11d48",
-                fontSize: 16,
-                fontWeight: "600",
-                marginBottom: 8,
-              }}
-            >
-              ⚠️ Trip Force Closed
-            </Text>
-            <Text
-              style={{ color: "#e11d48", fontSize: 14, textAlign: "center" }}
-            >
-              This trip was closed by admin. A financial deduction has been
-              applied to your account.
-            </Text>
-          </View>
-        )}
-
-        {/* Emergency End Trip Slider - Only show for ACTIVE trips */}
-        {!isCompleted && trip.status === "ACTIVE" && (
-          <EmergencyEndSlider
-            onConfirm={handleEmergencyTerminate}
-            disabled={!canUseEmergency}
-            disabledMessage={emergencyDisabledMessage}
-          />
-        )}
-      </ScrollView>
+            )}
+        </DraggableBottomSheet>
+      </View>
 
       {/* Employee Bottom Sheet */}
       {currentPoint && (

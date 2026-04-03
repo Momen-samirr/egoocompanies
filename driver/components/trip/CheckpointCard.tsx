@@ -62,8 +62,8 @@ export default function CheckpointCard({
         styles.container,
         {
           backgroundColor: getBackgroundColor(),
-          borderColor: getBorderColor(),
-          borderWidth: isCurrent ? 2 : 1,
+          borderColor: "transparent",
+          borderWidth: 0,
           opacity: isPast && !isReached ? 0.5 : 1,
         },
       ]}
@@ -164,9 +164,14 @@ export default function CheckpointCard({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 18,
     padding: spacing.lg,
     marginBottom: spacing.md,
+    shadowColor: "#494BD6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
   },
   content: {
     flexDirection: "row",
@@ -245,7 +250,7 @@ const styles = StyleSheet.create({
   reachButton: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderRadius: 8,
+    borderRadius: 14,
   },
   reachButtonText: {
     color: "#fff",

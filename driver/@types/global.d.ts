@@ -46,14 +46,3 @@ type DriverType = {
   createdAt: Date;
   updatedAt: Date;
 };
-
-type recentRidesTypes = {
-  id: string;
-  user: any;
-  rating: string;
-  earning: string;
-  pickup: string;
-  dropoff: string;
-  time: string;
-  distance: string;
-};

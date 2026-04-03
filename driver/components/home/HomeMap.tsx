@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { View, Text, StyleSheet } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
@@ -37,6 +38,7 @@ export default React.memo(function HomeMap({
   mapError,
   mapLoading = true,
 }: HomeMapProps) {
+  const { t } = useTranslation("home");
   // Memoize region to prevent unnecessary re-renders
   const memoizedRegion = useMemo(() => {
     return region;
@@ -102,14 +104,14 @@ export default React.memo(function HomeMap({
         {mapMarkers.destination && (
           <Marker
             coordinate={mapMarkers.destination}
-            title="Destination"
+            title={t("dropoff")}
             pinColor={color.status.active}
           />
         )}
         {mapMarkers.pickup && (
           <Marker
             coordinate={mapMarkers.pickup}
-            title="Pickup"
+            title={t("pickup")}
             pinColor={color.status.completed}
           />
         )}
@@ -136,14 +138,16 @@ export default React.memo(function HomeMap({
       {/* Map Error Display */}
       {mapError && (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Map Error: {mapError}</Text>
+          <Text style={styles.errorText}>
+            {t("mapErrorWithDetail", { detail: mapError })}
+          </Text>
         </View>
       )}
 
       {/* Map Loading Indicator */}
       {mapLoading && !mapError && (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading map...</Text>
+          <Text style={styles.loadingText}>{t("loadingMap")}</Text>
         </View>
       )}
     </View>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import * as Notifications from "expo-notifications";
 import { Toast } from "react-native-toast-notifications";
 import { router } from "expo-router";
@@ -28,6 +29,8 @@ export interface NotificationHandlers {
  * Manages notification registration, listeners, and processing
  */
 export function useNotifications(handlers: NotificationHandlers) {
+  const { t } = useTranslation("notifications");
+  const { t: tc } = useTranslation("common");
   const processedNotificationIds = useRef<Set<string>>(new Set());
   const isProcessingNotification = useRef<boolean>(false);
 
@@ -122,7 +125,7 @@ export function useNotifications(handlers: NotificationHandlers) {
         if (orderData && orderData.type === "tripActivation") {
           console.log("📬 Trip activation notification received:", orderData);
           Toast.show(
-            `Trip "${orderData.tripName}" is now available to start!`,
+            t("tripNowAvailable", { tripName: orderData.tripName }),
             {
               type: "success",
               duration: 5000,
@@ -141,7 +144,7 @@ export function useNotifications(handlers: NotificationHandlers) {
         // Validate required fields
         if (!orderData) {
           console.error("❌ No orderData found in notification");
-          Toast.show("Invalid notification format", {
+          Toast.show(t("invalidFormat"), {
             type: "danger",
           });
           return;
@@ -156,7 +159,7 @@ export function useNotifications(handlers: NotificationHandlers) {
             "❌ Invalid notification data - missing required fields"
           );
           Toast.show(
-            "Invalid ride request data - missing location or user info",
+            t("invalidRideData"),
             {
               type: "danger",
             }
@@ -173,17 +176,17 @@ export function useNotifications(handlers: NotificationHandlers) {
           currentLocationName:
             orderData.currentLocationName ||
             orderData.currentLocation?.name ||
-            "Pickup Location",
+            tc("pickupLocation"),
           destinationLocationName:
             orderData.destinationLocation ||
             orderData.destinationLocationName ||
             orderData.marker?.name ||
-            "Destination",
+            tc("destination"),
           destinationLocation: orderData.destinationLocation,
         });
       } catch (error: any) {
         console.error("❌ Error processing notification data:", error);
-        Toast.show(`Error processing ride request: ${error.message}`, {
+        Toast.show(t("errorProcessingRide", { message: error.message }), {
           type: "danger",
           duration: 5000,
         });
@@ -191,7 +194,7 @@ export function useNotifications(handlers: NotificationHandlers) {
         isProcessingNotification.current = false;
       }
     },
-    [handlers]
+    [handlers, t, tc]
   );
 
   // Register for push notifications
@@ -263,7 +266,7 @@ export function useNotifications(handlers: NotificationHandlers) {
         if (!permissions.granted) {
           console.error("❌ Notification permissions not granted!");
           Toast.show(
-            "Notification permissions not granted. Please enable notifications in settings.",
+            t("permissionsNotGranted"),
             {
               type: "danger",
               duration: 5000,
@@ -287,7 +290,7 @@ export function useNotifications(handlers: NotificationHandlers) {
           return;
         }
 
-        Toast.show("📱 New ride request received!", {
+        Toast.show(t("newRideRequest"), {
           type: "success",
           duration: 3000,
         });
@@ -296,7 +299,7 @@ export function useNotifications(handlers: NotificationHandlers) {
           const data = notification.request.content.data;
           if (!data) {
             console.error("❌ ERROR: No data in notification");
-            Toast.show("Notification received but no data found", {
+            Toast.show(t("noDataFound"), {
               type: "warning",
               duration: 3000,
             });
@@ -305,7 +308,7 @@ export function useNotifications(handlers: NotificationHandlers) {
           handleNotificationData(data, notification.request.identifier);
         } catch (error: any) {
           console.error("❌ ERROR: Exception in notification listener", error);
-          Toast.show(`Error: ${error.message}`, {
+          Toast.show(t("errorGeneric", { message: error.message }), {
             type: "danger",
             duration: 5000,
           });
@@ -324,7 +327,7 @@ export function useNotifications(handlers: NotificationHandlers) {
           return;
         }
 
-        Toast.show("👆 Notification tapped - opening app...", {
+        Toast.show(t("tappedOpening"), {
           type: "info",
           duration: 3000,
         });
@@ -362,7 +365,7 @@ export function useNotifications(handlers: NotificationHandlers) {
                   fallbackError
                 );
                 Toast.show(
-                  "Notification received but could not process data. Please check manually.",
+                  t("processManual"),
                   {
                     type: "warning",
                     duration: 5000,
@@ -377,7 +380,7 @@ export function useNotifications(handlers: NotificationHandlers) {
 
           if (!data) {
             console.error("❌ No data found in tapped notification");
-            Toast.show("Notification tapped but no data found", {
+            Toast.show(t("tappedNoData"), {
               type: "warning",
               duration: 3000,
             });
@@ -402,7 +405,7 @@ export function useNotifications(handlers: NotificationHandlers) {
             !errorMessage.includes("WritableMap")
           ) {
             Toast.show(
-              `Error processing tapped notification: ${errorMessage}`,
+              t("errorTapped", { message: errorMessage }),
               {
                 type: "danger",
                 duration: 5000,
@@ -427,7 +430,7 @@ export function useNotifications(handlers: NotificationHandlers) {
               return;
             }
 
-            Toast.show("🚀 App opened from notification", {
+            Toast.show(t("openedFromNotification"), {
               type: "info",
               duration: 3000,
             });
@@ -465,7 +468,7 @@ export function useNotifications(handlers: NotificationHandlers) {
                       fallbackError
                     );
                     Toast.show(
-                      "Notification received but could not process data. Please check manually.",
+                      t("processManual"),
                       {
                         type: "warning",
                         duration: 5000,
@@ -487,7 +490,7 @@ export function useNotifications(handlers: NotificationHandlers) {
                 }, 1000);
               } else {
                 console.error("❌ No data found in last notification");
-                Toast.show("Notification found but no data available", {
+                Toast.show(t("foundNoData"), {
                   type: "warning",
                   duration: 3000,
                 });
@@ -503,7 +506,7 @@ export function useNotifications(handlers: NotificationHandlers) {
                 !errorMessage.includes("WritableMap")
               ) {
                 Toast.show(
-                  `Error processing last notification: ${errorMessage}`,
+                  t("errorLast", { message: errorMessage }),
                   {
                     type: "danger",
                     duration: 5000,
@@ -546,7 +549,7 @@ export function useNotifications(handlers: NotificationHandlers) {
         Notifications.removeNotificationSubscription(responseSubscription);
       }
     };
-  }, [handleNotificationData]);
+  }, [handleNotificationData, t]);
 
   // Register for push notifications function
   async function registerForPushNotificationsAsync() {
@@ -556,7 +559,7 @@ export function useNotifications(handlers: NotificationHandlers) {
       console.warn(
         "⚠️ Not a physical device - push notifications not available"
       );
-      Toast.show("Must use physical device for Push Notifications", {
+      Toast.show(t("physicalDeviceRequired"), {
         type: "danger",
       });
       return;
@@ -575,7 +578,7 @@ export function useNotifications(handlers: NotificationHandlers) {
 
       if (finalStatus !== "granted") {
         console.error("❌ Notification permissions not granted:", finalStatus);
-        Toast.show("Failed to get push token for push notification!", {
+        Toast.show(t("pushTokenFailed"), {
           type: "danger",
         });
         return;
@@ -590,7 +593,7 @@ export function useNotifications(handlers: NotificationHandlers) {
 
       if (!projectId) {
         console.error("❌ Project ID not found for push notifications");
-        Toast.show("Failed to get project id for push notification!", {
+        Toast.show(t("projectIdFailed"), {
           type: "danger",
         });
         return;
@@ -608,7 +611,7 @@ export function useNotifications(handlers: NotificationHandlers) {
         !pushTokenString.startsWith("ExponentPushToken[")
       ) {
         console.error("❌ Invalid push token format:", pushTokenString);
-        Toast.show("Invalid push token format", {
+        Toast.show(t("invalidPushToken"), {
           type: "danger",
         });
         return;
@@ -633,7 +636,7 @@ export function useNotifications(handlers: NotificationHandlers) {
                 console.error(
                   "❌ Failed to save token: No access token after all retries"
                 );
-                Toast.show("Please log in to enable push notifications", {
+                Toast.show(t("loginToEnablePush"), {
                   type: "warning",
                   duration: 3000,
                 });
@@ -659,7 +662,7 @@ export function useNotifications(handlers: NotificationHandlers) {
               console.log(
                 "✅ Token verification: MATCH - notifications should work!"
               );
-              Toast.show("Push notifications enabled!", {
+              Toast.show(t("pushEnabled"), {
                 type: "success",
                 duration: 2000,
               });
@@ -671,7 +674,7 @@ export function useNotifications(handlers: NotificationHandlers) {
               error.message
             );
             if (error.response?.status === 401) {
-              Toast.show("Please log in again to enable notifications", {
+              Toast.show(t("loginAgainNotifications"), {
                 type: "warning",
                 duration: 3000,
               });
@@ -686,7 +689,7 @@ export function useNotifications(handlers: NotificationHandlers) {
                 "❌ Failed to save notification token after all retries"
               );
               Toast.show(
-                "Failed to save notification token. Please check your connection and try again.",
+                t("tokenSaveFailed"),
                 {
                   type: "warning",
                   duration: 5000,
@@ -711,7 +714,7 @@ export function useNotifications(handlers: NotificationHandlers) {
         );
       } else if (isPhysicalDevice()) {
         Toast.show(
-          "Push notifications may not be available. Please rebuild the app.",
+          t("pushUnavailableRebuild"),
           {
             type: "warning",
             duration: 3000,

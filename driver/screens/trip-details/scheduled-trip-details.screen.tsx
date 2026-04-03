@@ -4,9 +4,9 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-  Linking,
 } from "react-native";
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { router, useLocalSearchParams } from "expo-router";
 import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -19,7 +19,12 @@ import { Toast } from "react-native-toast-notifications";
 import { getServerUri } from "@/configs/constants";
 import { useTheme } from "@react-navigation/native";
 import Header from "@/components/common/header";
-import { Gps, Location } from "@/utils/icons";
+import * as LocationService from "expo-location";
+import { useTripActivation } from "@/contexts/TripActivationContext";
+import {
+  getTripActionState,
+  normalizeTripStatus,
+} from "@/services/scheduledTripsService";
 
 interface ScheduledTrip {
   id: string;
@@ -33,6 +38,14 @@ interface ScheduledTrip {
     id: string;
     name: string;
   };
+  activationStatus?: {
+    canActivate: boolean;
+    reason?: string;
+    distanceToFirstPoint?: number;
+    isWithinTimeWindow?: boolean;
+    isTooEarly?: boolean;
+    earliestStartTime?: string;
+  } | null;
   assignedCaptain: {
     id: string;
     name: string;
@@ -57,6 +70,7 @@ interface ScheduledTrip {
 }
 
 export default function ScheduledTripDetailsScreen() {
+  const { t } = useTranslation("trips");
   const { colors } = useTheme();
   const { tripId } = useLocalSearchParams() as { tripId: string };
   const [trip, setTrip] = useState<ScheduledTrip | null>(null);
@@ -68,11 +82,13 @@ export default function ScheduledTripDetailsScreen() {
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
+  const [actionLoading, setActionLoading] = useState(false);
+  const { activeTripId, activateTrip: activateTripAction } = useTripActivation();
 
   useEffect(() => {
     fetchTrip();
     checkOnlineStatus();
-  }, [tripId]);
+  }, [tripId, t]);
 
   const checkOnlineStatus = async () => {
     try {
@@ -88,7 +104,7 @@ export default function ScheduledTripDetailsScreen() {
       setLoading(true);
       const accessToken = await AsyncStorage.getItem("accessToken");
       if (!accessToken) {
-        Toast.show("Please login first", { type: "danger" });
+        Toast.show(t("loginFirst"), { type: "danger" });
         return;
       }
 
@@ -109,13 +125,13 @@ export default function ScheduledTripDetailsScreen() {
           setTrip(foundTrip);
           updateMapRegion(foundTrip);
         } else {
-          Toast.show("Trip not found", { type: "danger" });
+          Toast.show(t("tripNotFound"), { type: "danger" });
           router.back();
         }
       }
     } catch (error: any) {
       console.error("Error fetching trip:", error);
-      Toast.show(error.response?.data?.message || "Failed to fetch trip", {
+      Toast.show(error.response?.data?.message || t("fetchTripFailed"), {
         type: "danger",
       });
     } finally {
@@ -198,7 +214,7 @@ export default function ScheduledTripDetailsScreen() {
           }}
         >
           <Text style={{ color: colors.text, fontSize: 16 }}>
-            Trip not found
+            {t("tripNotFound")}
           </Text>
         </View>
       </View>
@@ -206,6 +222,83 @@ export default function ScheduledTripDetailsScreen() {
   }
 
   const statusColor = getStatusColor(trip.status);
+  const normalizedStatus = normalizeTripStatus(trip.status);
+  const isActiveTrip = activeTripId === trip.id || normalizedStatus === "ACTIVE";
+  const canActivate =
+    isOnline &&
+    (normalizedStatus === "SCHEDULED" ||
+      normalizedStatus === "PENDING" ||
+      normalizedStatus === "NOT_STARTED") &&
+    !!trip.activationStatus?.canActivate &&
+    (!activeTripId || activeTripId === trip.id);
+  const actionState = getTripActionState({
+    status: isActiveTrip ? "ACTIVE" : trip.status,
+    canActivate,
+    isOnline,
+    isActivating: actionLoading,
+  });
+
+  const actionLabel = actionState.isActivating
+    ? t("activating")
+    : actionState.actionType === "continue"
+      ? t("continueTrip")
+      : actionState.actionType === "failed"
+        ? t("tripFailed")
+        : actionState.actionType === "activate"
+          ? t("activateTrip")
+          : t("unavailable");
+
+  const statusKey = `status_${String(trip.status).toUpperCase()}`;
+  const tripStatusTranslated = t(statusKey as "status_FAILED");
+  const tripStatusLabel =
+    tripStatusTranslated !== statusKey ? tripStatusTranslated : trip.status;
+
+  const handleTripAction = async () => {
+    if (actionState.actionType === "continue") {
+      router.push({
+        pathname: "/trip-navigation",
+        params: { tripId: trip.id },
+      });
+      return;
+    }
+
+    if (actionState.actionType !== "activate") {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      const permission = await LocationService.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        Toast.show(t("locationRequired"), { type: "danger" });
+        return;
+      }
+
+      const location = await LocationService.getCurrentPositionAsync({});
+      await activateTripAction({
+        tripId: trip.id,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      setTrip((previous) => (previous ? { ...previous, status: "ACTIVE" } : previous));
+      Toast.show(t("tripStarted"), { type: "success" });
+      router.push({
+        pathname: "/trip-navigation",
+        params: { tripId: trip.id },
+      });
+    } catch (error: any) {
+      console.error("Error starting trip:", error);
+      if (error?.response) {
+        setTrip((previous) => (previous ? { ...previous, status: "FAILED" } : previous));
+      }
+      Toast.show(error.response?.data?.message || t("startTripFailed"), {
+        type: "danger",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -222,7 +315,10 @@ export default function ScheduledTripDetailsScreen() {
                   longitude: point.longitude,
                 }}
                 title={point.name}
-                description={`Checkpoint ${index + 1}${point.isFinalPoint ? " (Final)" : ""}`}
+                description={t("checkpointMarkerDescription", {
+                  index: index + 1,
+                  final: point.isFinalPoint ? t("finalCheckpointSuffix") : "",
+                })}
                 pinColor={point.isFinalPoint ? "green" : "blue"}
               />
             ))}
@@ -292,7 +388,7 @@ export default function ScheduledTripDetailsScreen() {
                     fontWeight: "600",
                   }}
                 >
-                  {trip.status === "FAILED" ? "Failed" : trip.status === "FORCE_CLOSED" ? "Force Closed" : trip.status}
+                  {tripStatusLabel}
                 </Text>
               </View>
             </View>
@@ -335,7 +431,9 @@ export default function ScheduledTripDetailsScreen() {
                   marginBottom: windowHeight(1),
                 }}
               >
-                📅 Scheduled: {formatDateTime(trip.scheduledTime)}
+                {t("scheduledAt", {
+                  datetime: formatDateTime(trip.scheduledTime),
+                })}
               </Text>
               <Text
                 style={{
@@ -343,7 +441,7 @@ export default function ScheduledTripDetailsScreen() {
                   color: color.secondaryFont,
                 }}
               >
-                📍 Total Checkpoints: {trip.points.length}
+                {t("totalCheckpointsLabel", { count: trip.points.length })}
               </Text>
             </View>
 
@@ -355,7 +453,9 @@ export default function ScheduledTripDetailsScreen() {
                   marginBottom: windowHeight(1),
                 }}
               >
-                ✅ Started: {formatDateTime(trip.progress.startedAt)}
+                {t("startedAtLabel", {
+                  datetime: formatDateTime(trip.progress.startedAt),
+                })}
               </Text>
             )}
             {trip.progress?.completedAt && (
@@ -365,7 +465,9 @@ export default function ScheduledTripDetailsScreen() {
                   color: colors.text,
                 }}
               >
-                🎉 Completed: {formatDateTime(trip.progress.completedAt)}
+                {t("completedAtLabel", {
+                  datetime: formatDateTime(trip.progress.completedAt),
+                })}
               </Text>
             )}
           </View>
@@ -387,7 +489,7 @@ export default function ScheduledTripDetailsScreen() {
                 marginBottom: windowHeight(2),
               }}
             >
-              Checkpoints
+              {t("checkpointsHeading")}
             </Text>
             {trip.points.map((point, index) => (
               <View
@@ -414,7 +516,7 @@ export default function ScheduledTripDetailsScreen() {
                       : "#9ca3af",
                     justifyContent: "center",
                     alignItems: "center",
-                    marginRight: windowWidth(3),
+                    marginEnd: windowWidth(3),
                   }}
                 >
                   <Text
@@ -437,7 +539,9 @@ export default function ScheduledTripDetailsScreen() {
                   >
                     {point.name}
                     {point.isFinalPoint && (
-                      <Text style={{ color: "#10b981" }}> (Final)</Text>
+                      <Text style={{ color: "#10b981" }}>
+                        {t("finalCheckpointSuffix")}
+                      </Text>
                     )}
                   </Text>
                   <Text
@@ -457,7 +561,9 @@ export default function ScheduledTripDetailsScreen() {
                         marginTop: windowHeight(0.5),
                       }}
                     >
-                      ✓ Reached: {formatDateTime(point.reachedAt)}
+                      {t("reachedAtLabel", {
+                        datetime: formatDateTime(point.reachedAt),
+                      })}
                     </Text>
                   )}
                 </View>
@@ -466,60 +572,32 @@ export default function ScheduledTripDetailsScreen() {
           </View>
 
           {/* Action Buttons */}
-          {trip.status === "SCHEDULED" && (
-            <TouchableOpacity
-              onPress={() => {
-                router.push({
-                  pathname: "/scheduled-trips",
-                });
-              }}
-              style={{
-                backgroundColor: color.primary,
-                padding: windowHeight(2),
-                borderRadius: 8,
-                alignItems: "center",
-                marginBottom: windowHeight(2),
-              }}
-            >
+          <TouchableOpacity
+            onPress={handleTripAction}
+            disabled={actionState.disabled}
+            activeOpacity={0.8}
+            style={{
+              backgroundColor: actionState.backgroundColor,
+              padding: windowHeight(2),
+              borderRadius: 8,
+              alignItems: "center",
+              marginBottom: windowHeight(2),
+            }}
+          >
+            {actionLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
               <Text
                 style={{
-                  color: "#fff",
+                  color: actionState.textColor,
                   fontSize: fontSizes.FONT18,
                   fontWeight: "600",
                 }}
               >
-                Go to Scheduled Trips
+                {actionLabel}
               </Text>
-            </TouchableOpacity>
-          )}
-
-          {trip.status === "ACTIVE" && (
-            <TouchableOpacity
-              onPress={() => {
-                router.push({
-                  pathname: "/trip-navigation",
-                  params: { tripId: trip.id },
-                });
-              }}
-              style={{
-                backgroundColor: color.primary,
-                padding: windowHeight(2),
-                borderRadius: 8,
-                alignItems: "center",
-                marginBottom: windowHeight(2),
-              }}
-            >
-              <Text
-                style={{
-                  color: "#fff",
-                  fontSize: fontSizes.FONT18,
-                  fontWeight: "600",
-                }}
-              >
-                Continue Trip
-              </Text>
-            </TouchableOpacity>
-          )}
+            )}
+          </TouchableOpacity>
 
           {trip.status === "FORCE_CLOSED" && (
             <View
@@ -541,7 +619,7 @@ export default function ScheduledTripDetailsScreen() {
                   marginBottom: windowHeight(1),
                 }}
               >
-                ⚠️ Trip Force Closed
+                {t("tripForceClosedTitle")}
               </Text>
               <Text
                 style={{
@@ -550,7 +628,7 @@ export default function ScheduledTripDetailsScreen() {
                   textAlign: "center",
                 }}
               >
-                This trip was closed by admin. A financial deduction has been applied to your account.
+                {t("tripForceClosedBody")}
               </Text>
             </View>
           )}

@@ -11,7 +11,7 @@ import { useTheme } from "@react-navigation/native";
 import { windowHeight, fontSizes } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
-import { spacing } from "@/styles/design-system";
+import { kinetic, spacing } from "@/styles/design-system";
 import { Gps, Location } from "@/utils/icons";
 import HomeMap from "./HomeMap";
 import PassengerCard from "@/components/ride/PassengerCard";
@@ -108,21 +108,22 @@ export default React.memo(function RideRequestModal({
           style={[
             styles.modalContainer,
             {
-              backgroundColor: colors.background,
+              backgroundColor: "rgba(255,255,255,0.96)",
               maxHeight: "90%",
             },
           ]}
         >
+          <View style={styles.pullBar} />
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>
-              New Ride Request
+              Incoming Ride Request
             </Text>
             <TouchableOpacity
               onPress={onClose}
-              style={styles.closeButton}
+              style={[styles.closeButton, { backgroundColor: kinetic.colors.surfaceLow }]}
               activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 24, color: colors.text }}>×</Text>
+              <Text style={{ fontSize: 24, color: colors.text, marginTop: -2 }}>×</Text>
             </TouchableOpacity>
           </View>
 
@@ -151,10 +152,12 @@ export default React.memo(function RideRequestModal({
             {/* Location Details */}
             <View
               style={{
-                backgroundColor: colors.card,
-                borderRadius: 12,
+                backgroundColor: kinetic.colors.surfaceLowest,
+                borderRadius: 20,
                 padding: spacing.lg,
                 marginBottom: spacing.lg,
+                borderWidth: 1,
+                borderColor: "rgba(199,196,215,0.2)",
               }}
             >
               <View style={{ flexDirection: "row", marginBottom: spacing.md }}>
@@ -195,8 +198,6 @@ export default React.memo(function RideRequestModal({
                   justifyContent: "space-between",
                   alignItems: "center",
                   paddingTop: spacing.md,
-                  borderTopWidth: 1,
-                  borderTopColor: colors.border,
                 }}
               >
                 <ETADisplay distance={data.estimatedDistance} size="md" />
@@ -257,14 +258,22 @@ export default React.memo(function RideRequestModal({
 const styles = StyleSheet.create({
   modalBackground: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(25, 28, 29, 0.2)",
     justifyContent: "flex-end",
   },
   modalContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
+  },
+  pullBar: {
+    width: 48,
+    height: 6,
+    borderRadius: 999,
+    alignSelf: "center",
+    marginBottom: spacing.md,
+    backgroundColor: "rgba(118,117,134,0.25)",
   },
   modalHeader: {
     flexDirection: "row",
@@ -281,6 +290,7 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 32,
     height: 32,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -307,7 +317,7 @@ const styles = StyleSheet.create({
   },
   border: {
     height: 1,
-    backgroundColor: color.border,
+    backgroundColor: "#E7E8E9",
     marginVertical: spacing.sm,
   },
 });

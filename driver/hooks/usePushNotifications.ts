@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Platform, AppState, AppStateStatus } from "react-native";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
@@ -27,6 +28,7 @@ interface UsePushNotificationsReturn {
 export function usePushNotifications(
   options: UsePushNotificationsOptions = {}
 ): UsePushNotificationsReturn {
+  const { t } = useTranslation("notifications");
   const { driverId, enabled = true } = options;
   const [token, setToken] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
@@ -62,7 +64,7 @@ export function usePushNotifications(
 
       if (!isPhysicalDevice()) {
         logger.warn("Not a physical device - push notifications not available");
-        Toast.show("Must use physical device for Push Notifications", {
+        Toast.show(t("physicalDeviceRequired"), {
           type: "danger",
         });
         isRegisteringToken.current = false;
@@ -85,7 +87,7 @@ export function usePushNotifications(
         logger.error("Notification permissions not granted", {
           status: finalStatus,
         });
-        Toast.show("Failed to get push token for push notification!", {
+        Toast.show(t("pushTokenFailed"), {
           type: "danger",
         });
         setError("Notification permissions not granted");
@@ -106,7 +108,7 @@ export function usePushNotifications(
           expoConfig: Constants?.expoConfig,
           easConfig: Constants?.easConfig,
         });
-        Toast.show("Failed to get project id for push notification!", {
+        Toast.show(t("projectIdFailed"), {
           type: "danger",
         });
         setError("Project ID not found");
@@ -126,7 +128,7 @@ export function usePushNotifications(
 
       if (!pushTokenString) {
         logger.error("Failed to get push token - token is null/undefined");
-        Toast.show("Failed to get push token", {
+        Toast.show(t("getPushTokenFailed"), {
           type: "danger",
         });
         setError("Failed to get push token");
@@ -137,7 +139,7 @@ export function usePushNotifications(
       // Validate token format
       if (!pushTokenString.startsWith("ExponentPushToken[")) {
         logger.error("Invalid push token format", { token: pushTokenString });
-        Toast.show("Invalid push token format", {
+        Toast.show(t("invalidPushToken"), {
           type: "danger",
         });
         setError("Invalid push token format");
@@ -186,7 +188,7 @@ export function usePushNotifications(
                 logger.error(
                   "Failed to save token: No access token after all retries"
                 );
-                Toast.show("Please log in to enable push notifications", {
+                Toast.show(t("loginToEnablePush"), {
                   type: "warning",
                   duration: 3000,
                 });
@@ -230,7 +232,7 @@ export function usePushNotifications(
 
               const isNewToken = lastSavedToken.current !== pushTokenString;
               if (isNewToken) {
-                Toast.show("Push notifications enabled!", {
+                Toast.show(t("pushEnabled"), {
                   type: "success",
                   duration: 2000,
                 });
@@ -262,7 +264,7 @@ export function usePushNotifications(
 
             if (error.response?.status === 401) {
               logger.error("Unauthorized - access token may be invalid");
-              Toast.show("Please log in again to enable notifications", {
+              Toast.show(t("loginAgainNotifications"), {
                 type: "warning",
                 duration: 3000,
               });
@@ -279,7 +281,7 @@ export function usePushNotifications(
                 "Failed to save notification token after all retries"
               );
               Toast.show(
-                "Failed to save notification token. Please check your connection and try again.",
+                t("tokenSaveFailed"),
                 {
                   type: "warning",
                   duration: 5000,
@@ -308,7 +310,7 @@ export function usePushNotifications(
         });
       } else if (isPhysicalDevice()) {
         Toast.show(
-          "Push notifications may not be available. Please rebuild the app.",
+          t("pushUnavailableRebuild"),
           {
             type: "warning",
             duration: 3000,

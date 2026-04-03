@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   View,
   Text,
@@ -27,8 +28,11 @@ const MAX_SLIDE_DISTANCE = SLIDER_WIDTH - THUMB_SIZE - spacing.md * 2;
 export default function EmergencyEndSlider({
   onConfirm,
   disabled = false,
-  disabledMessage = "You have already used the emergency end option today.",
+  disabledMessage,
 }: EmergencyEndSliderProps) {
+  const { t } = useTranslation("trips");
+  const resolvedDisabledMessage =
+    disabledMessage ?? t("emergencyUsedToday");
   const [isSliding, setIsSliding] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -76,11 +80,11 @@ export default function EmergencyEndSlider({
 
   const handleConfirm = async () => {
     Alert.alert(
-      "Emergency End Trip",
-      "Are you sure you want to emergency end this trip? This action cannot be undone and you can only use this option once per day.",
+      t("emergencyConfirmAlertTitle"),
+      t("emergencyConfirmAlertBody"),
       [
         {
-          text: "Cancel",
+          text: t("cancel"),
           style: "cancel",
           onPress: () => {
             Animated.spring(slideAnim, {
@@ -93,7 +97,7 @@ export default function EmergencyEndSlider({
           },
         },
         {
-          text: "Confirm",
+          text: t("confirm"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -141,11 +145,11 @@ export default function EmergencyEndSlider({
   return (
     <View style={styles.container}>
       <View style={styles.warningContainer}>
-        <Text style={styles.warningTitle}>⚠️ Emergency End Trip</Text>
+        <Text style={styles.warningTitle}>{t("emergencySliderWarningTitle")}</Text>
         <Text style={styles.warningText}>
           {disabled
-            ? disabledMessage
-            : "Slide to the right to emergency end this trip. This action can only be used once per day."}
+            ? resolvedDisabledMessage
+            : t("emergencySlideHint")}
         </Text>
       </View>
 
@@ -190,10 +194,10 @@ export default function EmergencyEndSlider({
             ]}
           >
             {disabled
-              ? "Unavailable"
+              ? t("emergencyUnavailable")
               : isProcessing
-              ? "Processing..."
-              : "Slide to End"}
+              ? t("emergencyProcessing")
+              : t("emergencySlideToEnd")}
           </Text>
         </View>
       </View>

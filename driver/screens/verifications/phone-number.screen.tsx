@@ -1,65 +1,30 @@
-import { View, Text, TouchableOpacity } from "react-native";
-import React, { useState, useRef, useEffect } from "react";
-import SignInText from "@/components/login/signin.text";
-import Button from "@/components/common/button";
-import { external } from "@/styles/external.style";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { router, useLocalSearchParams } from "expo-router";
-import { commonStyles } from "@/styles/common.style";
 import color from "@/themes/app.colors";
-import OTPTextInput from "react-native-otp-textinput";
-import { style } from "./style";
-import AuthContainer from "@/utils/container/auth-container";
-import { windowHeight } from "@/themes/app.constant";
+import fonts from "@/themes/app.fonts";
 import axios from "axios";
 import { Toast } from "react-native-toast-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getServerUri } from "@/configs/constants";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthCard from "@/components/auth/AuthCard";
+import { Ionicons } from "@expo/vector-icons";
+import OtpCellRow from "@/components/kinetic/OtpCellRow";
+import KineticPrimaryButton from "@/components/kinetic/KineticPrimaryButton";
 
 export default function PhoneNumberVerificationScreen() {
+  const { t } = useTranslation("auth");
   const driver = useLocalSearchParams();
   const [otp, setOtp] = useState("");
-  const otpRef = useRef(otp);
   const [loader, setLoader] = useState(false);
 
-  // Keep ref in sync with state
-  useEffect(() => {
-    otpRef.current = otp;
-    console.log("PhoneNumberVerificationScreen - otpRef updated to:", otp);
-  }, [otp]);
-
-  // Debug: Track OTP state changes
-  useEffect(() => {
-    console.log("PhoneNumberVerificationScreen - otp state changed to:", otp);
-    console.log(
-      "PhoneNumberVerificationScreen - otp length:",
-      otp?.length || 0
-    );
-    console.log("PhoneNumberVerificationScreen - otp type:", typeof otp);
-  }, [otp]);
-
-  // Debug: Log when component renders
-  useEffect(() => {
-    console.log("PhoneNumberVerificationScreen - Component rendered/mounted");
-    return () => {
-      console.log("PhoneNumberVerificationScreen - Component unmounting");
-    };
-  }, []);
-
   const handleSubmit = async () => {
-    // Debug logging - capture current state
-    console.log("handleSubmit - START");
-    console.log("handleSubmit - otp state:", otp);
-    console.log("handleSubmit - otpRef.current:", otpRef.current);
-    console.log("handleSubmit - otp type:", typeof otp);
-    console.log("handleSubmit - otp length:", otp?.length || 0);
-    console.log("handleSubmit - otp === '':", otp === "");
-
-    // Use ref value if state is empty (fallback)
-    const otpToUse = otp || otpRef.current || "";
+    const otpToUse = otp;
 
     if (otpToUse === "") {
-      console.log("Validation failed - OTP is empty");
-      Toast.show("Please fill the fields!", {
+      Toast.show(t("fillFields"), {
         placement: "bottom",
       });
       return;
@@ -68,11 +33,8 @@ export default function PhoneNumberVerificationScreen() {
     // Trim and clean the OTP to remove any whitespace
     const otpNumbers = otpToUse.trim().replace(/\s+/g, "");
 
-    console.log("handleSubmit - otpNumbers:", otpNumbers);
-    console.log("handleSubmit - otpNumbers length:", otpNumbers?.length || 0);
-
     if (otpNumbers.length !== 4) {
-      Toast.show("Please enter a valid 4-digit OTP!", {
+      Toast.show(t("validOtp"), {
         placement: "bottom",
         type: "danger",
       });
@@ -100,10 +62,8 @@ export default function PhoneNumberVerificationScreen() {
         })
         .catch((error) => {
           setLoader(false);
-          console.error("OTP verification error:", error);
           const errorMessage =
-            error.response?.data?.message ||
-            "Your OTP is incorrect or expired!";
+            error.response?.data?.message || t("otpIncorrect");
           Toast.show(errorMessage, {
             placement: "bottom",
             type: "danger",
@@ -124,10 +84,8 @@ export default function PhoneNumberVerificationScreen() {
         })
         .catch((error) => {
           setLoader(false);
-          console.error("Login OTP verification error:", error);
           const errorMessage =
-            error.response?.data?.message ||
-            "Your OTP is incorrect or expired!";
+            error.response?.data?.message || t("otpIncorrect");
           Toast.show(errorMessage, {
             placement: "bottom",
             type: "danger",
@@ -137,63 +95,73 @@ export default function PhoneNumberVerificationScreen() {
     }
   };
   return (
-    <AuthContainer
-      topSpace={windowHeight(240)}
-      imageShow={true}
-      container={
-        <View>
-          <SignInText
-            title={"Phone Number Verification"}
-            subtitle={"Check your phone number for the otp!"}
-          />
-          <OTPTextInput
-            handleTextChange={(code) => {
-              console.log(
-                "PhoneNumberVerificationScreen - handleTextChange called with:",
-                code
-              );
-              otpRef.current = code;
-              setOtp(code);
-              console.log(
-                "PhoneNumberVerificationScreen - After setOtp, state is:",
-                otp
-              );
-            }}
-            inputCount={4}
-            textInputStyle={style.otpTextInput}
-            tintColor={color.subtitle}
-            autoFocus={false}
-          />
-          <View style={[external.mt_30]}>
-            <Button
-              title="Verify"
-              height={windowHeight(30)}
-              onPress={() => handleSubmit()}
-              disabled={loader}
-            />
-          </View>
-          <View style={[external.mb_15]}>
-            <View
-              style={[
-                external.pt_10,
-                external.Pb_10,
-                {
-                  flexDirection: "row",
-                  gap: 5,
-                  justifyContent: "center",
-                },
-              ]}
-            >
-              <Text style={[commonStyles.regularText]}>Not Received yet?</Text>
-              <TouchableOpacity>
-                <Text style={[style.signUpText, { color: "#000" }]}>
-                  Resend it
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+    <AuthShell>
+      <AuthCard>
+        <View style={styles.headerWrap}>
+          <Text style={styles.title}>{t("verifyPhoneTitle")}</Text>
+          <Text style={styles.subtitle}>
+            {t("verifyPhoneSubtitle", {
+              phone: driver.phone_number || t("yourPhoneFallback"),
+            })}
+          </Text>
         </View>
-      }
-    />
+
+        <OtpCellRow value={otp} onChangeText={setOtp} />
+
+        <View style={styles.verifyButton}>
+          <KineticPrimaryButton
+            title={t("verifyAndContinue")}
+            loading={loader}
+            onPress={handleSubmit}
+            icon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
+          />
+        </View>
+
+        <View style={styles.resendWrap}>
+          <Text style={styles.resendHint}>{t("resendHint")}</Text>
+          <TouchableOpacity>
+            <Text style={styles.resendLink}>{t("resendLink")}</Text>
+          </TouchableOpacity>
+        </View>
+      </AuthCard>
+    </AuthShell>
   );
 }
+
+const styles = StyleSheet.create({
+  headerWrap: {
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 32,
+    fontFamily: fonts.bold,
+    color: "#191C1D",
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#60636E",
+    fontFamily: fonts.regular,
+    lineHeight: 20,
+  },
+  verifyButton: {
+    marginTop: 18,
+  },
+  resendWrap: {
+    marginTop: 18,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  resendHint: {
+    color: "#464554",
+    fontSize: 13,
+    fontFamily: fonts.regular,
+  },
+  resendLink: {
+    color: color.primary,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+});

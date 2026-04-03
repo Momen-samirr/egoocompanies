@@ -1,15 +1,18 @@
 import { useState, useEffect } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { getParentData, removeParentToken, removeParentData } from "@/lib/auth";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthBrandHeader from "@/components/auth/AuthBrandHeader";
+import AuthCard from "@/components/auth/AuthCard";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -55,61 +58,57 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={40} color="#6366f1" />
+    <AuthShell>
+      <AuthBrandHeader title="Parent Profile" subtitle="Manage your account settings" />
+      <AuthCard>
+        <View style={styles.header}>
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={40} color="#494BD6" />
+          </View>
+          <Text style={styles.name}>
+            {parent?.firstName} {parent?.lastName}
+          </Text>
+          <Text style={styles.email}>{parent?.email || parent?.phoneNumber}</Text>
         </View>
-        <Text style={styles.name}>
-          {parent?.firstName} {parent?.lastName}
-        </Text>
-        <Text style={styles.email}>{parent?.email || parent?.phoneNumber}</Text>
-      </View>
 
-      <View style={styles.menu}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="notifications-outline" size={24} color="#374151" />
-          <Text style={styles.menuText}>Notifications</Text>
-          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-        </TouchableOpacity>
+        <View style={styles.menu}>
+          <TouchableOpacity style={styles.menuItem}>
+            <Ionicons name="notifications-outline" size={22} color="#374151" />
+            <Text style={styles.menuText}>Notifications</Text>
+            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="help-circle-outline" size={24} color="#374151" />
-          <Text style={styles.menuText}>Help & Support</Text>
-          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem}>
+            <Ionicons name="help-circle-outline" size={22} color="#374151" />
+            <Text style={styles.menuText}>Help & Support</Text>
+            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={24} color="#ef4444" />
-          <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          <TouchableOpacity style={[styles.menuItem, styles.logoutItem]} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={22} color="#BA1A1A" />
+            <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f9fafb",
-  },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
   header: {
-    backgroundColor: "#fff",
-    padding: 30,
+    paddingVertical: 8,
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#dbeafe",
+    backgroundColor: "#E1E0FF",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 15,
@@ -117,32 +116,33 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#1f2937",
+    color: "#191C1D",
     marginBottom: 5,
   },
   email: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#60636E",
   },
   menu: {
-    marginTop: 20,
-    backgroundColor: "#fff",
+    marginTop: 18,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: "#EFF1F5",
+    marginBottom: 10,
   },
   menuText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: "#374151",
-    marginLeft: 15,
+    marginLeft: 12,
   },
+  logoutItem: { backgroundColor: "#FEE7E7" },
   logoutText: {
-    color: "#ef4444",
+    color: "#BA1A1A",
   },
 });
 

@@ -50,7 +50,7 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full bg-background">
+      <div className="flex h-screen w-full bg-[#f7f9fb]">
         {/* Sidebar - Hidden for COMPANY users */}
         {showSidebar && <AppSidebar />}
 

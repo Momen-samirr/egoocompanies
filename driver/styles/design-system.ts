@@ -58,6 +58,47 @@ export const shadows = {
   },
 };
 
+// Kinetic (Stitch) palette and effects
+export const kinetic = {
+  colors: {
+    primary: "#4648d4",
+    primaryContainer: "#6063ee",
+    onPrimary: "#ffffff",
+    surface: "#f8f9fa",
+    surfaceLow: "#f3f4f5",
+    surfaceLowest: "#ffffff",
+    onSurface: "#191c1d",
+    onSurfaceVariant: "#464554",
+    outlineVariant: "#c7c4d7",
+    success: "#10b981",
+    successLight: "rgba(16, 185, 129, 0.1)",
+    error: "#ba1a1a",
+    errorLight: "#ffdad6",
+  },
+  radius: {
+    lg: 16,
+    xl: 24,
+    xxl: 40,
+    full: 9999,
+  },
+  shadows: {
+    ambient: {
+      shadowColor: "#4648d4",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.06,
+      shadowRadius: 24,
+      elevation: 6,
+    },
+    soft: {
+      shadowColor: "#4648d4",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 14,
+      elevation: 3,
+    },
+  },
+};
+
 // Touch Target Sizes (minimum 44x44pt for accessibility)
 export const touchTargets = {
   min: windowHeight(44),
@@ -137,6 +178,7 @@ export default {
   spacing,
   borderRadius,
   shadows,
+  kinetic,
   touchTargets,
   iconSizes,
   cardPadding,

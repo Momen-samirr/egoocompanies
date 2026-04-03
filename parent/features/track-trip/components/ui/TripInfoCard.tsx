@@ -6,6 +6,8 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Trip, TripPoint } from "../../types";
+import KineticStatsTiles from "@/components/kinetic/KineticStatsTiles";
+import KineticTimeline from "@/components/kinetic/KineticTimeline";
 
 /**
  * Props for TripInfoCard component
@@ -30,6 +32,12 @@ export function TripInfoCard({
 }: TripInfoCardProps) {
   const progressPercentage =
     totalPoints > 0 ? ((currentPointIndex + 1) / totalPoints) * 100 : 0;
+  const timelineItems = trip.points.slice(0, 3).map((point, index) => ({
+    id: point.id,
+    label: point.name,
+    subtitle: index === currentPointIndex ? "Current checkpoint" : undefined,
+    state: index < currentPointIndex ? ("done" as const) : index === currentPointIndex ? ("current" as const) : ("upcoming" as const),
+  }));
 
   return (
     <View style={styles.tripInfoCard}>
@@ -44,17 +52,16 @@ export function TripInfoCard({
 
       {trip.progress && totalPoints > 0 && (
         <View style={styles.progressContainer}>
-          <Text style={styles.progressText}>
-            Stop {currentPointIndex + 1} of {totalPoints}
-          </Text>
+          <KineticStatsTiles
+            leftLabel="Status"
+            leftValue={`Stop ${currentPointIndex + 1}/${totalPoints}`}
+            rightLabel="Estimated ETA"
+            rightValue={`${Math.max(totalPoints - currentPointIndex, 1)} mins`}
+          />
           <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressBarFill,
-                { width: `${progressPercentage}%` },
-              ]}
-            />
+            <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
           </View>
+          <KineticTimeline items={timelineItems} />
         </View>
       )}
 
@@ -72,18 +79,16 @@ export function TripInfoCard({
 
 const styles = StyleSheet.create({
   tripInfoCard: {
-    padding: 15,
-    marginHorizontal: 15,
-    marginBottom: 15,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    padding: 16,
+    marginHorizontal: 14,
+    marginBottom: 16,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 24,
   },
   tripName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1f2937",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#191C1D",
     marginBottom: 8,
   },
   pickupInfo: {
@@ -93,28 +98,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   pickupPoint: {
-    fontSize: 14,
-    color: "#6b7280",
+    fontSize: 13,
+    color: "#60636E",
     marginLeft: 4,
   },
   progressContainer: {
     marginTop: 12,
-  },
-  progressText: {
-    fontSize: 14,
-    color: "#6366f1",
-    fontWeight: "500",
-    marginBottom: 8,
+    gap: 10,
   },
   progressBar: {
     height: 6,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#ECEEF4",
     borderRadius: 3,
     overflow: "hidden",
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#6366f1",
+    backgroundColor: "#494BD6",
     borderRadius: 3,
   },
   infoMessage: {
@@ -122,8 +122,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 12,
     padding: 12,
-    backgroundColor: "#f9fafb",
-    borderRadius: 8,
+    backgroundColor: "#F3F4F5",
+    borderRadius: 12,
   },
   infoText: {
     fontSize: 13,

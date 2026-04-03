@@ -38,6 +38,10 @@ import {
 } from "../utils/send-whatsapp-group";
 import { queueTripStatusChange } from "../utils/whatsapp-report-queue";
 import { calculateDistanceToCheckpoint } from "../utils/route-calculator";
+import {
+  resolveDriverRegistrationVehicleFields,
+  type DriverRegistrationVehicleBody,
+} from "../utils/driver-registration-defaults";
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken, {
@@ -249,32 +253,29 @@ export const verifyPhoneOtpForRegistration = async (
 // sending otp to email
 export const sendingOtpToEmail = async (req: Request, res: Response) => {
   try {
-    const {
-      name,
-      country,
-      phone_number,
-      email,
-      vehicle_type,
-      registration_number,
-      registration_date,
-      driving_license,
-      vehicle_color,
-      rate,
-    } = req.body;
+    const { name, country, phone_number, email } = req.body;
+
+    if (!name || !country || !phone_number || !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, country, phone number, and email are required.",
+      });
+    }
+
+    const phoneNormalized = normalizePhoneNumber(phone_number);
+    const vehicleFields = resolveDriverRegistrationVehicleFields(
+      req.body,
+      phoneNormalized
+    );
 
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
     const driver = {
       name,
       country,
-      phone_number,
+      phone_number: phoneNormalized,
       email,
-      vehicle_type,
-      registration_number,
-      registration_date,
-      driving_license,
-      vehicle_color,
-      rate,
+      ...vehicleFields,
     };
     const token = jwt.sign(
       {
@@ -339,31 +340,26 @@ export const verifyingEmailOtp = async (req: Request, res: Response) => {
       });
     }
 
-    const {
-      name,
-      country,
-      phone_number,
-      email,
-      vehicle_type,
-      registration_number,
-      registration_date,
-      driving_license,
-      vehicle_color,
-      rate,
-    } = newDriver.driver;
+    const raw = newDriver.driver as DriverRegistrationVehicleBody & {
+      name: string;
+      country: string;
+      email: string;
+    };
+    const phoneNormalized = normalizePhoneNumber(
+      String(raw.phone_number || "")
+    );
+    const vehicleFields = resolveDriverRegistrationVehicleFields(
+      raw,
+      phoneNormalized
+    );
 
     const driver = await prisma.driver.create({
       data: {
-        name,
-        country,
-        phone_number,
-        email,
-        vehicle_type,
-        registration_number,
-        registration_date,
-        driving_license,
-        vehicle_color,
-        rate,
+        name: raw.name,
+        country: raw.country,
+        phone_number: phoneNormalized,
+        email: raw.email,
+        ...vehicleFields,
       },
     });
     sendToken(driver, res);

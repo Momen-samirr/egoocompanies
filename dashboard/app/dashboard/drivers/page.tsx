@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { Driver, Pagination } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
-import StatusBadge from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -73,16 +72,30 @@ export default function DriversPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">
-          Drivers Management
-        </h1>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Drivers Management</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            Manage, track, and monitor your active fleet operators in real-time.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">Export List</Button>
+          <Button className="primary-gradient text-white">Onboard New Driver</Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card><CardContent className="p-5"><p className="text-xs uppercase font-bold text-slate-500">Total Fleet</p><p className="text-3xl font-black">{pagination?.total || drivers.length}</p></CardContent></Card>
+        <Card><CardContent className="p-5"><p className="text-xs uppercase font-bold text-slate-500">Online Now</p><p className="text-3xl font-black">{drivers.filter((d) => d.status === "active").length}</p></CardContent></Card>
+        <Card><CardContent className="p-5"><p className="text-xs uppercase font-bold text-slate-500">Avg Rating</p><p className="text-3xl font-black">4.8</p></CardContent></Card>
+        <Card><CardContent className="p-5"><p className="text-xs uppercase font-bold text-slate-500">Pending Renewal</p><p className="text-3xl font-black text-amber-600">{drivers.filter((d) => d.status !== "active").length}</p></CardContent></Card>
       </div>
 
       <Card>
         <CardContent className="p-6">
-          <div className="mb-4 flex gap-4">
+          <div className="mb-4 flex flex-wrap gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -90,7 +103,7 @@ export default function DriversPage() {
                 placeholder="Search by name, email, phone, or registration..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
+                className="pl-10 bg-slate-100 border-none"
               />
             </div>
             <Select
@@ -122,24 +135,27 @@ export default function DriversPage() {
             />
           ) : (
             <>
-              <div className="overflow-x-auto rounded-md border">
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
+                    <TableRow className="bg-slate-50/70">
+                      <TableHead>Driver Detail</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Vehicle Type</TableHead>
+                      <TableHead>Performance</TableHead>
                       <TableHead>Total Rides</TableHead>
-                      <TableHead>Earnings</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {drivers.map((driver) => (
-                      <TableRow key={driver.id}>
+                      <TableRow key={driver.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell className="font-semibold">
-                          {driver.name}
+                          <div className="flex flex-col">
+                            <span className="font-bold">{driver.name}</span>
+                            <span className="text-xs text-muted-foreground">Earnings: ${driver.totalEarning.toFixed(2)}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {driver.phone_number}
@@ -147,10 +163,10 @@ export default function DriversPage() {
                         <TableCell>
                           <Badge variant="outline">{driver.vehicle_type}</Badge>
                         </TableCell>
-                        <TableCell>{driver.totalRides}</TableCell>
                         <TableCell className="font-semibold">
-                          ${driver.totalEarning.toFixed(2)}
+                          4.8 ★
                         </TableCell>
+                        <TableCell>{driver.totalRides}</TableCell>
                         <TableCell>
                           <Select
                             value={driver.status}
@@ -187,7 +203,7 @@ export default function DriversPage() {
 
               {pagination && pagination.pages > 1 && (
                 <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-slate-500">
                     Showing {(page - 1) * pagination.limit + 1} to{" "}
                     {Math.min(page * pagination.limit, pagination.total)} of{" "}
                     {pagination.total} results

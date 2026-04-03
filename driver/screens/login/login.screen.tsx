@@ -1,92 +1,32 @@
-import { View, Text, Image, TouchableOpacity } from "react-native";
-import React, { useState, useEffect, useRef } from "react";
-import AuthContainer from "@/utils/container/auth-container";
-import { windowHeight, windowWidth } from "@/themes/app.constant";
-import styles from "./styles";
-import Images from "@/utils/images";
-import SignInText from "@/components/login/signin.text";
-import { external } from "@/styles/external.style";
-import Button from "@/components/common/button";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
-import PhoneNumberInput from "@/components/login/phone-number.input";
 import { Toast } from "react-native-toast-notifications";
 import axios from "axios";
 import { getServerUri } from "@/configs/constants";
+import { Ionicons } from "@expo/vector-icons";
+import color from "@/themes/app.colors";
+import fonts from "@/themes/app.fonts";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthBrandHeader from "@/components/auth/AuthBrandHeader";
+import AuthCard from "@/components/auth/AuthCard";
+import AuthPhoneField from "@/components/auth/AuthPhoneField";
 
 export default function LoginScreen() {
+  const { t } = useTranslation("auth");
+  const { t: tCommon } = useTranslation("common");
   const [phone_number, setphone_number] = useState("");
-  const phoneNumberRef = useRef(phone_number);
   const [loading, setloading] = useState(false);
   const [countryCode, setCountryCode] = useState("20");
 
-  // Keep ref in sync with state
-  useEffect(() => {
-    phoneNumberRef.current = phone_number;
-    console.log("LoginScreen - phoneNumberRef updated to:", phone_number);
-  }, [phone_number]);
-
-  // Ensure countryCode always has a default value
-  useEffect(() => {
-    if (!countryCode || countryCode === "") {
-      setCountryCode("20");
-    }
-  }, [countryCode]);
-
-  // Debug: Track phone_number changes
-  useEffect(() => {
-    console.log("LoginScreen - phone_number state changed to:", phone_number);
-    console.log(
-      "LoginScreen - phone_number length:",
-      phone_number?.length || 0
-    );
-    console.log("LoginScreen - phone_number type:", typeof phone_number);
-  }, [phone_number]);
-
-  // Debug: Log when component renders
-  useEffect(() => {
-    console.log("LoginScreen - Component rendered/mounted");
-    return () => {
-      console.log("LoginScreen - Component unmounting");
-    };
-  }, []);
-
   const handleSubmit = async () => {
-    // Debug logging - capture current state
-    console.log("handleSubmit - START");
-    console.log("handleSubmit - phone_number state:", phone_number);
-    console.log(
-      "handleSubmit - phoneNumberRef.current:",
-      phoneNumberRef.current
-    );
-    console.log("handleSubmit - phone_number type:", typeof phone_number);
-    console.log(
-      "handleSubmit - phone_number length:",
-      phone_number?.length || 0
-    );
-    console.log("handleSubmit - phone_number === '':", phone_number === "");
-
-    // Use ref value if state is empty (fallback)
-    const phoneNumberToUse = phone_number || phoneNumberRef.current || "";
-
-    // Trim phone number to handle whitespace
-    const trimmedPhoneNumber = phoneNumberToUse.trim();
-
-    console.log("handleSubmit - trimmedPhoneNumber:", trimmedPhoneNumber);
-    console.log(
-      "handleSubmit - trimmedPhoneNumber length:",
-      trimmedPhoneNumber?.length || 0
-    );
-    console.log("handleSubmit - countryCode:", countryCode);
-
-    // Validate that both fields are filled
-    // Use default country code if somehow it got cleared
+    const trimmedPhoneNumber = phone_number.trim();
     const validCountryCode =
       countryCode && countryCode !== "" ? countryCode : "20";
 
-    // More specific validation messages
     if (!trimmedPhoneNumber) {
-      console.log("Validation failed - phone number is empty");
-      Toast.show("Please enter your phone number!", {
+      Toast.show(t("enterPhone"), {
         placement: "bottom",
         type: "danger",
       });
@@ -94,8 +34,7 @@ export default function LoginScreen() {
     }
 
     if (!validCountryCode || validCountryCode === "") {
-      console.log("Validation failed - country code is empty");
-      Toast.show("Please select your country code!", {
+      Toast.show(t("selectCountryCode"), {
         placement: "bottom",
         type: "danger",
       });
@@ -103,17 +42,11 @@ export default function LoginScreen() {
     }
 
     setloading(true);
-    // Remove ALL + signs from countryCode to avoid double plus (++)
     const cleanCountryCode = (validCountryCode || "")
       .toString()
       .replace(/\+/g, "")
       .trim();
-    console.log("Original countryCode:", validCountryCode);
-    console.log("Cleaned countryCode:", cleanCountryCode);
     const phoneNumber = `+${cleanCountryCode}${trimmedPhoneNumber}`;
-    console.log("Final phoneNumber:", phoneNumber);
-    console.log("Sending OTP request to:", `${getServerUri()}/driver/send-otp`);
-    console.log("Phone number:", phoneNumber);
 
     await axios
       .post(
@@ -122,11 +55,10 @@ export default function LoginScreen() {
           phone_number: phoneNumber,
         },
         {
-          timeout: 10000, // 10 second timeout
+          timeout: 10000,
         }
       )
-      .then((res) => {
-        console.log("OTP sent successfully");
+      .then(() => {
         setloading(false);
         const driver = {
           phone_number: phoneNumber,
@@ -138,41 +70,25 @@ export default function LoginScreen() {
       })
       .catch((error) => {
         setloading(false);
-        console.error("Error sending OTP:", error);
-        console.error("Error details:", {
-          message: error.message,
-          code: error.code,
-          response: error.response?.data,
-          status: error.response?.status,
-          serverUri: getServerUri(),
-        });
-
-        // Provide more helpful error messages
-        let errorMessage =
-          "Something went wrong! Please re-check your phone number!";
+        let errorMessage = t("genericPhoneError");
 
         if (
           error.code === "ECONNABORTED" ||
           error.message.includes("timeout")
         ) {
-          errorMessage =
-            "Request timed out. Please check your internet connection and try again.";
+          errorMessage = t("timeoutError");
         } else if (
           error.code === "ERR_NETWORK" ||
           error.message === "Network Error"
         ) {
-          errorMessage =
-            "Cannot connect to server. Please check your internet connection and ensure the server is running.";
+          errorMessage = t("networkError");
         } else if (error.response) {
-          // Server responded with error status
           errorMessage =
             error.response.data?.message ||
             error.response.data?.error ||
-            `Server error: ${error.response.status}`;
+            t("serverError", { status: error.response.status });
         } else if (error.request) {
-          // Request was made but no response received
-          errorMessage =
-            "No response from server. Please check if the server is running and accessible.";
+          errorMessage = t("noResponseError");
         }
 
         Toast.show(errorMessage, {
@@ -184,65 +100,137 @@ export default function LoginScreen() {
   };
 
   return (
-    <AuthContainer
-      topSpace={windowHeight(150)}
-      imageShow={true}
-      container={
-        <View>
-          <View>
-            <View>
-              <Image style={styles.transformLine} source={Images.line} />
-              <SignInText />
-              <View style={[external.mt_25, external.Pb_10]}>
-                <PhoneNumberInput
-                  phone_number={phone_number}
-                  setphone_number={(value) => {
-                    console.log(
-                      "LoginScreen - setphone_number called with:",
-                      value
-                    );
-                    phoneNumberRef.current = value;
-                    setphone_number(value);
-                    console.log(
-                      "LoginScreen - After setphone_number, state is:",
-                      phone_number
-                    );
-                  }}
-                  countryCode={countryCode}
-                  setCountryCode={setCountryCode}
-                />
-                <View style={[external.mt_25, external.Pb_15]}>
-                  <Button
-                    title="Get Otp"
-                    disabled={loading}
-                    height={windowHeight(35)}
-                    onPress={() => handleSubmit()}
-                  />
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "center",
-                    gap: windowWidth(8),
-                    paddingBottom: windowHeight(15),
-                  }}
-                >
-                  <Text style={{ fontSize: windowHeight(12) }}>
-                    Don't have any rider account?
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => router.push("/(routes)/signup")}
-                  >
-                    <Text style={{ color: "blue", fontSize: windowHeight(12) }}>
-                      Sign Up
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
+    <AuthShell>
+      <AuthBrandHeader />
+
+      <AuthCard>
+        <View style={styles.headerWrap}>
+          <Text style={styles.welcomeTitle}>{t("welcomeBack")}</Text>
+          <Text style={styles.welcomeSubtitle}>{t("enterPhoneSubtitle")}</Text>
+        </View>
+
+        <View style={styles.labelWrap}>
+          <Text style={styles.label}>{t("phoneNumber")}</Text>
+          <AuthPhoneField
+            phoneNumber={phone_number}
+            onPhoneNumberChange={setphone_number}
+            countryCode={countryCode}
+            onCountryCodeChange={setCountryCode}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.continueButton, loading && styles.continueButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={loading}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={tCommon("continue")}
+        >
+          {loading ? (
+            <ActivityIndicator color={color.whiteColor} />
+          ) : (
+            <>
+              <Text style={styles.continueText}>{tCommon("continue")}</Text>
+              <Ionicons name="arrow-forward" size={18} color={color.whiteColor} />
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.modePillWrap}>
+          <View style={styles.modePill}>
+            <Text style={styles.modePillText}>{t("driverModeEnabled")}</Text>
           </View>
         </View>
-      }
-    />
+
+        <View style={styles.footerWrap}>
+          <Text style={styles.footerText}>{t("noAccount")}</Text>
+          <TouchableOpacity onPress={() => router.push("/(routes)/signup")}>
+            <Text style={styles.signupText}>{t("signUp")}</Text>
+          </TouchableOpacity>
+        </View>
+      </AuthCard>
+    </AuthShell>
   );
 }
+
+const styles = StyleSheet.create({
+  headerWrap: {
+    marginBottom: 22,
+  },
+  welcomeTitle: {
+    fontFamily: fonts.bold,
+    color: "#191C1D",
+    fontSize: 32,
+    marginBottom: 6,
+  },
+  welcomeSubtitle: {
+    fontFamily: fonts.regular,
+    color: "#60636E",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  labelWrap: {
+    marginBottom: 20,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: "#636670",
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  continueButton: {
+    height: 56,
+    borderRadius: 24,
+    backgroundColor: color.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  continueButtonDisabled: {
+    opacity: 0.7,
+  },
+  continueText: {
+    fontFamily: fonts.bold,
+    color: color.whiteColor,
+    fontSize: 18,
+  },
+  modePillWrap: {
+    alignItems: "center",
+    marginTop: 18,
+  },
+  modePill: {
+    borderRadius: 999,
+    backgroundColor: "#E1E0FF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  modePillText: {
+    fontFamily: fonts.bold,
+    color: "#2F2EBE",
+    fontSize: 10,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  footerWrap: {
+    marginTop: 20,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  footerText: {
+    fontFamily: fonts.regular,
+    color: "#60636E",
+    fontSize: 13,
+  },
+  signupText: {
+    fontFamily: fonts.bold,
+    color: color.primary,
+    fontSize: 13,
+  },
+});

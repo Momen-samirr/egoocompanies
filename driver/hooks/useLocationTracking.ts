@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import * as GeoLocation from "expo-location";
 import { Toast } from "react-native-toast-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -64,6 +65,7 @@ export interface UseLocationTrackingReturn {
 export function useLocationTracking(
   options: UseLocationTrackingOptions
 ): UseLocationTrackingReturn {
+  const { t } = useTranslation("location");
   const {
     isActive,
     onLocationUpdate,
@@ -239,7 +241,7 @@ export function useLocationTracking(
 
       if (!foreground) {
         setError("Location permission denied");
-        Toast.show("Please grant location permission to use this app!", {
+        Toast.show(t("grantPermission"), {
           type: "danger",
         });
         return;
@@ -248,7 +250,7 @@ export function useLocationTracking(
       if (!background) {
         logger.warn("Background location permission not granted");
         Toast.show(
-          "Background location is required for tracking when screen is off. Please enable it in Settings.",
+          t("screenOffBackgroundRequired"),
           {
             type: "warning",
             duration: 5000,
@@ -288,7 +290,7 @@ export function useLocationTracking(
             `Cannot start background location - AppState is ${currentAppState}, not 'active'`
           );
           Toast.show(
-            "Cannot start location tracking from background. Please bring app to foreground.",
+            t("cannotStartFromBackground"),
             {
               type: "danger",
               duration: 5000,
@@ -309,7 +311,7 @@ export function useLocationTracking(
               `Background location task '${BACKGROUND_LOCATION_TASK}' is not registered`
             );
             Toast.show(
-              "Location tracking task not registered. Please restart the app.",
+              t("taskNotRegistered"),
               {
                 type: "danger",
                 duration: 5000,
@@ -361,8 +363,8 @@ export function useLocationTracking(
               // Foreground service configuration for Android
               // Configured for maximum reliability: persistent, high priority, non-dismissible
               foregroundService: {
-                notificationTitle: "Location Tracking Active",
-                notificationBody: "Tracking your location for ride requests",
+                notificationTitle: t("fgNotificationTitle"),
+                notificationBody: t("fgNotificationBody"),
                 notificationColor: "#10B981",
                 notificationChannelId: "location-tracking",
               },
@@ -446,7 +448,7 @@ export function useLocationTracking(
             );
 
             Toast.show(
-              "Failed to start background location tracking. Please check app permissions and try again.",
+              t("backgroundStartFailed"),
               {
                 type: "danger",
                 duration: 5000,
@@ -463,15 +465,13 @@ export function useLocationTracking(
           console.error("❌ [DEBUG] Exception during service startup:", error);
 
           // Provide specific error messages based on error type
-          let errorMessage = "Failed to start background tracking";
+          let errorMessage = t("backgroundStartErrorDefault");
           if (error.message?.includes("permission")) {
-            errorMessage =
-              "Location permission denied. Please enable in settings.";
+            errorMessage = t("backgroundStartErrorPermission");
           } else if (error.message?.includes("background")) {
-            errorMessage = "Background location permission required.";
+            errorMessage = t("backgroundStartErrorBackgroundPerm");
           } else if (error.code === "E_LOCATION_SERVICES_DISABLED") {
-            errorMessage =
-              "Location services are disabled. Please enable in device settings.";
+            errorMessage = t("backgroundStartErrorServicesOff");
           }
 
           Toast.show(errorMessage, {
@@ -484,7 +484,7 @@ export function useLocationTracking(
           "TaskManager not available - background location tracking will not work"
         );
         Toast.show(
-          "Background location tracking unavailable. Please update the app.",
+          t("backgroundUnavailableShort"),
           {
             type: "warning",
             duration: 5000,
@@ -1089,7 +1089,7 @@ export function useLocationTracking(
                       "❌ Failed to restart background service before background transition"
                     );
                     Toast.show(
-                      "Location tracking may not work in background. Please check permissions.",
+                      t("backgroundMaybeBroken"),
                       {
                         type: "warning",
                         duration: 4000,
@@ -1153,7 +1153,7 @@ export function useLocationTracking(
                 logger.info(
                   "Background location stopped while in background - immediately restarting from foreground"
                 );
-                Toast.show("Location tracking was stopped. Restarting...", {
+                Toast.show(t("stoppedRestarting"), {
                   type: "warning",
                   duration: 3000,
                 });
@@ -1346,7 +1346,7 @@ export function useLocationTracking(
                       logger.info(
                         "✅ Background location service restarted successfully"
                       );
-                      Toast.show("Location tracking resumed successfully", {
+                      Toast.show(t("resumed"), {
                         type: "success",
                         duration: 2000,
                       });
@@ -1401,7 +1401,7 @@ export function useLocationTracking(
                     "Failed to restart background location service after multiple attempts"
                   );
                   Toast.show(
-                    "Failed to restart location tracking. Please toggle online/offline status.",
+                    t("restartTrackingFailed"),
                     {
                       type: "danger",
                       duration: 5000,

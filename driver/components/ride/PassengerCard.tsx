@@ -104,8 +104,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     padding: spacing.lg,
-    borderRadius: 12,
+    borderRadius: 18,
     marginBottom: spacing.md,
+    shadowColor: "#494BD6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   profileSection: {
     flexDirection: "row",
@@ -149,7 +154,7 @@ const styles = StyleSheet.create({
   actionButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },

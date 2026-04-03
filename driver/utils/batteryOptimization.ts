@@ -7,6 +7,10 @@ import {
 } from "react-native";
 import { Toast } from "react-native-toast-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { i18n } from "@/lib/i18n/instance";
+
+const tl = (key: string) => i18n.t(key, { ns: "location" });
+const tp = (key: string) => i18n.t(key, { ns: "permissions" });
 
 /**
  * Check if battery optimization is enabled for this app
@@ -37,22 +41,22 @@ export function promptDisableBatteryOptimization(): void {
   }
 
   Alert.alert(
-    "Battery Optimization",
-    "To ensure location updates work when your screen is off, please disable battery optimization for this app. This will allow the app to continue tracking your location in the background.",
+    tl("batteryOptTitle"),
+    tl("batteryOptMessage"),
     [
       {
-        text: "Cancel",
+        text: i18n.t("cancel", { ns: "common" }),
         style: "cancel",
       },
       {
-        text: "Open Settings",
+        text: tp("openSettings"),
         onPress: () => {
           // Open battery optimization settings
           // The exact intent varies by Android version and manufacturer
           try {
             Linking.openSettings();
             Toast.show(
-              "Please find 'Battery' or 'Battery Optimization' and set this app to 'Not optimized'",
+              tl("batteryToastAfterOpen"),
               {
                 type: "info",
                 duration: 5000,
@@ -61,7 +65,7 @@ export function promptDisableBatteryOptimization(): void {
           } catch (error) {
             console.error("Error opening settings:", error);
             Toast.show(
-              "Please go to Settings > Battery > Battery Optimization and disable it for this app",
+              tl("batteryToastManualPath"),
               {
                 type: "info",
                 duration: 5000,
@@ -84,17 +88,12 @@ export function showBatteryOptimizationInstructions(): void {
   }
 
   Alert.alert(
-    "Battery Optimization Instructions",
-    "To ensure location tracking works when your screen is off:\n\n" +
-      "1. Go to Settings > Apps > [This App]\n" +
-      "2. Tap on 'Battery' or 'Power'\n" +
-      "3. Select 'Battery Optimization' or 'Unrestricted'\n" +
-      "4. Find this app and set it to 'Not optimized' or 'Don't optimize'\n\n" +
-      "Note: Steps may vary slightly depending on your device manufacturer.",
+    tl("batteryInstructionsTitle"),
+    tl("batteryInstructionsBody"),
     [
-      { text: "OK" },
+      { text: i18n.t("ok", { ns: "common" }) },
       {
-        text: "Open Settings",
+        text: tp("openSettings"),
         onPress: () => Linking.openSettings(),
       },
     ]

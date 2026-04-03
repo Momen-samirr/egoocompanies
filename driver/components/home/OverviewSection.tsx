@@ -1,10 +1,11 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "@react-navigation/native";
 import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
-import { spacing, shadows } from "@/styles/design-system";
+import { spacing, kinetic } from "@/styles/design-system";
 import { SmartCar, Driving, Calender } from "@/utils/icons";
 import { Info } from "@/assets/icons/info";
 import { router } from "expo-router";
@@ -47,7 +48,7 @@ const StatCard = React.memo(function StatCard({ icon, value, label, color: textC
           backgroundColor: colors.card,
           borderColor: colors.border,
         },
-        onPress && { ...shadows.sm },
+        onPress && { ...kinetic.shadows.soft },
       ]}
       activeOpacity={onPress ? 0.7 : 1}
     >
@@ -78,66 +79,59 @@ interface OverviewSectionProps {
 
 function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
   const { colors } = useTheme();
+  const { t } = useTranslation("home");
   const [stats, setStats] = useState<DriverStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Create AbortController for request cancellation
+  const fetchStats = useCallback(async () => {
+    // Create AbortController for request cancellation on this request
     const abortController = new AbortController();
+    try {
+      setLoading(true);
+      setError(null);
+      const accessToken = await AsyncStorage.getItem("accessToken");
 
-    const fetchStats = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const accessToken = await AsyncStorage.getItem("accessToken");
-        
-        if (!accessToken) {
-          setError("Please login first");
-          return;
-        }
-
-        const response = await axios.get(`${getServerUri()}/driver/stats`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          signal: abortController.signal, // Add signal for cancellation
-        });
-
-        if (response.data.success) {
-          setStats(response.data.stats);
-        } else {
-          setError("Failed to load statistics");
-        }
-      } catch (err: any) {
-        // Don't set error if request was cancelled
-        if (axios.isCancel(err) || err.name === "AbortError") {
-          console.log("Request cancelled");
-          return;
-        }
-        console.error("Error fetching driver stats:", err);
-        setError(err.response?.data?.message || "Failed to load statistics");
-      } finally {
-        // Only update loading state if component is still mounted
-        if (!abortController.signal.aborted) {
-          setLoading(false);
-        }
+      if (!accessToken) {
+        setError(t("loginFirstStats"));
+        return;
       }
-    };
 
-    fetchStats();
+      const response = await axios.get(`${getServerUri()}/driver/stats`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        signal: abortController.signal,
+      });
 
-    // Cleanup: cancel request if component unmounts
-    return () => {
+      if (response.data.success) {
+        setStats(response.data.stats);
+      } else {
+        setError(t("statsLoadFailed"));
+      }
+    } catch (err: any) {
+      if (axios.isCancel(err) || err.name === "AbortError") {
+        return;
+      }
+      console.error("Error fetching driver stats:", err);
+      setError(err.response?.data?.message || t("statsLoadFailed"));
+    } finally {
+      if (!abortController.signal.aborted) {
+        setLoading(false);
+      }
       abortController.abort();
-    };
-  }, [refreshTrigger]);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats, refreshTrigger]);
 
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t("overview")}</Text>
         <View style={styles.cardsContainer}>
           {[1, 2, 3].map((i) => (
             <View key={i} style={styles.statCard}>
@@ -152,7 +146,7 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
   if (error) {
     return (
       <View style={styles.container}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t("overview")}</Text>
         <View
           style={[
             styles.errorContainer,
@@ -169,7 +163,7 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
             onPress={fetchStats}
             style={[styles.retryButton, { backgroundColor: color.semantic.error }]}
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t("retry")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -182,14 +176,14 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>{t("overview")}</Text>
       
       <View style={styles.cardsContainer}>
         {/* Completed Trips Today */}
         <StatCard
           icon={<SmartCar width={24} height={24} />}
           value={stats.completedTripsToday}
-          label="Completed Today"
+          label={t("completedToday")}
           color={color.status.completed}
           backgroundColor={`${color.status.completed}20`}
         />
@@ -198,7 +192,7 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
         <StatCard
           icon={<Calender colors={color.status.scheduled} width={24} height={24} />}
           value={stats.upcomingScheduledTrips}
-          label="Upcoming Trips"
+          label={t("upcomingTrips")}
           color={color.status.scheduled}
           backgroundColor={`${color.status.scheduled}20`}
           onPress={() => router.push("/(routes)/scheduled-trips")}
@@ -213,7 +207,7 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
               </View>
             }
             value={stats.failedTrips}
-            label="Failed Trips"
+            label={t("failedTripsLabel")}
             color={color.semantic.error}
             backgroundColor={`${color.semantic.error}20`}
           />
@@ -253,7 +247,7 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
               </View>
               <View style={styles.activeTripContent}>
                 <Text style={[styles.activeTripLabel, { color: color.status.active }]}>
-                  Active Trip
+                  {t("activeTripLabel")}
                 </Text>
                 <Text
                   style={[styles.activeTripName, { color: colors.text }]}
@@ -269,17 +263,9 @@ function OverviewSection({ refreshTrigger }: OverviewSectionProps = {}) {
       </View>
 
       {/* Total Completed Trips */}
-      <View
-        style={[
-          styles.summaryCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-      >
+      <View style={[styles.summaryCard, { backgroundColor: "#F3F4F5" }]}>
         <Text style={[styles.summaryLabel, { color: color.text.secondary }]}>
-          Total Completed Trips
+          {t("totalCompletedTripsLabel")}
         </Text>
         <Text style={[styles.summaryValue, { color: colors.text }]}>
           {stats.totalCompletedTrips}
@@ -295,7 +281,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   sectionTitle: {
-    fontSize: fontSizes.FONT20,
+    fontSize: fontSizes.FONT22,
     fontFamily: fonts.bold,
     fontWeight: "600",
     marginBottom: spacing.md,
@@ -309,10 +295,10 @@ const styles = StyleSheet.create({
     width: "48%",
     margin: spacing.xs,
     padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
+    ...kinetic.shadows.soft,
   },
   iconContainer: {
     width: 48,
@@ -320,7 +306,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: spacing.md,
+    marginEnd: spacing.md,
   },
   statContent: {
     flex: 1,
@@ -340,8 +326,7 @@ const styles = StyleSheet.create({
     width: "100%",
     margin: spacing.xs,
     padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 2,
+    borderRadius: 24,
   },
   activeTripHeader: {
     flexDirection: "row",
@@ -350,7 +335,7 @@ const styles = StyleSheet.create({
   activeTripIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
     marginRight: spacing.md,
@@ -375,11 +360,11 @@ const styles = StyleSheet.create({
   summaryCard: {
     marginTop: spacing.md,
     padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    ...kinetic.shadows.soft,
   },
   summaryLabel: {
     fontSize: fontSizes.FONT14,
@@ -392,8 +377,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 20,
     alignItems: "center",
   },
   errorText: {

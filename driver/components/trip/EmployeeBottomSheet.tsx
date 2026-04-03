@@ -272,9 +272,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: SHEET_MAX_HEIGHT,
-    backgroundColor: color.background.card,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
     ...shadows.xl,
     zIndex: zIndex.modal,
   },
@@ -292,8 +292,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border,
+    borderBottomWidth: 0,
   },
   headerContent: {
     flexDirection: "row",
@@ -308,8 +307,8 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: `${color.primary}15`,
+    borderRadius: 16,
+    backgroundColor: "#E1E0FF",
     justifyContent: "center",
     alignItems: "center",
     marginRight: spacing.md,
@@ -331,7 +330,7 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: color.lightGray,
@@ -349,7 +348,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     backgroundColor: color.background.secondary,
-    borderRadius: borderRadius.md,
+    borderRadius: 16,
     marginBottom: spacing.md,
   },
   employeeCardWithBorder: {

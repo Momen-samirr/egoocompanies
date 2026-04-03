@@ -83,7 +83,7 @@ export default function ActiveTripsPage() {
     return (
       <div className="space-y-4">
         <div className="flex justify-end">
-          <Button onClick={() => setViewMode("map")} icon={MapIcon}>
+          <Button className="primary-gradient text-white" onClick={() => setViewMode("map")} icon={MapIcon}>
             Map View
           </Button>
         </div>
@@ -124,10 +124,10 @@ export default function ActiveTripsPage() {
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="bg-white shadow-sm border-b p-4">
+      <div className="glass-panel shadow-sm border-b border-slate-200/60 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Active Trips</h1>
+            <h1 className="text-2xl font-black tracking-tight text-gray-900">Active Trips</h1>
             <p className="text-sm text-gray-500">
               {activeTrips.length} active trip(s)
             </p>

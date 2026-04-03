@@ -59,11 +59,11 @@ export function RouteMarker({
         ]}
       >
         {isStudentPoint ? (
-          <Ionicons name="location" size={28} color="#6366f1" />
+          <Ionicons name="location" size={28} color="#494BD6" />
         ) : isStartPoint ? (
           <Ionicons name="play-circle" size={24} color="#10b981" />
         ) : (
-          <Ionicons name="ellipse" size={20} color="#6b7280" />
+          <Ionicons name="ellipse" size={20} color="#60636E" />
         )}
       </View>
     </Marker>
@@ -73,19 +73,18 @@ export function RouteMarker({
 const styles = StyleSheet.create({
   pointMarker: {
     backgroundColor: "#fff",
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 8,
-    borderWidth: 2,
-    borderColor: "#e5e7eb",
-    shadowColor: "#000",
+    borderWidth: 0,
+    shadowColor: "#494BD6",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   studentPointMarker: {
-    borderColor: "#6366f1",
-    borderWidth: 3,
+    borderColor: "#494BD6",
+    borderWidth: 2,
   },
   startPointMarker: {
     borderColor: "#10b981",
@@ -95,8 +94,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   currentPointMarker: {
-    borderColor: "#6366f1",
-    borderWidth: 3,
+    borderColor: "#494BD6",
+    borderWidth: 2,
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 5,

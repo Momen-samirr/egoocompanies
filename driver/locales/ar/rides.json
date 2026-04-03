@@ -1,0 +1,14 @@
+{
+  "rideDetails": "تفاصيل الرحلة",
+  "safeJourney": "لنقم برحلة آمنة!",
+  "wellDone": "أحسنت {{name}}",
+  "updateStatusFailed": "فشل تحديث حالة الرحلة",
+  "locationUnavailable": "بيانات الموقع غير متوفرة",
+  "youHaveArrived": "لقد وصلت!",
+  "activeRide": "رحلة نشطة",
+  "completed": "مكتملة",
+  "cancelled": "ملغاة",
+  "proximityToast": "لقد وصلت إلى {{place}}! يرجى الضغط على \"{{action}}\".",
+  "pickUpPassenger": "استلام الراكب",
+  "completeRide": "إكمال الرحلة"
+}

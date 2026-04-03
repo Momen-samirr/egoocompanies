@@ -6,8 +6,14 @@ import { ToastProvider } from "react-native-toast-notifications";
 import { LogBox } from "react-native";
 import { useFonts } from "expo-font";
 import { DriverProvider } from "@/contexts/DriverContext";
+import { TripActivationProvider } from "@/contexts/TripActivationContext";
+import { I18nActionsProvider } from "@/contexts/I18nActionsContext";
 import OfflineIndicator from "@/components/common/OfflineIndicator";
 import { logger } from "@/lib/logger";
+import { initI18n } from "@/lib/i18n/instance";
+import { getStoredLanguage } from "@/lib/i18n/storage";
+import { syncLayoutDirectionForLanguage } from "@/lib/i18n/rtl";
+import type { AppLanguage } from "@/lib/i18n/constants";
 // Import background location task immediately to ensure it registers at module load time
 // This is required by Expo TaskManager
 import "@/services/backgroundLocationTask";
@@ -75,15 +81,37 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     "TT-Octosquares-Medium": require("../assets/fonts/TT-Octosquares-Medium.ttf"),
   });
+  const [i18nReady, setI18nReady] = useState(false);
 
   useEffect(() => {
     LogBox.ignoreAllLogs(true);
-    if (loaded || error) {
-      SplashScreen.hideAsync();
+  }, []);
+
+  useEffect(() => {
+    if (!loaded && !error) {
+      return;
     }
+    let cancelled = false;
+    (async () => {
+      const stored = await getStoredLanguage();
+      const lng: AppLanguage = stored === "ar" ? "ar" : "en";
+      await initI18n(lng);
+      syncLayoutDirectionForLanguage(lng);
+      if (!cancelled) {
+        setI18nReady(true);
+        await SplashScreen.hideAsync();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [loaded, error]);
 
   if (!loaded && !error) {
+    return null;
+  }
+
+  if (!i18nReady) {
     return null;
   }
 
@@ -92,13 +120,16 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   return (
-    <DriverProvider>
-      <ToastProvider>
-        <OfflineIndicator />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-        </Stack>
-      </ToastProvider>
-    </DriverProvider>
+    <I18nActionsProvider>
+      <DriverProvider>
+        <TripActivationProvider>
+          <ToastProvider>
+            <OfflineIndicator />
+            {/* Omit explicit Stack.Screen list so all file-based routes (e.g. (routes)/*) are registered */}
+            <Stack screenOptions={{ headerShown: false }} />
+          </ToastProvider>
+        </TripActivationProvider>
+      </DriverProvider>
+    </I18nActionsProvider>
   );
 }

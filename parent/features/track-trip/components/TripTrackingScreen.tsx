@@ -28,6 +28,7 @@ import { ConnectionStatus } from "./ui/ConnectionStatus";
 import { ETACard } from "./ui/ETACard";
 import { DriverInfo } from "./ui/DriverInfo";
 import { TripInfoCard } from "./ui/TripInfoCard";
+import MapControlStack from "@/components/kinetic/MapControlStack";
 
 /**
  * Props for TripTrackingScreen component
@@ -167,7 +168,7 @@ export function TripTrackingScreen({
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366f1" />
+        <ActivityIndicator size="large" color="#494BD6" />
       </View>
     );
   }
@@ -234,6 +235,15 @@ export function TripTrackingScreen({
         </MapViewContainer>
       )}
 
+      <View style={styles.livePill}>
+        <View style={styles.liveDot} />
+        <Text style={styles.liveText}>Live</Text>
+        <View style={styles.liveDivider} />
+        <Text style={styles.liveMeta}>Last update: just now</Text>
+      </View>
+
+      <MapControlStack />
+
       {/* Bottom Sheet */}
       <View style={styles.bottomSheet}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -274,6 +284,7 @@ export function TripTrackingScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#F8F9FA",
   },
   centerContainer: {
     flex: 1,
@@ -286,15 +297,52 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "50%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    maxHeight: "54%",
+    shadowColor: "#4648d4",
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
     elevation: 5,
+    paddingTop: 10,
+  },
+  livePill: {
+    position: "absolute",
+    top: 90,
+    alignSelf: "center",
+    zIndex: 20,
+    backgroundColor: "rgba(255,255,255,0.88)",
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+    backgroundColor: "#10b981",
+    marginRight: 6,
+  },
+  liveText: {
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#191C1D",
+  },
+  liveDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: "rgba(199,196,215,0.6)",
+    marginHorizontal: 8,
+  },
+  liveMeta: {
+    color: "#60636E",
+    fontSize: 11,
   },
   errorText: {
     fontSize: 18,
@@ -303,9 +351,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   button: {
-    backgroundColor: "#6366f1",
+    backgroundColor: "#494BD6",
     padding: 15,
-    borderRadius: 8,
+    borderRadius: 16,
     minWidth: 120,
     alignItems: "center",
   },

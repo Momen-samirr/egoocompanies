@@ -179,6 +179,16 @@ body {
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
 }
 
+.primary-gradient {
+  background: linear-gradient(135deg, #4648d4 0%, #6063ee 100%);
+}
+
+.glass-panel {
+  background: rgba(247, 249, 251, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
 /* Custom scrollbar for sidebar */
 .sidebar-scroll::-webkit-scrollbar {
   width: 6px;

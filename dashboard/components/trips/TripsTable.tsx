@@ -10,12 +10,10 @@ import TripsTableRow from "./TripsTableRow";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 
 interface SortIndicatorProps {
   field: string;
@@ -85,10 +83,10 @@ export default function TripsTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-xl border border-slate-100">
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow className="bg-slate-50/70">
             <TableHead className="w-12">
               <input
                 type="checkbox"

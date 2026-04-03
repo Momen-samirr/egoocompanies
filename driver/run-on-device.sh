@@ -3,7 +3,7 @@
 # Script to run driver app on specific device (aed407cf)
 # Usage: ./run-on-device.sh
 
-DEVICE_ID="aed407cf"
+DEVICE_ID="ede976ad"
 APP_PACKAGE="com.becodemy.ridewavedriver"
 
 echo "🚗 Running Driver App (Ridewave-Driver) on device: $DEVICE_ID"

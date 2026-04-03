@@ -48,14 +48,14 @@ export default function NotificationItem({
   return (
     <div
       onClick={onClick}
-      className={`p-4 border-b border-gray-200 cursor-pointer transition-colors hover:bg-gray-50 ${
-        isUnread ? "bg-blue-50 border-l-4 border-l-blue-500" : ""
+      className={`p-5 rounded-xl cursor-pointer transition-colors hover:bg-slate-100 ${
+        isUnread ? "bg-indigo-50" : "bg-white"
       }`}
     >
       <div className="flex items-start gap-3">
         <div
-          className={`flex-shrink-0 mt-1 ${
-            isUnread ? "text-blue-600" : "text-gray-400"
+          className={`shrink-0 mt-1 ${
+            isUnread ? "text-indigo-600" : "text-gray-400"
           }`}
         >
           <DocumentIcon className="h-5 w-5" />
@@ -63,13 +63,13 @@ export default function NotificationItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">{driverName}</p>
+              <p className="text-sm font-bold text-gray-900">{driverName}</p>
               <p className="text-sm text-gray-600 mt-1">
                 {actionLabel} {documentTypeLabel}
               </p>
             </div>
             {isUnread && (
-              <span className="flex-shrink-0 h-2 w-2 rounded-full bg-blue-500 mt-2" />
+              <span className="shrink-0 h-2 w-2 rounded-full bg-indigo-500 mt-2" />
             )}
           </div>
           <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">

@@ -6,6 +6,12 @@ import { renderHook, waitFor } from "@testing-library/react-native";
 import { useLocationTracking } from "@/hooks/useLocationTracking";
 import * as Location from "expo-location";
 
+jest.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+}));
+
 // Mock expo-location
 jest.mock("expo-location", () => ({
   requestForegroundPermissionsAsync: jest.fn(),

@@ -1,0 +1,14 @@
+{
+  "rideDetails": "Ride Details",
+  "safeJourney": "Let's have a safe journey!",
+  "wellDone": "Well done {{name}}",
+  "updateStatusFailed": "Failed to update ride status",
+  "locationUnavailable": "Location data not available",
+  "youHaveArrived": "You have arrived!",
+  "activeRide": "Active ride",
+  "completed": "Completed",
+  "cancelled": "Cancelled",
+  "proximityToast": "You've reached {{place}}! Please press \"{{action}}\".",
+  "pickUpPassenger": "Pick Up Passenger",
+  "completeRide": "Complete Ride"
+}

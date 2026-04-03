@@ -1,5 +1,9 @@
 import * as Location from "expo-location";
 import { Platform, Alert, Linking } from "react-native";
+import { i18n } from "@/lib/i18n/instance";
+
+const tl = (key: string) => i18n.t(key, { ns: "location" });
+const tp = (key: string) => i18n.t(key, { ns: "permissions" });
 
 /**
  * Request foreground location permissions
@@ -37,9 +41,9 @@ export async function requestBackgroundLocationPermission(): Promise<boolean> {
         const foregroundGranted = await requestForegroundLocationPermission();
         if (!foregroundGranted) {
           Alert.alert(
-            "Location Permission Required",
-            "Please grant location permission to use this app.",
-            [{ text: "OK" }]
+            tl("permissionForegroundTitle"),
+            tl("permissionForegroundBody"),
+            [{ text: i18n.t("ok", { ns: "common" }) }]
           );
           return false;
         }
@@ -54,12 +58,12 @@ export async function requestBackgroundLocationPermission(): Promise<boolean> {
       } else {
         console.warn("⚠️ Background location permission denied:", status);
         Alert.alert(
-          "Background Location Required",
-          "This app needs background location access to track your location when the screen is off. Please enable it in Settings.",
+          tl("permissionBackgroundTitle"),
+          tl("permissionBackgroundBody"),
           [
-            { text: "Cancel", style: "cancel" },
+            { text: i18n.t("cancel", { ns: "common" }), style: "cancel" },
             {
-              text: "Open Settings",
+              text: tp("openSettings"),
               onPress: () => Linking.openSettings(),
             },
           ]

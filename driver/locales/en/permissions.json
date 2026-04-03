@@ -1,0 +1,7 @@
+{
+  "batteryTitle": "Battery optimization",
+  "batteryBody": "Disable battery optimization for reliable background location.",
+  "locationTitle": "Location required",
+  "locationBody": "Location permission is needed for navigation and rides.",
+  "openSettings": "Open Settings"
+}

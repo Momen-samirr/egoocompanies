@@ -827,14 +827,14 @@ export default function MapPage() {
       style={{ marginTop: 0, paddingTop: 0 }}
     >
       {/* Controls */}
-      <div className="bg-white shadow-sm border-b p-4">
+      <div className="glass-panel shadow-sm border-b border-slate-200/60 p-4">
         <div className="flex flex-wrap items-center gap-4">
           {/* Logout button for company users */}
           {mounted && isCompany && (
             <div className="flex items-center gap-2 ml-auto">
               <button
                 onClick={logout}
-                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
                 title="Logout"
               >
                 <ArrowRightOnRectangleIcon className="h-4 w-4" />
@@ -847,7 +847,7 @@ export default function MapPage() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+              className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-sm"
             >
               <option value="all">All</option>
               <option value="active">Active</option>
@@ -860,7 +860,7 @@ export default function MapPage() {
             <select
               value={filterVehicleType}
               onChange={(e) => setFilterVehicleType(e.target.value)}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+              className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-sm"
             >
               <option value="all">All</option>
               <option value="Car">Car</option>
@@ -889,7 +889,7 @@ export default function MapPage() {
                 isConnected ? "bg-green-500" : "bg-red-500"
               }`}
             />
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-600 font-medium">
               {isConnected ? "Connected" : "Disconnected"}
             </span>
           </div>
@@ -908,14 +908,14 @@ export default function MapPage() {
           <div className="flex gap-2">
             <button
               onClick={centerOnUserLocation}
-              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
               title="Center on your location"
             >
               📍 My Location
             </button>
             <button
               onClick={fitAllDrivers}
-              className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+              className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
               title="Fit all drivers in view"
             >
               🗺️ Fit Drivers
@@ -928,7 +928,7 @@ export default function MapPage() {
                 // Force a re-render by updating state
                 setDrivers({ ...drivers });
               }}
-              className="px-3 py-1 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700"
+              className="px-3 py-1 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700"
               title="Refresh driver data"
             >
               🔄 Refresh

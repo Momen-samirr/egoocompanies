@@ -12,7 +12,7 @@ import { animateCameraToDriver } from "@/utils/mapCamera";
 import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
-import { spacing, shadows } from "@/styles/design-system";
+import { kinetic, spacing } from "@/styles/design-system";
 import Constants from "expo-constants";
 
 interface NavigationScreenProps {
@@ -175,11 +175,20 @@ export default function NavigationScreen({
       )}
 
       {/* Top Bar - Mode and Close Button */}
-      <View style={[styles.topBar, { backgroundColor: colors.card }, shadows.md]}>
+      <View
+        style={[
+          styles.topBar,
+          { backgroundColor: "rgba(248,249,250,0.92)" },
+          kinetic.shadows.soft,
+        ]}
+      >
         <View style={styles.topBarContent}>
           <View style={styles.modeContainer}>
+            <Text style={[styles.brandText]}>
+              Transport Hub
+            </Text>
             <Text style={[styles.modeText, { color: colors.text }]}>
-              {mode === "pickup" ? "📍 To Pickup" : "🎯 To Destination"}
+              {mode === "pickup" ? "To Pickup" : "To Destination"}
             </Text>
           </View>
           {onClose && (
@@ -194,7 +203,13 @@ export default function NavigationScreen({
       </View>
 
       {/* Bottom Bar - ETA and Distance */}
-      <View style={[styles.bottomBar, { backgroundColor: colors.card }, shadows.lg]}>
+      <View
+        style={[
+          styles.bottomBar,
+          { backgroundColor: "rgba(255,255,255,0.92)" },
+          kinetic.shadows.ambient,
+        ]}
+      >
         <View style={styles.bottomBarContent}>
           <View style={styles.etaContainer}>
             <Text style={[styles.etaLabel, { color: color.text.secondary }]}>
@@ -264,7 +279,7 @@ export default function NavigationScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: color.background.primary,
+    backgroundColor: kinetic.colors.surface,
   },
   map: {
     flex: 1,
@@ -274,7 +289,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.xl + 12,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.md,
     zIndex: 1000,
@@ -286,6 +301,14 @@ const styles = StyleSheet.create({
   },
   modeContainer: {
     flex: 1,
+  },
+  brandText: {
+    fontSize: fontSizes.FONT12,
+    fontFamily: fonts.bold,
+    color: kinetic.colors.primary,
+    marginBottom: 2,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   modeText: {
     fontSize: fontSizes.FONT18,
@@ -310,8 +333,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.md,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
     zIndex: 1000,
   },
   bottomBarContent: {
@@ -334,10 +357,12 @@ const styles = StyleSheet.create({
   actionButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    ...shadows.sm,
+    borderWidth: 1,
+    borderColor: "rgba(199,196,215,0.35)",
+    ...kinetic.shadows.soft,
   },
   actionButtonIcon: {
     fontSize: 20,

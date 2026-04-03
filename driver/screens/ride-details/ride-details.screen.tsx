@@ -14,6 +14,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { router, useLocalSearchParams } from "expo-router";
 import { fontSizes, windowHeight, windowWidth } from "@/themes/app.constant";
 import MapView, { Marker } from "react-native-maps";
@@ -46,6 +47,7 @@ import { calculateDistance } from "@/utils/haversine";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 
 export default function RideDetailsScreen() {
+  const { t } = useTranslation("rides");
   const { colors } = useTheme();
   const { driver } = useGetDriverData();
   const { orderData: orderDataObj } = useLocalSearchParams() as any;
@@ -277,10 +279,10 @@ export default function RideDetailsScreen() {
                 hasShownProximityNotification.current = notificationKey;
                 const actionText =
                   orderStatus === "Processing"
-                    ? "Pick Up Passenger"
-                    : "Complete Ride";
+                    ? t("pickUpPassenger")
+                    : t("completeRide");
                 Toast.show(
-                  `You've reached ${targetName}! Please press "${actionText}".`,
+                  t("proximityToast", { place: targetName, action: actionText }),
                   {
                     type: "success",
                     duration: 5000,
@@ -309,7 +311,7 @@ export default function RideDetailsScreen() {
         locationWatchSubscription.current = null;
       }
     };
-  }, [orderStatus, orderData?.marker, orderData?.currentLocation]);
+  }, [orderStatus, orderData?.marker, orderData?.currentLocation, t]);
 
   // Update bearing to destination whenever current location changes
   useEffect(() => {
@@ -372,17 +374,17 @@ export default function RideDetailsScreen() {
           setorderStatus(res.data.updatedRide.status);
           // Reset proximity notification flag when status changes from Processing to Ongoing
           hasShownProximityNotification.current = null;
-          Toast.show("Let's have a safe journey!", {
+          Toast.show(t("safeJourney"), {
             type: "success",
           });
         } else {
-          Toast.show(`Well done ${orderData.driver.name}`);
+          Toast.show(t("wellDone", { name: orderData.driver.name }));
           router.push("/(tabs)/home");
         }
       })
       .catch((error) => {
         console.log(error);
-        Toast.show("Failed to update ride status", { type: "danger" });
+        Toast.show(t("updateStatusFailed"), { type: "danger" });
       });
   };
 
@@ -414,7 +416,7 @@ export default function RideDetailsScreen() {
 
   const startNavigation = () => {
     if (!currentLocation || !orderData?.marker) {
-      Toast.show("Location data not available", { type: "warning" });
+      Toast.show(t("locationUnavailable"), { type: "warning" });
       return;
     }
 
@@ -430,7 +432,7 @@ export default function RideDetailsScreen() {
   };
 
   const handleNavigationArrival = () => {
-    Toast.show("You have arrived!", { type: "success" });
+    Toast.show(t("youHaveArrived"), { type: "success" });
     // Optionally auto-advance to next step
     if (orderStatus === "Processing") {
       // Auto-start trip when arriving at pickup

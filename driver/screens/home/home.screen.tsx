@@ -22,11 +22,10 @@ import Header from "@/components/common/header";
 import { useTheme } from "@react-navigation/native";
 import { external } from "@/styles/external.style";
 import styles from "./styles";
-import RideCard from "@/components/ride/ride.card";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
-import { Gps, Location, Calender } from "@/utils/icons";
+import { Gps, Location, Calender, Wallet, FillClock, SmartCar } from "@/utils/icons";
 import color from "@/themes/app.colors";
 import Button from "@/components/common/button";
 import axios from "axios";
@@ -45,7 +44,6 @@ import PassengerCard from "@/components/ride/PassengerCard";
 import ETADisplay from "@/components/common/ETADisplay";
 import { spacing, shadows, borderRadius } from "@/styles/design-system";
 import fonts from "@/themes/app.fonts";
-import OverviewSection from "@/components/home/OverviewSection";
 import DriverStatusCard from "@/components/home/DriverStatusCard";
 import { runMapDiagnostics, logMapDiagnostics } from "@/utils/mapDiagnostics";
 import {
@@ -63,6 +61,8 @@ import {
   BACKGROUND_LOCATION_TASK,
 } from "@/services/backgroundLocationTask";
 import { useLocationTracking } from "@/hooks/useLocationTracking";
+import { useHomeDashboardData } from "@/hooks/useHomeDashboardData";
+import { useTranslation } from "react-i18next";
 // Conditionally import TaskManager to avoid errors if native module isn't ready
 let TaskManager: any = null;
 try {
@@ -72,6 +72,9 @@ try {
 }
 
 export default function HomeScreen() {
+  const { t } = useTranslation("home");
+  const { t: tn } = useTranslation("notifications");
+  const { t: tc } = useTranslation("common");
   const notificationListener = useRef<any>();
   const { driver, loading: DriverDataLoading } = useGetDriverData();
   const [userData, setUserData] = useState<any>(null);
@@ -92,9 +95,6 @@ export default function HomeScreen() {
   const [marker, setMarker] = useState<any>(null);
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [lastLocation, setLastLocation] = useState<any>(null);
-  const [recentRides, setrecentRides] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const ws = useRef<WebSocket | null>(null);
   const isOnRef = useRef<any>(undefined); // Track isOn in ref so callbacks always have latest value
   const processedNotificationIds = useRef<Set<string>>(new Set()); // Track processed notification IDs to prevent duplicates
@@ -116,6 +116,13 @@ export default function HomeScreen() {
   const [mapLoading, setMapLoading] = useState(true);
 
   const { colors } = useTheme();
+  const {
+    loading: dashboardLoading,
+    refreshing: dashboardRefreshing,
+    data: dashboardData,
+    refreshDashboardData,
+    revalidateDashboardData,
+  } = useHomeDashboardData();
 
   // Safe wrapper to check if device is physical (without using expo-device to avoid UserHandle error)
   // The expo-device module causes a UserHandle serialization error on subsequent app launches
@@ -137,13 +144,8 @@ export default function HomeScreen() {
   };
 
   const onRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    // Trigger refresh in OverviewSection
-    setRefreshTrigger((prev) => prev + 1);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  }, []);
+    refreshDashboardData();
+  }, [refreshDashboardData]);
 
   // CRITICAL: Set up notification handler BEFORE listeners
   // This handler determines how notifications are displayed when app is in foreground
@@ -277,10 +279,13 @@ export default function HomeScreen() {
       // Check if this is a trip activation notification
       if (orderData && orderData.type === "tripActivation") {
         console.log("📬 Trip activation notification received:", orderData);
-        Toast.show(`Trip "${orderData.tripName}" is now available to start!`, {
-          type: "success",
-          duration: 5000,
-        });
+        Toast.show(
+          tn("tripNowAvailable", { tripName: orderData.tripName }),
+          {
+            type: "success",
+            duration: 5000,
+          }
+        );
         // Navigate to scheduled trips screen
         setTimeout(() => {
           router.push("/(routes)/scheduled-trips");
@@ -291,7 +296,7 @@ export default function HomeScreen() {
       // Validate required fields
       if (!orderData) {
         console.error("❌ No orderData found in notification");
-        Toast.show("Invalid notification format", {
+        Toast.show(tn("invalidFormat"), {
           type: "danger",
         });
         return;
@@ -304,12 +309,9 @@ export default function HomeScreen() {
           hasMarker: !!orderData.marker,
           hasUser: !!orderData.user,
         });
-        Toast.show(
-          "Invalid ride request data - missing location or user info",
-          {
-            type: "danger",
-          }
-        );
+        Toast.show(tn("invalidRideData"), {
+          type: "danger",
+        });
         return;
       }
 
@@ -345,13 +347,13 @@ export default function HomeScreen() {
       setcurrentLocationName(
         orderData.currentLocationName ||
           orderData.currentLocation?.name ||
-          "Pickup Location"
+          tc("pickupLocation")
       );
       setdestinationLocationName(
         orderData.destinationLocation ||
           orderData.destinationLocationName ||
           orderData.marker?.name ||
-          "Destination"
+          tc("destination")
       );
       setUserData(orderData.user);
 
@@ -391,7 +393,7 @@ export default function HomeScreen() {
         "Raw notification data:",
         JSON.stringify(notificationData, null, 2)
       );
-      Toast.show(`Error processing ride request: ${error.message}`, {
+      Toast.show(tn("errorProcessingRide", { message: error.message }), {
         type: "danger",
         duration: 5000,
       });
@@ -415,13 +417,10 @@ export default function HomeScreen() {
         );
         if (!permissions.granted) {
           console.error("❌ Notification permissions not granted!");
-          Toast.show(
-            "Notification permissions not granted. Please enable notifications in settings.",
-            {
-              type: "danger",
-              duration: 5000,
-            }
-          );
+          Toast.show(tn("permissionsNotGranted"), {
+            type: "danger",
+            duration: 5000,
+          });
         } else {
           console.log("✅ Notification permissions granted");
         }
@@ -465,7 +464,7 @@ export default function HomeScreen() {
         }
 
         // Show toast immediately to confirm notification was received
-        Toast.show("📱 New ride request received!", {
+        Toast.show(tn("newRideRequest"), {
           type: "success",
           duration: 3000,
         });
@@ -496,7 +495,7 @@ export default function HomeScreen() {
               "❌ Full notification content:",
               JSON.stringify(notification.request.content, null, 2)
             );
-            Toast.show("Notification received but no data found", {
+            Toast.show(tn("noDataFound"), {
               type: "warning",
               duration: 3000,
             });
@@ -514,7 +513,7 @@ export default function HomeScreen() {
           console.error("❌ Error message:", error.message);
           console.error("❌ Error stack:", error.stack);
           console.error("❌ Error details:", JSON.stringify(error, null, 2));
-          Toast.show(`Error: ${error.message}`, {
+          Toast.show(tn("errorGeneric", { message: error.message }), {
             type: "danger",
             duration: 5000,
           });
@@ -546,7 +545,7 @@ export default function HomeScreen() {
         }
 
         // Show a toast to indicate notification was tapped
-        Toast.show("👆 Notification tapped - opening app...", {
+        Toast.show(tn("tappedOpening"), {
           type: "info",
           duration: 3000,
         });
@@ -594,13 +593,10 @@ export default function HomeScreen() {
                   "❌ Could not extract notification data:",
                   fallbackError
                 );
-                Toast.show(
-                  "Notification received but could not process data. Please check manually.",
-                  {
-                    type: "warning",
-                    duration: 5000,
-                  }
-                );
+                Toast.show(tn("processManual"), {
+                  type: "warning",
+                  duration: 5000,
+                });
                 return;
               }
             } else {
@@ -610,7 +606,7 @@ export default function HomeScreen() {
 
           if (!data) {
             console.error("❌ No data found in tapped notification");
-            Toast.show("Notification tapped but no data found", {
+            Toast.show(tn("tappedNoData"), {
               type: "warning",
               duration: 3000,
             });
@@ -636,13 +632,10 @@ export default function HomeScreen() {
             !errorMessage.includes("Could not put") &&
             !errorMessage.includes("WritableMap")
           ) {
-            Toast.show(
-              `Error processing tapped notification: ${errorMessage}`,
-              {
-                type: "danger",
-                duration: 5000,
-              }
-            );
+            Toast.show(tn("errorTapped", { message: errorMessage }), {
+              type: "danger",
+              duration: 5000,
+            });
           }
         }
       });
@@ -677,7 +670,7 @@ export default function HomeScreen() {
             }
 
             // Show a toast to indicate app was opened from notification
-            Toast.show("🚀 App opened from notification", {
+            Toast.show(tn("openedFromNotification"), {
               type: "info",
               duration: 3000,
             });
@@ -728,13 +721,10 @@ export default function HomeScreen() {
                       "❌ Could not extract notification data:",
                       fallbackError
                     );
-                    Toast.show(
-                      "Notification received but could not process data. Please check manually.",
-                      {
-                        type: "warning",
-                        duration: 5000,
-                      }
-                    );
+                    Toast.show(tn("processManual"), {
+                      type: "warning",
+                      duration: 5000,
+                    });
                     return;
                   }
                 } else {
@@ -753,7 +743,7 @@ export default function HomeScreen() {
                 }, 1000);
               } else {
                 console.error("❌ No data found in last notification");
-                Toast.show("Notification found but no data available", {
+                Toast.show(tn("foundNoData"), {
                   type: "warning",
                   duration: 3000,
                 });
@@ -769,13 +759,10 @@ export default function HomeScreen() {
                 !errorMessage.includes("Could not put") &&
                 !errorMessage.includes("WritableMap")
               ) {
-                Toast.show(
-                  `Error processing last notification: ${errorMessage}`,
-                  {
-                    type: "danger",
-                    duration: 5000,
-                  }
-                );
+                Toast.show(tn("errorLast", { message: errorMessage }), {
+                  type: "danger",
+                  duration: 5000,
+                });
               }
             }
           } else {
@@ -899,13 +886,10 @@ export default function HomeScreen() {
             console.warn(
               "⚠️ App in background but background location permission not granted"
             );
-            Toast.show(
-              "Background location permission required for tracking when screen is off",
-              {
-                type: "warning",
-                duration: 3000,
-              }
-            );
+            Toast.show(tn("backgroundPermissionShort"), {
+              type: "warning",
+              duration: 3000,
+            });
           } else if (hasBackground && isOnRef.current === true) {
             console.log(
               "✅ Background location permission granted - tracking will continue managed by useLocationTracking hook"
@@ -1046,7 +1030,7 @@ export default function HomeScreen() {
         console.warn(
           "⚠️ Not a physical device - push notifications not available"
         );
-        Toast.show("Must use physical device for Push Notifications", {
+        Toast.show(tn("physicalDeviceRequired"), {
           type: "danger",
         });
         isRegisteringToken.current = false;
@@ -1067,7 +1051,7 @@ export default function HomeScreen() {
 
       if (finalStatus !== "granted") {
         console.error("❌ Notification permissions not granted:", finalStatus);
-        Toast.show("Failed to get push token for push notification!", {
+        Toast.show(tn("pushTokenFailed"), {
           type: "danger",
         });
         isRegisteringToken.current = false;
@@ -1086,7 +1070,7 @@ export default function HomeScreen() {
         console.error("❌ Project ID not found for push notifications");
         console.error("❌ expoConfig:", Constants?.expoConfig);
         console.error("❌ easConfig:", Constants?.easConfig);
-        Toast.show("Failed to get project id for push notification!", {
+        Toast.show(tn("projectIdFailed"), {
           type: "danger",
         });
         isRegisteringToken.current = false;
@@ -1107,7 +1091,7 @@ export default function HomeScreen() {
 
       if (!pushTokenString) {
         console.error("❌ Failed to get push token - token is null/undefined");
-        Toast.show("Failed to get push token", {
+        Toast.show(tn("getPushTokenFailed"), {
           type: "danger",
         });
         isRegisteringToken.current = false;
@@ -1117,7 +1101,7 @@ export default function HomeScreen() {
       // Validate token format
       if (!pushTokenString.startsWith("ExponentPushToken[")) {
         console.error("❌ Invalid push token format:", pushTokenString);
-        Toast.show("Invalid push token format", {
+        Toast.show(tn("invalidPushToken"), {
           type: "danger",
         });
         isRegisteringToken.current = false;
@@ -1179,7 +1163,7 @@ export default function HomeScreen() {
                 console.error(
                   "❌ Token will be saved automatically when driver logs in"
                 );
-                Toast.show("Please log in to enable push notifications", {
+                Toast.show(tn("loginToEnablePush"), {
                   type: "warning",
                   duration: 3000,
                 });
@@ -1232,7 +1216,7 @@ export default function HomeScreen() {
               // Only show toast if this is a new token (not already saved)
               const isNewToken = lastSavedToken.current !== pushTokenString;
               if (isNewToken) {
-                Toast.show("Push notifications enabled!", {
+                Toast.show(tn("pushEnabled"), {
                   type: "success",
                   duration: 2000,
                 });
@@ -1270,7 +1254,7 @@ export default function HomeScreen() {
             } else if (error.response?.status === 401) {
               console.error("❌ Unauthorized - access token may be invalid");
               console.error("❌ Driver may need to log in again");
-              Toast.show("Please log in again to enable notifications", {
+              Toast.show(tn("loginAgainNotifications"), {
                 type: "warning",
                 duration: 3000,
               });
@@ -1296,13 +1280,10 @@ export default function HomeScreen() {
               console.error("   2. Network connection issue");
               console.error("   3. Server is down");
               console.error("   4. Access token is invalid");
-              Toast.show(
-                "Failed to save notification token. Please check your connection and try again.",
-                {
-                  type: "warning",
-                  duration: 5000,
-                }
-              );
+              Toast.show(tn("tokenSaveFailed"), {
+                type: "warning",
+                duration: 5000,
+              });
             }
           }
         }
@@ -1340,13 +1321,10 @@ export default function HomeScreen() {
         // The app can still function without push notifications
       } else if (isPhysicalDevice()) {
         // Only show other errors on real devices
-        Toast.show(
-          "Push notifications may not be available. Please rebuild the app.",
-          {
-            type: "warning",
-            duration: 3000,
-          }
-        );
+        Toast.show(tn("pushUnavailableRebuild"), {
+          type: "warning",
+          duration: 3000,
+        });
       }
     } finally {
       // Always reset the registration flag, even if there was an error
@@ -2097,21 +2075,6 @@ export default function HomeScreen() {
     return false;
   };
 
-  const getRecentRides = async () => {
-    const accessToken = await AsyncStorage.getItem("accessToken");
-    const res = await axios.get(`${getServerUri()}/driver/get-rides`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-    setrecentRides(res.data.rides);
-  };
-
-  // Recent Rides fetching - Temporarily disabled
-  // useEffect(() => {
-  //   getRecentRides();
-  // }, []);
-
   // Memoize handleClose to prevent unnecessary re-renders
   const handleClose = useCallback(() => {
     setIsModalVisible(false);
@@ -2171,7 +2134,7 @@ export default function HomeScreen() {
           console.warn(
             "⚠️ WebSocket not connected - status may not sync properly"
           );
-          Toast.show("Connection issue detected. Please check your internet.", {
+          Toast.show(tn("connectionIssue"), {
             type: "warning",
             duration: 3000,
           });
@@ -2199,9 +2162,10 @@ export default function HomeScreen() {
           setIsOn(newIsOn);
           isOnRef.current = newIsOn;
           await AsyncStorage.setItem("status", response.data.driver.status);
+          revalidateDashboardData();
 
           Toast.show(
-            `You are now ${targetStatus === "active" ? "online" : "offline"}`,
+            targetStatus === "active" ? t("youAreNowOnline") : t("youAreNowOffline"),
             {
               type: "success",
               duration: 2000,
@@ -2216,13 +2180,10 @@ export default function HomeScreen() {
               const hasBackground = await hasBackgroundLocationPermission();
               if (!hasBackground) {
                 console.warn("⚠️ Background location permission not granted");
-                Toast.show(
-                  "Background location is required for tracking when screen is off",
-                  {
-                    type: "warning",
-                    duration: 4000,
-                  }
-                );
+                Toast.show(tn("backgroundLocationWarn"), {
+                  type: "warning",
+                  duration: 4000,
+                });
               }
 
               // Start foreground service for background location tracking
@@ -2313,7 +2274,7 @@ export default function HomeScreen() {
         const errorMessage =
           error.response?.data?.message ||
           error.message ||
-          "Failed to update status. Please check your connection and try again.";
+          tn("statusUpdateFailed");
 
         Toast.show(errorMessage, {
           type: "danger",
@@ -2321,7 +2282,7 @@ export default function HomeScreen() {
         });
       }
     },
-    [loading, isOn, currentLocation, wsConnected]
+    [loading, isOn, currentLocation, wsConnected, revalidateDashboardData, t, tn]
   );
 
   // Confirm going offline
@@ -2339,8 +2300,8 @@ export default function HomeScreen() {
     const message = {
       to: expoPushToken,
       sound: "default",
-      title: "Ride Request Accepted!",
-      body: `Your driver is on the way!`,
+      title: t("rideRequestAcceptedTitle"),
+      body: t("rideRequestAcceptedBody"),
       data: { orderData: data },
     };
     await axios
@@ -2412,7 +2373,7 @@ export default function HomeScreen() {
       });
     } catch (error: any) {
       console.error("Error accepting ride:", error);
-      Toast.show("Failed to accept ride. Please try again.", {
+      Toast.show(tn("acceptRideFailed"), {
         type: "danger",
         duration: 3000,
       });
@@ -2428,6 +2389,8 @@ export default function HomeScreen() {
     destinationLocationName,
     currentLocation,
     marker,
+    t,
+    tn,
   ]);
 
   // Memoize expensive calculations to avoid recalculating on every render
@@ -2464,83 +2427,443 @@ export default function HomeScreen() {
     currentLocation?.longitude,
   ]);
 
+  const activeRouteName = dashboardData.activeRoute.title;
+  const activeRouteCurrentStop =
+    currentLocationName || dashboardData.activeRoute.currentStop;
+  const activeRouteNextStop =
+    destinationLocationName || dashboardData.activeRoute.nextStop;
+  const activeRouteEtaMinutes = distance
+    ? Math.max(2, Math.round(Number(distance) * 3))
+    : dashboardData.activeRoute.etaMinutes;
+
+  const tripsDoneCount = dashboardData.tripsDone;
+  const totalHoursValue = `${dashboardData.totalHours.toFixed(1)}h`;
+  const todayEarningsValue = dashboardData.todayEarnings.toFixed(2);
+  const scheduledTripsPreview = dashboardData.scheduledTrips.slice(0, 6);
+
+  const formatTripChip = (scheduledTime: string) => {
+    const tripDate = new Date(scheduledTime);
+    if (Number.isNaN(tripDate.getTime())) return tc("upcoming");
+    return tripDate
+      .toLocaleString([], {
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+      .toUpperCase()
+      .replace(",", "");
+  };
+
   return (
     <View style={[external.fx_1, { backgroundColor: colors.background }]}>
-      <Header isOn={isOn} />
-      {/* Driver Status Card */}
-      <DriverStatusCard
-        isOnline={isOn === true}
-        isLoading={loading}
-        onToggle={handleStatusChange}
-        wsConnected={wsConnected}
-        showConnectionStatus={true}
+      <Header
+        isOn={isOn}
+        title={t("title")}
+        showOnlineStatus
+        showMenuButton
+        showNotificationIcon={false}
       />
       <ScrollView
         style={styles.spaceBelow}
+        contentContainerStyle={{ paddingBottom: spacing.xxxl }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={dashboardRefreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Scheduled Trips Card */}
-        <TouchableOpacity
-          onPress={() => router.push("/(routes)/scheduled-trips")}
-          style={[
-            {
-              marginHorizontal: spacing.lg,
-              marginTop: spacing.md,
-              marginBottom: spacing.md,
-              backgroundColor: colors.card,
+        <DriverStatusCard
+          isOnline={isOn === true}
+          isLoading={loading}
+          onToggle={handleStatusChange}
+          wsConnected={wsConnected}
+          showConnectionStatus={false}
+        />
+
+        <View
+          style={{
+            marginHorizontal: spacing.lg,
+            marginBottom: spacing.lg,
+            backgroundColor: color.primary,
+            borderRadius: 26,
+            overflow: "hidden",
+          }}
+        >
+          <View style={{ padding: spacing.lg }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <View>
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.72)",
+                    fontFamily: fonts.bold,
+                    fontSize: fontSizes.FONT12,
+                    letterSpacing: 2,
+                  }}
+                >
+                  {t("activeRoute")}
+                </Text>
+                <Text
+                  style={{
+                    color: color.whiteColor,
+                    fontFamily: fonts.bold,
+                    fontSize: fontSizes.FONT34,
+                    marginTop: spacing.xs,
+                    maxWidth: "88%",
+                  }}
+                  numberOfLines={2}
+                >
+                  {activeRouteName}
+                </Text>
+              </View>
+              <View
+                style={{
+                  minWidth: 72,
+                  height: 72,
+                  borderRadius: 20,
+                  backgroundColor: "rgba(255,255,255,0.16)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingHorizontal: spacing.sm,
+                }}
+              >
+                <Text style={{ color: color.whiteColor, fontFamily: fonts.bold, fontSize: 22 }}>
+                  {activeRouteEtaMinutes > 0 ? activeRouteEtaMinutes : "--"}
+                </Text>
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.86)",
+                    fontFamily: fonts.medium,
+                    fontSize: fontSizes.FONT12,
+                    marginTop: 2,
+                  }}
+                >
+                  MINS
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ marginTop: spacing.lg }}>
+              <Text style={{ color: "rgba(255,255,255,0.72)", fontFamily: fonts.medium, fontSize: fontSizes.FONT12 }}>
+                Current Location
+              </Text>
+              <Text style={{ color: color.whiteColor, fontFamily: fonts.bold, fontSize: fontSizes.FONT20, marginTop: 2 }}>
+                {activeRouteCurrentStop}
+              </Text>
+              <View style={{ width: 1, height: 16, backgroundColor: "rgba(255,255,255,0.35)", marginVertical: 6, marginLeft: 4 }} />
+              <Text style={{ color: "rgba(255,255,255,0.72)", fontFamily: fonts.medium, fontSize: fontSizes.FONT12 }}>
+                Next Stop
+              </Text>
+              <Text style={{ color: color.whiteColor, fontFamily: fonts.bold, fontSize: fontSizes.FONT20, marginTop: 2 }}>
+                {activeRouteNextStop}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={{
+              flexDirection: "row",
+              backgroundColor: "rgba(0,0,0,0.12)",
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+              gap: spacing.md,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                if (mapMarkers.destination && mapMarkers.pickup) {
+                  setIsModalVisible(true);
+                  return;
+                }
+                router.push("/(routes)/scheduled-trips");
+              }}
+              style={{
+                flex: 1,
+                borderRadius: 16,
+                backgroundColor: color.whiteColor,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: spacing.md,
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: color.primary, fontFamily: fonts.bold, fontSize: fontSizes.FONT18 }}>
+                {t("viewMap")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() =>
+                Toast.show(tn("arrivalConfirmed"), {
+                  type: "success",
+                  duration: 2000,
+                })
+              }
+              style={{
+                flex: 1,
+                borderRadius: 16,
+                backgroundColor: color.whiteColor,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: spacing.md,
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: color.primary, fontFamily: fonts.bold, fontSize: fontSizes.FONT18 }}>
+                {t("arrivedButton")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ marginHorizontal: spacing.lg, marginBottom: spacing.lg }}>
+          <View
+            style={{
+              backgroundColor: color.whiteColor,
+              borderRadius: 24,
               padding: spacing.lg,
-              borderRadius: 12,
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "space-between",
-              ...shadows.md,
-            },
-          ]}
-          activeOpacity={0.7}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+              ...shadows.sm,
+            }}
+          >
+            <View>
+              <Text
+                style={{
+                  fontFamily: fonts.bold,
+                  color: color.text.secondary,
+                  letterSpacing: 1.8,
+                  fontSize: fontSizes.FONT12,
+                }}
+              >
+                {t("todaysEarningsLabel")}
+              </Text>
+              <Text
+                style={{
+                  marginTop: spacing.xs,
+                  fontFamily: fonts.bold,
+                  color: color.primary,
+                  fontSize: fontSizes.FONT42,
+                }}
+              >
+                ${dashboardLoading ? "--" : todayEarningsValue}
+              </Text>
+            </View>
             <View
               style={{
                 width: 48,
                 height: 48,
-                borderRadius: 24,
-                backgroundColor: `${color.primary}20`,
-                justifyContent: "center",
+                borderRadius: 14,
                 alignItems: "center",
-                marginRight: spacing.md,
+                justifyContent: "center",
+                backgroundColor: "#EEF0FF",
               }}
             >
-              <Calender colors={color.primary} />
+              <Wallet colors={color.primary} />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text
+          </View>
+
+          <View style={{ flexDirection: "row", marginTop: spacing.md, gap: spacing.md }}>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: color.whiteColor,
+                borderRadius: 20,
+                padding: spacing.lg,
+                ...shadows.sm,
+              }}
+            >
+              <View
                 style={{
-                  fontSize: fontSizes.FONT18,
-                  fontFamily: fonts.bold,
-                  color: colors.text,
-                  marginBottom: spacing.xs / 2,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 12,
+                  backgroundColor: "#EEF0FF",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: spacing.md,
                 }}
               >
-                Scheduled Trips
+                <SmartCar />
+              </View>
+              <Text style={{ color: color.text.secondary, fontFamily: fonts.bold, fontSize: fontSizes.FONT12, letterSpacing: 1 }}>
+                {t("tripsDone")}
               </Text>
-              <Text
+              <Text style={{ marginTop: 4, color: colors.text, fontFamily: fonts.bold, fontSize: fontSizes.FONT34 }}>
+                {dashboardLoading ? "--" : tripsDoneCount}
+              </Text>
+            </View>
+
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: color.whiteColor,
+                borderRadius: 20,
+                padding: spacing.lg,
+                ...shadows.sm,
+              }}
+            >
+              <View
                 style={{
-                  fontSize: fontSizes.FONT14,
-                  fontFamily: fonts.regular,
-                  color: color.text.secondary,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 12,
+                  backgroundColor: "#EEF0FF",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: spacing.md,
                 }}
               >
-                View and manage your scheduled trips
+                <FillClock />
+              </View>
+              <Text style={{ color: color.text.secondary, fontFamily: fonts.bold, fontSize: fontSizes.FONT12, letterSpacing: 1 }}>
+                {t("totalHours")}
+              </Text>
+              <Text style={{ marginTop: 4, color: colors.text, fontFamily: fonts.bold, fontSize: fontSizes.FONT34 }}>
+                {dashboardLoading ? "--" : totalHoursValue}
               </Text>
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
 
-        {/* Overview Section */}
-        <OverviewSection refreshTrigger={refreshTrigger} />
+        <View
+          style={{
+            marginHorizontal: spacing.lg,
+            marginTop: spacing.xs,
+            marginBottom: spacing.sm,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: fontSizes.FONT20,
+              fontFamily: fonts.bold,
+              color: colors.text,
+            }}
+          >
+            {t("scheduledTrips")}
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.push("/(routes)/scheduled-trips")}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={{
+                color: color.primary,
+                fontFamily: fonts.bold,
+                fontSize: fontSizes.FONT13,
+              }}
+            >
+              {t("seeAll")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: spacing.lg,
+            paddingBottom: spacing.lg,
+            gap: spacing.md,
+          }}
+        >
+          {scheduledTripsPreview.length === 0 ? (
+            <TouchableOpacity
+              onPress={() => router.push("/(routes)/scheduled-trips")}
+              activeOpacity={0.8}
+              style={{
+                width: windowWidth(280),
+                backgroundColor: color.whiteColor,
+                borderRadius: 24,
+                padding: spacing.lg,
+                ...shadows.sm,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.text,
+                  fontFamily: fonts.bold,
+                  fontSize: fontSizes.FONT20,
+                }}
+              >
+                No upcoming trips
+              </Text>
+              <Text
+                style={{
+                  color: color.text.secondary,
+                  fontFamily: fonts.regular,
+                  fontSize: fontSizes.FONT14,
+                  marginTop: spacing.xs,
+                }}
+              >
+                Pull to refresh or check scheduled trips.
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            scheduledTripsPreview.map((trip, index) => (
+              <TouchableOpacity
+                key={trip.id}
+                onPress={() => router.push("/(routes)/scheduled-trips")}
+                activeOpacity={0.8}
+                style={{
+                  width: windowWidth(280),
+                  backgroundColor: color.whiteColor,
+                  borderRadius: 24,
+                  padding: spacing.lg,
+                  ...shadows.sm,
+                }}
+              >
+                <View
+                  style={{
+                    alignSelf: "flex-start",
+                    paddingHorizontal: spacing.sm,
+                    paddingVertical: 6,
+                    borderRadius: 999,
+                    backgroundColor: index % 2 === 0 ? "#FFF0E1" : "#E9EEFF",
+                    marginBottom: spacing.md,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: index % 2 === 0 ? "#8A5A2C" : color.primary,
+                      fontFamily: fonts.bold,
+                      fontSize: fontSizes.FONT11,
+                      letterSpacing: 1,
+                    }}
+                  >
+                    {formatTripChip(trip.scheduledTime)}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontFamily: fonts.bold,
+                    fontSize: fontSizes.FONT26,
+                  }}
+                  numberOfLines={1}
+                >
+                  {trip.name}
+                </Text>
+                <Text
+                  style={{
+                    color: color.text.secondary,
+                    fontFamily: fonts.regular,
+                    fontSize: fontSizes.FONT14,
+                    marginTop: 4,
+                  }}
+                  numberOfLines={1}
+                >
+                  {trip.points?.length || 0}{" "}
+                  {(trip.points?.length || 0) === 1
+                    ? t("checkpoint")
+                    : t("checkpoints")}{" "}
+                  - {trip.points?.[trip.points.length - 1]?.name || t("routeFallback")}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
       </ScrollView>
 
       {/* Enhanced Ride Request Modal */}
@@ -2555,21 +2878,41 @@ export default function HomeScreen() {
             style={[
               styles.modalContainer,
               {
-                backgroundColor: colors.background,
+                backgroundColor: "rgba(255,255,255,0.92)",
                 maxHeight: "90%",
+                borderTopLeftRadius: 40,
+                borderTopRightRadius: 40,
               },
             ]}
           >
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                New Ride Request
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  {t("newRideRequest")}
+                </Text>
+                <Text
+                  style={{
+                    color: color.text.secondary,
+                    fontSize: fontSizes.FONT13,
+                    fontFamily: fonts.regular,
+                    marginTop: spacing.xs / 2,
+                  }}
+                >
+                  {t("rideReviewSubtitle")}
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={handleClose}
-                style={styles.closeButton}
+                style={[
+                  styles.closeButton,
+                  {
+                    borderRadius: 16,
+                    backgroundColor: "#EFF1F5",
+                  },
+                ]}
                 activeOpacity={0.7}
               >
-                <Text style={{ fontSize: 24, color: colors.text }}>×</Text>
+                <Text style={{ fontSize: 20, color: colors.text }}>×</Text>
               </TouchableOpacity>
             </View>
 
@@ -2578,7 +2921,7 @@ export default function HomeScreen() {
               <View
                 style={{
                   height: windowHeight(300),
-                  borderRadius: 12,
+                  borderRadius: 20,
                   overflow: "hidden",
                   marginBottom: spacing.lg,
                   position: "relative",
@@ -2602,14 +2945,14 @@ export default function HomeScreen() {
                   {mapMarkers.destination && (
                     <Marker
                       coordinate={mapMarkers.destination}
-                      title="Destination"
+                      title={t("destination")}
                       pinColor={color.status.active}
                     />
                   )}
                   {mapMarkers.pickup && (
                     <Marker
                       coordinate={mapMarkers.pickup}
-                      title="Pickup"
+                      title={t("pickup")}
                       pinColor={color.status.completed}
                     />
                   )}
@@ -2634,7 +2977,7 @@ export default function HomeScreen() {
                       right: 10,
                       backgroundColor: "rgba(239, 68, 68, 0.9)",
                       padding: 12,
-                      borderRadius: 8,
+                      borderRadius: 14,
                       zIndex: 1000,
                     }}
                   >
@@ -2645,7 +2988,7 @@ export default function HomeScreen() {
                         fontWeight: "bold",
                       }}
                     >
-                      Map Error: {mapError}
+                      {t("mapErrorPrefix")} {mapError}
                     </Text>
                   </View>
                 )}
@@ -2666,7 +3009,7 @@ export default function HomeScreen() {
                     }}
                   >
                     <Text style={{ color: "white", fontSize: 14 }}>
-                      Loading map...
+                      {t("loadingMap")}
                     </Text>
                   </View>
                 )}
@@ -2682,8 +3025,8 @@ export default function HomeScreen() {
               {/* Location Details */}
               <View
                 style={{
-                  backgroundColor: colors.card,
-                  borderRadius: 12,
+                  backgroundColor: "rgba(255,255,255,0.96)",
+                  borderRadius: 24,
                   padding: spacing.lg,
                   marginBottom: spacing.lg,
                 }}
@@ -2709,14 +3052,14 @@ export default function HomeScreen() {
                       ]}
                       numberOfLines={2}
                     >
-                      {currentLocationName || "Pickup Location"}
+                      {currentLocationName || tc("pickupLocation")}
                     </Text>
-                    <View style={styles.border} />
+                    <View style={{ height: 10 }} />
                     <Text
                       style={[styles.drop, { color: colors.text }]}
                       numberOfLines={2}
                     >
-                      {destinationLocationName || "Destination"}
+                      {destinationLocationName || tc("destination")}
                     </Text>
                   </View>
                 </View>
@@ -2728,21 +3071,20 @@ export default function HomeScreen() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     paddingTop: spacing.md,
-                    borderTopWidth: 1,
-                    borderTopColor: colors.border,
                   }}
                 >
                   <ETADisplay distance={estimatedDistance} size="md" />
-                  <View>
+                  <View style={{ alignItems: "flex-end" }}>
                     <Text
                       style={{
-                        fontSize: fontSizes.FONT12,
-                        fontFamily: fonts.regular,
+                        fontSize: fontSizes.FONT10,
+                        fontFamily: fonts.bold,
                         color: color.text.secondary,
                         marginBottom: spacing.xs / 2,
+                        letterSpacing: 0.8,
                       }}
                     >
-                      Estimated Fare
+                      {t("fareLabel")}
                     </Text>
                     <Text
                       style={{
@@ -2765,20 +3107,53 @@ export default function HomeScreen() {
                   marginBottom: spacing.lg,
                 }}
               >
-                <Button
-                  title="Decline"
+                <TouchableOpacity
                   onPress={handleClose}
-                  width="48%"
-                  height={windowHeight(50)}
-                  backgroundColor={color.semantic.error}
-                />
-                <Button
-                  title={loading ? "Accepting..." : "Accept Ride"}
+                  activeOpacity={0.9}
+                  style={{
+                    width: "48%",
+                    height: 56,
+                    borderRadius: 20,
+                    backgroundColor: "#FCECEC",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: color.semantic.error,
+                      fontFamily: fonts.bold,
+                      fontSize: fontSizes.FONT16,
+                    }}
+                  >
+                    {t("decline")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   onPress={() => acceptRideHandler()}
-                  width="48%"
-                  height={windowHeight(50)}
                   disabled={loading}
-                />
+                  activeOpacity={0.9}
+                  style={{
+                    width: "48%",
+                    height: 56,
+                    borderRadius: 20,
+                    backgroundColor: loading ? "#8D90A0" : color.primary,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    flexDirection: "row",
+                    gap: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontFamily: fonts.bold,
+                      fontSize: fontSizes.FONT16,
+                    }}
+                  >
+                    {loading ? t("accepting") : t("acceptRide")}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
@@ -2820,7 +3195,7 @@ export default function HomeScreen() {
                 textAlign: "center",
               }}
             >
-              Go Offline?
+              {t("goOfflineTitle")}
             </Text>
             <Text
               style={{
@@ -2832,8 +3207,7 @@ export default function HomeScreen() {
                 lineHeight: 20,
               }}
             >
-              You will stop receiving ride requests. You can go online again
-              anytime.
+              {t("offlineModalDetail")}
             </Text>
             <View
               style={{
@@ -2842,14 +3216,14 @@ export default function HomeScreen() {
               }}
             >
               <Button
-                title="Cancel"
+                title={tc("cancel")}
                 onPress={cancelGoOffline}
                 width="48%"
                 height={windowHeight(50)}
                 backgroundColor={color.text.secondary}
               />
               <Button
-                title="Go Offline"
+                title={t("confirmOffline")}
                 onPress={confirmGoOffline}
                 width="48%"
                 height={windowHeight(50)}
