@@ -13,7 +13,7 @@ import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
 import color from "@/themes/app.colors";
 import fonts from "@/themes/app.fonts";
 import { kinetic, spacing } from "@/styles/design-system";
-import Constants from "expo-constants";
+import { getGoogleMapsApiKey } from "@/utils/googleMapsApiKey";
 
 interface NavigationScreenProps {
   origin: Coordinate;
@@ -93,14 +93,7 @@ export default function NavigationScreen({
     }
   }, [state.currentLocation, state.driverHeading, destination]);
 
-  // Get Google Maps API key
-  const getApiKey = (): string => {
-    const envKey = process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY;
-    const configKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;
-    return envKey || configKey || "";
-  };
-
-  const apiKey = getApiKey();
+  const apiKey = getGoogleMapsApiKey();
 
   return (
     <View style={styles.container}>

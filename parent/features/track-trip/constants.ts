@@ -8,8 +8,11 @@ import Constants from "expo-constants";
  * Google Maps API Key
  */
 export const GOOGLE_MAPS_API_KEY =
+  process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY ||
   Constants.expoConfig?.extra?.googleMaps?.apiKey ||
   Constants.expoConfig?.android?.config?.googleMaps?.apiKey ||
+  (Constants.expoConfig as { ios?: { config?: { googleMapsApiKey?: string } } })
+    ?.ios?.config?.googleMapsApiKey ||
   "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q";
 
 /**

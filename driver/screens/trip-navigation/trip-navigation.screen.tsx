@@ -23,6 +23,7 @@ import { calculateDistance } from "@/utils/haversine";
 import EmergencyEndSlider from "@/components/trip/EmergencyEndSlider";
 import EmployeeBottomSheet from "@/components/trip/EmployeeBottomSheet";
 import { spacing, shadows } from "@/styles/design-system";
+import { getGoogleMapsApiKey } from "@/utils/googleMapsApiKey";
 import fonts from "@/themes/app.fonts";
 import NavigationArrow from "@/components/navigation/NavigationArrow";
 import {
@@ -184,7 +185,7 @@ export default function TripNavigationScreen() {
           latitude: currentPoint.latitude,
           longitude: currentPoint.longitude,
         }}
-        apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+        apikey={getGoogleMapsApiKey()}
         strokeWidth={5}
         strokeColor={color.primary}
         lineCap="round"

@@ -5,6 +5,7 @@
 
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import { getGoogleMapsApiKey } from "./googleMapsApiKey";
 
 export interface MapDiagnostics {
   platform: string;
@@ -24,43 +25,43 @@ export interface MapDiagnostics {
  * Check if Google Maps API key is configured
  */
 export function checkApiKey(): { hasKey: boolean; source: string; key?: string; allKeys?: { [key: string]: string } } {
-  // Check from app.json config (Android)
+  const resolved = getGoogleMapsApiKey();
   const androidKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;
-  
-  // Check from environment variable
+  const iosKey = (
+    Constants.expoConfig as { ios?: { config?: { googleMapsApiKey?: string } } }
+  )?.ios?.config?.googleMapsApiKey;
   const envKey = process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY;
-  
+
   const allKeys: { [key: string]: string } = {};
-  if (androidKey) allKeys["app.json"] = androidKey;
-  if (envKey) allKeys["environment"] = envKey;
-  
-  // Check for consistency
-  const keys = Object.values(allKeys);
-  const isConsistent = keys.length > 0 && keys.every(key => key === keys[0]);
-  
+  if (envKey) allKeys["EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY"] = envKey;
+  if (androidKey) allKeys["app.json android.googleMaps"] = androidKey;
+  if (iosKey) allKeys["app.json ios.googleMapsApiKey"] = iosKey;
+
+  const keys = Object.values(allKeys).filter(Boolean);
+  const isConsistent =
+    keys.length > 0 && keys.every((k) => k === keys[0]);
+
   if (!isConsistent && keys.length > 1) {
     console.warn("⚠️ API key mismatch detected across configuration sources");
   }
-  
-  if (androidKey) {
-    return { 
-      hasKey: true, 
-      source: "app.json (Android config)", 
-      key: androidKey,
-      allKeys: allKeys
+
+  if (resolved) {
+    const source = envKey
+      ? "EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY"
+      : androidKey === resolved
+        ? "app.json (Android googleMaps)"
+        : iosKey === resolved
+          ? "app.json (iOS googleMapsApiKey)"
+          : "resolved";
+    return {
+      hasKey: true,
+      source,
+      key: resolved,
+      allKeys,
     };
   }
-  
-  if (envKey) {
-    return { 
-      hasKey: true, 
-      source: "Environment variable", 
-      key: envKey,
-      allKeys: allKeys
-    };
-  }
-  
-  return { hasKey: false, source: "Not found", allKeys: allKeys };
+
+  return { hasKey: false, source: "Not found", allKeys };
 }
 
 /**

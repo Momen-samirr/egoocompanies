@@ -23,6 +23,7 @@ import { useTheme } from "@react-navigation/native";
 import { external } from "@/styles/external.style";
 import styles from "./styles";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import { getGoogleMapsApiKey } from "@/utils/googleMapsApiKey";
 import MapViewDirections from "react-native-maps-directions";
 import { windowHeight, windowWidth, fontSizes } from "@/themes/app.constant";
 import { Gps, Location, Calender, Wallet, FillClock, SmartCar } from "@/utils/icons";
@@ -2960,7 +2961,7 @@ export default function HomeScreen() {
                     <MapViewDirections
                       origin={mapMarkers.pickup}
                       destination={mapMarkers.destination}
-                      apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                      apikey={getGoogleMapsApiKey()}
                       strokeWidth={4}
                       strokeColor={color.primary}
                     />

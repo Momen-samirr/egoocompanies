@@ -19,6 +19,7 @@ import { Toast } from "react-native-toast-notifications";
 import { getServerUri } from "@/configs/constants";
 import { useTheme } from "@react-navigation/native";
 import Header from "@/components/common/header";
+import { getGoogleMapsApiKey } from "@/utils/googleMapsApiKey";
 import * as LocationService from "expo-location";
 import { useTripActivation } from "@/contexts/TripActivationContext";
 import {
@@ -337,7 +338,7 @@ export default function ScheduledTripDetailsScreen() {
                       latitude: nextPoint.latitude,
                       longitude: nextPoint.longitude,
                     }}
-                    apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                    apikey={getGoogleMapsApiKey()}
                     strokeWidth={3}
                     strokeColor={index === trip.points.length - 2 ? "green" : "blue"}
                   />

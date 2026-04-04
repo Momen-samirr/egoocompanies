@@ -45,6 +45,7 @@ import NavigationScreen from "@/components/navigation/NavigationScreen";
 import { Coordinate as NavCoordinate } from "@/services/navigationService";
 import { calculateDistance } from "@/utils/haversine";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
+import { getGoogleMapsApiKey } from "@/utils/googleMapsApiKey";
 
 export default function RideDetailsScreen() {
   const { t } = useTranslation("rides");
@@ -578,7 +579,7 @@ export default function RideDetailsScreen() {
                   <MapViewDirections
                     origin={orderData.currentLocation}
                     destination={orderData.marker}
-                    apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+                    apikey={getGoogleMapsApiKey()}
                     strokeWidth={4}
                     strokeColor={color.primary}
                   />

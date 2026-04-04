@@ -6,6 +6,7 @@ import MapViewDirections from "react-native-maps-directions";
 import color from "@/themes/app.colors";
 import { windowHeight } from "@/themes/app.constant";
 import { spacing } from "@/styles/design-system";
+import { getGoogleMapsApiKey } from "@/utils/googleMapsApiKey";
 
 // Test Here
 interface HomeMapProps {
@@ -119,7 +120,7 @@ export default React.memo(function HomeMap({
           <MapViewDirections
             origin={mapMarkers.pickup}
             destination={mapMarkers.destination}
-            apikey={process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY!}
+            apikey={getGoogleMapsApiKey()}
             strokeWidth={4}
             strokeColor={color.primary}
             optimizeWaypoints={true}

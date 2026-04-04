@@ -14,6 +14,9 @@
     },
     "ios": {
       "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow egoo to use your location to find nearby rides and navigate.",

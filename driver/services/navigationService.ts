@@ -1,5 +1,5 @@
 import axios from "axios";
-import Constants from "expo-constants";
+import { getGoogleMapsApiKey } from "../utils/googleMapsApiKey";
 
 export interface Coordinate {
   latitude: number;
@@ -55,22 +55,14 @@ export interface DirectionsResponse {
 const routeCache = new Map<string, { route: Route; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-/**
- * Get Google Maps API key from environment or config
- */
-function getGoogleMapsApiKey(): string {
-  const envKey = process.env.EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY;
-  const configKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;
-  
-  if (envKey) {
-    return envKey;
+function requireGoogleMapsApiKey(): string {
+  const key = getGoogleMapsApiKey();
+  if (!key) {
+    throw new Error(
+      "Google Maps API key not found. Set EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY or android/ios Maps keys in app.json."
+    );
   }
-  
-  if (configKey) {
-    return configKey;
-  }
-  
-  throw new Error("Google Maps API key not found. Please set EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY");
+  return key;
 }
 
 /**
@@ -115,13 +107,8 @@ export async function calculateRoute(
       throw new Error("Destination coordinates out of valid range");
     }
     
-    const apiKey = getGoogleMapsApiKey();
-    
-    if (!apiKey) {
-      console.error("❌ Google Maps API key not found");
-      throw new Error("Google Maps API key not configured");
-    }
-    
+    const apiKey = requireGoogleMapsApiKey();
+
     // Check cache first
     const cacheKey = generateCacheKey(origin, destination, waypoints);
     const cached = routeCache.get(cacheKey);

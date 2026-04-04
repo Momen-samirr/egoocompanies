@@ -122,6 +122,33 @@ If you're in development and need to test quickly:
 
 **⚠️ Warning:** `0.0.0.0/0` allows access from any IP. Only use this for development!
 
+## Issue: "Transactions are not supported by this deployment" (Prisma P2010)
+
+Prisma uses MongoDB transactions for writes. MongoDB returns this message in several situations; **it is often misleading** and tied to **connection or auth**, not only to “no transactions on the server.”
+
+### What to do
+
+1. **Connection string (especially on Render / production)**  
+   Use the Atlas “Connect your application” string and ensure it includes:
+
+   ```env
+   DATABASE_URL="mongodb+srv://USER:PASSWORD@cluster.mongodb.net/DATABASE?retryWrites=true&w=majority"
+   ```
+
+   If your database user was created with a non-default auth database, add `authSource=admin` (or the DB where that user exists), e.g.  
+   `...mongodb.net/mydb?retryWrites=true&w=majority&authSource=admin`
+
+2. **Replica set**  
+   Use a normal Atlas **cluster** (M0 shared or higher) that runs as a replica set. Avoid setups that are truly standalone-only if Prisma reports transaction errors persistently.
+
+3. **Network Access**  
+   Add your **deployed** host’s egress (e.g. allow `0.0.0.0/0` for testing, or Render’s IPs if you use static egress) so Atlas is reachable from production.
+
+4. **Credentials**  
+   Wrong password or user often surfaces as other errors, but double-check the user in **Database Access** matches the URL.
+
+After changing `DATABASE_URL` or Atlas rules, redeploy / restart the server and retry driver registration (email OTP verify).
+
 ## Still Having Issues?
 
 1. Check MongoDB Atlas status: https://status.mongodb.com/

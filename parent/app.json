@@ -14,6 +14,9 @@
     },
     "ios": {
       "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow Ridewave Parent to use your location to track your child's school transportation.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Ridewave Parent to use your location to track your child's school transportation.",

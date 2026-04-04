@@ -364,6 +364,19 @@ export const verifyingEmailOtp = async (req: Request, res: Response) => {
     });
     sendToken(driver, res);
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (errMsg.includes("Transactions are not supported by this deployment")) {
+      console.error(
+        "[MongoDB/Prisma] Transactions not supported — often a connection string or Atlas access issue, not literal missing transactions. " +
+          "Use a replica-set deployment (standard Atlas M0+), DATABASE_URL with ?retryWrites=true&w=majority (and authSource if your user is not on the default DB), " +
+          "and whitelist Render in Atlas Network Access. See server/MONGODB_CONNECTION_FIX.md"
+      );
+      return res.status(503).json({
+        success: false,
+        message:
+          "Registration is temporarily unavailable due to a database connection issue. Please try again later or contact support.",
+      });
+    }
     console.log(error);
     res.status(400).json({
       success: false,

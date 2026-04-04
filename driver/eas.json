@@ -6,10 +6,16 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY": "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_CLOUD_API_KEY": "AIzaSyACeuD1tWDY1_NO14iVNJMLM4mxM8sTn_Q"
+      }
     },
     "production": {
       "autoIncrement": true,
