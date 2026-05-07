@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build artifacts
+*.so
+*.a
+*.o
+build/
+dist/
+*.log
+
+# Environment variables
+.env
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Expo
+.expo/
+.expo-shared/
+
+# Temporary files
+*.tmp
+*.temp
+stitch mobile apps/
+stitch-dashboard/
